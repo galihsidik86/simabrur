@@ -1,5 +1,15 @@
 # Safar — Sistem Informasi Manajemen Travel Haji & Umrah
 
+[![Tests](https://img.shields.io/badge/tests-94%20passing-2ea44f?logo=vitest&logoColor=white)](backend/src)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](backend/tsconfig.json)
+[![Node](https://img.shields.io/badge/Node.js-%E2%89%A520-339933?logo=nodedotjs&logoColor=white)](package.json)
+[![Express](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)](backend/package.json)
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](frontend/package.json)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-v4-06B6D4?logo=tailwindcss&logoColor=white)](frontend/src/styles/tokens.css)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](docker-compose.yml)
+[![Docker](https://img.shields.io/badge/Docker-production%20ready-2496ED?logo=docker&logoColor=white)](Dockerfile)
+[![Akuntansi](https://img.shields.io/badge/Akuntansi-PSAK%2072-b8860b)](PLAN.md)
+
 Implementasi full-stack dari mockup desain di repo ini (file `*.dc.html`). Rencana lengkap dan pembagian fase: lihat **PLAN.md**.
 
 ## Stack
