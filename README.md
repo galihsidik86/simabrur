@@ -9,6 +9,7 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](docker-compose.yml)
 [![Docker](https://img.shields.io/badge/Docker-production%20ready-2496ED?logo=docker&logoColor=white)](Dockerfile)
 [![Akuntansi](https://img.shields.io/badge/Akuntansi-PSAK%2072-b8860b)](PLAN.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Implementasi full-stack dari mockup desain di repo ini (file `*.dc.html`). Rencana lengkap dan pembagian fase: lihat **PLAN.md**.
 
