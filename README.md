@@ -13,6 +13,22 @@
 
 Implementasi full-stack dari mockup desain di repo ini (file `*.dc.html`). Rencana lengkap dan pembagian fase: lihat **PLAN.md**.
 
+## Tampilan Aplikasi
+
+| Dashboard Eksekutif | Wizard Pendaftaran Publik |
+|---|---|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Wizard Pendaftaran](docs/screenshots/wizard-pendaftaran.png) |
+
+| Kartu Piutang Pembayaran | Input Transaksi + Preview Jurnal |
+|---|---|
+| ![Pembayaran](docs/screenshots/pembayaran.png) | ![Input Transaksi](docs/screenshots/input-transaksi.png) |
+
+| Laporan Keuangan | Portal Jamaah (mobile) | Invoice A4 |
+|---|---|---|
+| ![Laporan Keuangan](docs/screenshots/laporan-keuangan.png) | <img src="docs/screenshots/portal-jamaah.png" width="280" alt="Portal Jamaah"> | <img src="docs/screenshots/invoice-a4.png" width="360" alt="Invoice A4"> |
+
+<sub>Regenerasi screenshot: jalankan dev server lalu `node scripts/screenshots.mjs` (butuh Microsoft Edge).</sub>
+
 ## Stack
 
 - **Backend**: Node.js + Express 5 + TypeScript · Knex + PostgreSQL 16 (Docker) · Zod · JWT (access + refresh) · RBAC 6 role · audit log

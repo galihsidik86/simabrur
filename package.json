@@ -18,5 +18,8 @@
     "start": "npm run start --workspace=backend",
     "db:backup": "powershell -ExecutionPolicy Bypass -File scripts/backup-db.ps1",
     "db:restore": "powershell -ExecutionPolicy Bypass -File scripts/restore-db.ps1"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.61.1"
   }
 }
