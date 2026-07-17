@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+backend/dist
+backend/public
+backend/uploads
+backend/.env
+frontend/dist
+backups
+docker
+scripts
+*.dc.html
+*.zip
+.thumbnail
+support.js
+doc-page.js
+PLAN.md
+CLAUDE.md

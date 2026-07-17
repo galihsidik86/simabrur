@@ -1,0 +1,22 @@
+{
+  "name": "safar",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Sistem Informasi Manajemen Travel Haji & Umrah — PT Safar Barokah Wisata",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=backend & npm run dev --workspace=frontend",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "migrate": "npm run migrate --workspace=backend",
+    "seed": "npm run seed --workspace=backend",
+    "test": "npm run test --workspace=backend",
+    "build": "npm run build --workspace=backend && npm run build --workspace=frontend && node -e \"const fs=require('fs');fs.rmSync('backend/public',{recursive:true,force:true});fs.cpSync('frontend/dist','backend/public',{recursive:true});console.log('frontend/dist -> backend/public')\"",
+    "start": "npm run start --workspace=backend",
+    "db:backup": "powershell -ExecutionPolicy Bypass -File scripts/backup-db.ps1",
+    "db:restore": "powershell -ExecutionPolicy Bypass -File scripts/restore-db.ps1"
+  }
+}

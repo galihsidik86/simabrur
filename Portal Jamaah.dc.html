@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:#ded4c0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#2c281f;}
+  a{color:oklch(0.5 0.09 165);text-decoration:none;}
+  .scr::-webkit-scrollbar{width:0;}
+</style>
+</helmet>
+<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:30px 0; background:radial-gradient(circle at 50% 0%, #e7ddc9, #d5cab4);">
+
+  <!-- PHONE -->
+  <div style="width:404px; height:868px; background:#12100c; border-radius:46px; padding:11px; box-shadow:0 40px 80px -30px rgba(50,40,15,0.6);">
+    <div style="width:100%; height:100%; background:#f3eee2; border-radius:36px; overflow:hidden; display:flex; flex-direction:column; position:relative;">
+
+      <!-- STATUS BAR -->
+      <div style="height:42px; flex:0 0 42px; display:flex; align-items:center; justify-content:space-between; padding:0 26px; font-size:13px; font-weight:600; color:{{ barColor }}; background:{{ barBg }};">
+        <span style="font-family:'JetBrains Mono',monospace;">9:41</span>
+        <div style="display:flex; gap:5px; align-items:center;">
+          <span style="width:16px; height:9px; border:1.3px solid {{ barColor }}; border-radius:2px; display:inline-block;"></span>
+        </div>
+      </div>
+
+      <!-- HEADER -->
+      <div style="flex:0 0 auto; padding:8px 22px 14px; background:{{ barBg }};">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="width:42px; height:42px; border-radius:50%; background:oklch(0.56 0.11 78); display:flex; align-items:center; justify-content:center; font-weight:700; color:#20180a; font-size:15px;">SR</div>
+          <div style="flex:1;">
+            <div style="font-size:11px; color:{{ subColor }};">Assalamu'alaikum,</div>
+            <div style="font-weight:600; font-size:15px; color:{{ barColor }};">Hj. Siti Rohmah</div>
+          </div>
+          <div style="position:relative; width:38px; height:38px; border-radius:11px; background:{{ notifBg }}; display:flex; align-items:center; justify-content:center;">
+            <span style="width:15px; height:15px; border:1.6px solid {{ barColor }}; border-radius:5px 5px 0 0; display:inline-block;"></span>
+            <span style="position:absolute; top:8px; right:9px; width:8px; height:8px; border-radius:50%; background:oklch(0.62 0.13 30); border:1.5px solid {{ notifBg }};"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- CONTENT -->
+      <div class="scr" style="flex:1; overflow-y:auto; padding:16px 18px 24px; background:#f3eee2;">
+
+        <!-- BERANDA -->
+        <sc-if value="{{ isBeranda }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="border-radius:20px; padding:20px; background:linear-gradient(140deg,oklch(0.44 0.08 175),oklch(0.5 0.09 165)); color:#fff; position:relative; overflow:hidden;">
+            <div style="font-size:11px; opacity:0.85; text-transform:uppercase; letter-spacing:1px;">Keberangkatan Anda</div>
+            <div style="font-family:'Marcellus',serif; font-size:22px; margin-top:4px;">{{ trip.pkg }}</div>
+            <div style="font-size:12.5px; opacity:0.9; margin-top:2px;">{{ trip.date }}</div>
+            <div style="display:flex; align-items:baseline; gap:8px; margin-top:16px;">
+              <span style="font-family:'JetBrains Mono',monospace; font-size:44px; font-weight:700; line-height:1;">{{ trip.days }}</span>
+              <span style="font-size:13px; opacity:0.9;">hari lagi</span>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:11px; opacity:0.85; margin-top:8px;">No. Registrasi · {{ trip.reg }}</div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;">
+            <sc-for list="{{ progress }}" as="p" hint-placeholder-count="2">
+              <div style="background:#fffdf8; border:1px solid #e6ddca; border-radius:16px; padding:15px;">
+                <div style="font-size:11.5px; color:#9a917d;">{{ p.label }}</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:700; color:{{ p.color }}; margin-top:4px;">{{ p.pct }}%</div>
+                <div style="height:6px; background:#f0eadc; border-radius:6px; overflow:hidden; margin-top:8px;"><div style="height:100%; width:{{ p.pct }}%; background:{{ p.color }};"></div></div>
+                <div style="font-size:10.5px; color:#a89e88; margin-top:6px;">{{ p.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="font-weight:600; font-size:13.5px; margin:20px 0 10px;">Perlu Tindakan</div>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <sc-for list="{{ actions }}" as="a" hint-placeholder-count="2">
+              <div onClick="{{ a.go }}" style="display:flex; align-items:center; gap:13px; padding:14px 15px; background:{{ a.bg }}; border:1px solid {{ a.border }}; border-radius:14px; cursor:pointer;">
+                <div style="width:38px; height:38px; border-radius:11px; background:{{ a.iconBg }}; flex:0 0 auto; display:flex; align-items:center; justify-content:center; color:#fff; font-size:16px; font-weight:700;">{{ a.icon }}</div>
+                <div style="flex:1;"><div style="font-weight:600; font-size:12.5px;">{{ a.title }}</div><div style="font-size:11px; color:#8c8371;">{{ a.desc }}</div></div>
+                <span style="color:#b6ac94; font-size:18px;">›</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="font-weight:600; font-size:13.5px; margin:20px 0 10px;">Rombongan Anda</div>
+          <div style="background:#fffdf8; border:1px solid #e6ddca; border-radius:16px; padding:16px; display:flex; flex-direction:column; gap:11px;">
+            <sc-for list="{{ groupInfo }}" as="g" hint-placeholder-count="3">
+              <div style="display:flex; justify-content:space-between; font-size:12.5px;"><span style="color:#9a917d;">{{ g.k }}</span><span style="font-weight:600;">{{ g.v }}</span></div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- BAYAR -->
+        <sc-if value="{{ isBayar }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="background:#fffdf8; border:1px solid #e6ddca; border-radius:18px; padding:18px;">
+            <div style="display:flex; justify-content:space-between; font-size:12px; color:#9a917d;"><span>Total tagihan</span><span style="font-family:'JetBrains Mono',monospace; color:#2c281f; font-weight:600;">{{ pay.total }}</span></div>
+            <div style="display:flex; justify-content:space-between; font-size:12px; color:#9a917d; margin-top:8px;"><span>Sudah terbayar</span><span style="font-family:'JetBrains Mono',monospace; color:oklch(0.46 0.07 158); font-weight:600;">{{ pay.paid }}</span></div>
+            <div style="height:9px; background:#f0eadc; border-radius:6px; overflow:hidden; margin:12px 0 8px;"><div style="height:100%; width:{{ pay.pct }}%; background:oklch(0.56 0.09 78);"></div></div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:12px; color:#9a917d;">Sisa</span>
+              <span style="font-family:'JetBrains Mono',monospace; font-size:19px; font-weight:700;">{{ pay.remain }}</span>
+            </div>
+          </div>
+
+          <div style="font-weight:600; font-size:13.5px; margin:18px 0 10px;">Jadwal Termin</div>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <sc-for list="{{ termins }}" as="t" hint-placeholder-count="4">
+              <div style="display:flex; align-items:center; gap:13px; padding:13px 15px; background:#fffdf8; border:1px solid {{ t.border }}; border-radius:14px;">
+                <div style="width:30px; height:30px; border-radius:50%; background:{{ t.dotBg }}; color:{{ t.dotColor }}; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; flex:0 0 auto;">{{ t.mark }}</div>
+                <div style="flex:1;"><div style="font-weight:600; font-size:12.5px;">{{ t.label }}</div><div style="font-size:10.5px; color:#a89e88;">{{ t.date }}</div></div>
+                <div style="text-align:right;"><div style="font-family:'JetBrains Mono',monospace; font-weight:600; font-size:12.5px;">{{ t.amount }}</div><div style="font-size:10px; font-weight:600; color:{{ t.stColor }};">{{ t.status }}</div></div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div onClick="{{ payNow }}" style="margin-top:16px; text-align:center; padding:15px; background:oklch(0.56 0.09 78); color:#20180a; font-weight:700; font-size:14px; border-radius:14px; cursor:pointer;">Bayar Termin — {{ pay.dueAmount }}</div>
+          <div style="font-size:10.5px; color:#a89e88; text-align:center; margin-top:8px;">Pembayaran dicatat sebagai Uang Muka Jamaah (amanah) hingga keberangkatan.</div>
+        </div>
+        </sc-if>
+
+        <!-- DOKUMEN -->
+        <sc-if value="{{ isDokumen }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="font-size:12.5px; color:#8c8371; margin-bottom:14px;">{{ docSummary }}</div>
+          <div style="display:flex; flex-direction:column; gap:11px;">
+            <sc-for list="{{ docs }}" as="d" hint-placeholder-count="5">
+              <div onClick="{{ d.go }}" style="display:flex; align-items:center; gap:13px; padding:14px 15px; background:#fffdf8; border:1px solid {{ d.border }}; border-radius:14px; cursor:{{ d.cursor }};">
+                <div style="width:38px; height:38px; border-radius:10px; background:{{ d.iconBg }}; color:{{ d.iconColor }}; display:flex; align-items:center; justify-content:center; font-size:9.5px; font-weight:700; flex:0 0 auto;">{{ d.abbr }}</div>
+                <div style="flex:1;"><div style="font-weight:600; font-size:12.5px;">{{ d.name }}</div><div style="font-size:11px; color:#a89e88;">{{ d.note }}</div></div>
+                <span style="font-size:10.5px; font-weight:600; color:{{ d.stColor }}; background:{{ d.stBg }}; padding:4px 10px; border-radius:20px;">{{ d.stat }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- PERJALANAN -->
+        <sc-if value="{{ isPerjalanan }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="display:flex; gap:12px; margin-bottom:16px;">
+            <sc-for list="{{ flights }}" as="f" hint-placeholder-count="2">
+              <div style="flex:1; background:#fffdf8; border:1px solid #e6ddca; border-radius:15px; padding:14px;">
+                <div style="font-size:10.5px; color:#9a917d; text-transform:uppercase; letter-spacing:0.5px;">{{ f.leg }}</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:16px; margin-top:5px;">{{ f.date }}</div>
+                <div style="font-size:11px; color:#8c8371; margin-top:3px;">{{ f.info }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="font-weight:600; font-size:13.5px; margin:6px 0 10px;">Akomodasi</div>
+          <div style="display:flex; flex-direction:column; gap:11px;">
+            <sc-for list="{{ hotels }}" as="h" hint-placeholder-count="2">
+              <div style="display:flex; gap:13px; padding:14px 15px; background:#fffdf8; border:1px solid #e6ddca; border-radius:14px; align-items:center;">
+                <div style="width:44px; height:44px; border-radius:11px; background:{{ h.tint }}; flex:0 0 auto; display:flex; align-items:center; justify-content:center; font-family:'Marcellus',serif; color:#fff; font-size:16px;">{{ h.initial }}</div>
+                <div style="flex:1;"><div style="font-weight:600; font-size:12.5px;">{{ h.name }}</div><div style="font-size:11px; color:#a89e88;">{{ h.detail }}</div></div>
+                <span style="font-size:11px; color:#9a917d;">{{ h.nights }}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="font-weight:600; font-size:13.5px; margin:18px 0 10px;">Checklist Perlengkapan</div>
+          <div style="background:#fffdf8; border:1px solid #e6ddca; border-radius:16px; padding:6px 15px;">
+            <sc-for list="{{ checklist }}" as="c" hint-placeholder-count="4">
+              <div style="display:flex; align-items:center; gap:11px; padding:11px 0; border-bottom:1px solid #f2ecdf;">
+                <span style="width:20px; height:20px; border-radius:6px; background:{{ c.bg }}; border:1.5px solid {{ c.border }}; color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex:0 0 auto;">{{ c.mark }}</span>
+                <span style="flex:1; font-size:12.5px; color:{{ c.textColor }};">{{ c.label }}</span>
+                <span style="font-size:10.5px; color:#a89e88;">{{ c.status }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- PROFIL -->
+        <sc-if value="{{ isProfil }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="background:#fffdf8; border:1px solid #e6ddca; border-radius:16px; padding:6px 16px; margin-bottom:16px;">
+            <sc-for list="{{ profil }}" as="p" hint-placeholder-count="6">
+              <div style="display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid #f2ecdf; font-size:12.5px;"><span style="color:#9a917d;">{{ p.k }}</span><span style="font-weight:600; text-align:right;">{{ p.v }}</span></div>
+            </sc-for>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <sc-for list="{{ menu }}" as="m" hint-placeholder-count="3">
+              <div style="display:flex; align-items:center; padding:14px 16px; background:#fffdf8; border:1px solid #e6ddca; border-radius:13px; font-size:12.5px; font-weight:500; color:{{ m.color }};"><span style="flex:1;">{{ m.label }}</span><span style="color:#b6ac94; font-size:17px;">›</span></div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+
+      </div>
+
+      <!-- BOTTOM NAV -->
+      <div style="flex:0 0 auto; display:flex; padding:9px 6px 22px; background:#fffdf8; border-top:1px solid #e6ddca;">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
+          <div onClick="{{ t.go }}" style="flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; cursor:pointer; padding:4px 0;">
+            <span style="width:9px; height:9px; border-radius:3px; background:{{ t.dot }};"></span>
+            <span style="font-size:10px; font-weight:{{ t.weight }}; color:{{ t.color }};">{{ t.label }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { tab: 'beranda' };
+
+  renderVals() {
+    const tab = this.state.tab;
+    const go = (t) => () => this.setState({ tab: t });
+    const dark = tab === 'beranda';
+    const tabDefs = [
+      ['beranda', 'Beranda', 'oklch(0.5 0.09 165)'],
+      ['bayar', 'Bayar', 'oklch(0.56 0.09 78)'],
+      ['dokumen', 'Dokumen', 'oklch(0.52 0.09 245)'],
+      ['perjalanan', 'Perjalanan', 'oklch(0.56 0.11 45)'],
+      ['profil', 'Profil', 'oklch(0.46 0.02 265)']
+    ];
+    const tabs = tabDefs.map(t => {
+      const on = tab === t[0];
+      return { label: t[1], go: go(t[0]), dot: on ? t[2] : '#d8cdb5', color: on ? '#2c281f' : '#a89e88', weight: on ? '700' : '500' };
+    });
+
+    const trip = { pkg: 'Umrah Plus Turki', date: '20 Agustus 2026 · 13 hari', days: '35', reg: 'UMR-2026-0418' };
+
+    const progress = [
+      { label: 'Dokumen', pct: 80, sub: '4 dari 5 terverifikasi', color: 'oklch(0.5 0.09 245)' },
+      { label: 'Pembayaran', pct: 72, sub: 'Rp 28,7 Jt / 39,9 Jt', color: 'oklch(0.56 0.09 78)' }
+    ];
+
+    const actions = [
+      { icon: '!', title: 'Termin ke-3 jatuh tempo', desc: 'Rp 11,2 Jt · tempo 10 Jul 2026', go: go('bayar'),
+        bg: 'oklch(0.97 0.03 30)', border: 'oklch(0.88 0.06 30)', iconBg: 'oklch(0.58 0.14 30)' },
+      { icon: '↑', title: 'Unggah Kartu Vaksin Meningitis', desc: 'Dokumen belum lengkap', go: go('dokumen'),
+        bg: 'oklch(0.97 0.03 78)', border: 'oklch(0.88 0.05 78)', iconBg: 'oklch(0.58 0.1 78)' }
+    ];
+
+    const groupInfo = [
+      { k: 'Rombongan', v: 'Grup B' },
+      { k: 'Muthawwif', v: 'Ust. Fadhil' },
+      { k: 'Tour Leader', v: 'Bpk. Surya' },
+      { k: 'Tipe Kamar', v: 'Triple · Kamar 511' }
+    ];
+
+    const pay = { total: 'Rp 39,9 Jt', paid: 'Rp 28,7 Jt', remain: 'Rp 11,2 Jt', pct: 72, dueAmount: 'Rp 11,2 Jt' };
+    const tm = (mark, label, date, amount, status, kind) => {
+      const map = {
+        done: { border: '#e6ddca', dotBg: 'oklch(0.5 0.09 158)', dotColor: '#fff', stColor: 'oklch(0.46 0.07 158)' },
+        due: { border: 'oklch(0.85 0.08 30)', dotBg: 'oklch(0.58 0.14 30)', dotColor: '#fff', stColor: 'oklch(0.55 0.14 28)' },
+        soon: { border: '#e6ddca', dotBg: '#f0eadc', dotColor: '#a89e88', stColor: '#a89e88' }
+      };
+      return Object.assign({ mark, label, date, amount, status }, map[kind]);
+    };
+    const termins = [
+      tm('✓', 'Uang Muka (DP)', '10 Maret 2026', 'Rp 5,0 Jt', 'Lunas', 'done'),
+      tm('✓', 'Termin 1', '10 Mei 2026', 'Rp 11,9 Jt', 'Lunas', 'done'),
+      tm('✓', 'Termin 2', '10 Juni 2026', 'Rp 11,8 Jt', 'Lunas', 'done'),
+      tm('3', 'Termin 3 (pelunasan)', '10 Juli 2026', 'Rp 11,2 Jt', 'Jatuh Tempo', 'due')
+    ];
+
+    const dc = (abbr, name, note, kind) => {
+      const map = {
+        ok: { border: '#e6ddca', iconBg: 'oklch(0.5 0.09 158)', iconColor: '#fff', stat: 'Terverifikasi', stColor: 'oklch(0.44 0.08 158)', stBg: 'oklch(0.95 0.04 158)', cursor: 'default', go: () => {} },
+        pending: { border: 'oklch(0.88 0.05 78)', iconBg: '#f0eadc', iconColor: '#a89e88', stat: 'Belum diunggah', stColor: 'oklch(0.5 0.1 78)', stBg: 'oklch(0.96 0.04 82)', cursor: 'pointer', go: () => {} }
+      };
+      return Object.assign({ abbr, name, note }, map[kind]);
+    };
+    const docs = [
+      dc('KTP', 'KTP', 'Diverifikasi 12 Mar 2026', 'ok'),
+      dc('KK', 'Kartu Keluarga', 'Diverifikasi 12 Mar 2026', 'ok'),
+      dc('PPR', 'Paspor', 'Valid s/d 30 Sep 2027', 'ok'),
+      dc('FTO', 'Pas Foto 4×6', 'Diverifikasi 15 Mar 2026', 'ok'),
+      dc('VKS', 'Kartu Vaksin Meningitis', 'Ketuk untuk mengunggah', 'pending')
+    ];
+
+    const flights = [
+      { leg: 'Keberangkatan', date: '20 Agu', info: 'CGK → IST → JED · Turkish TK-56' },
+      { leg: 'Kepulangan', date: '01 Sep', info: 'JED → IST → CGK · Turkish TK-57' }
+    ];
+    const hotels = [
+      { initial: 'M', name: 'Grand Al Massa ⭐4', detail: 'Makkah · ±350m dari Masjidil Haram', nights: '5 malam', tint: 'oklch(0.5 0.09 165)' },
+      { initial: 'D', name: 'Frontel Al Harithia ⭐4', detail: 'Madinah · ±200m dari Masjid Nabawi', nights: '3 malam', tint: 'oklch(0.52 0.09 245)' },
+      { initial: 'T', name: 'CVK Park Bosphorus ⭐5', detail: 'Istanbul · city tour 2 hari', nights: '2 malam', tint: 'oklch(0.50 0.10 322)' }
+    ];
+    const ck = (label, status, done) => ({ label, status,
+      bg: done ? 'oklch(0.5 0.09 158)' : '#fff', border: done ? 'oklch(0.5 0.09 158)' : '#c9bfa8',
+      mark: done ? '✓' : '', textColor: done ? '#2c281f' : '#6f6858' });
+    const checklist = [
+      ck('Koper & tas kabin', 'Diterima', true),
+      ck('Seragam batik', 'Diterima', true),
+      ck('Buku manasik & doa', 'Belum diambil', false),
+      ck('Kain ihram / mukena', 'Belum diambil', false)
+    ];
+
+    const profil = [
+      { k: 'Nama (paspor)', v: 'SITI ROHMAH' },
+      { k: 'No. Registrasi', v: 'UMR-2026-0418' },
+      { k: 'NIK', v: '3275xxxxxxxx0042' },
+      { k: 'No. Paspor', v: 'C5120388' },
+      { k: 'Mahram', v: 'H. Bambang (Suami)' },
+      { k: 'Cabang', v: 'Safar Jakarta' }
+    ];
+    const menu = [
+      { label: 'Ubah data & kontak', color: '#2c281f' },
+      { label: 'Unduh invoice & kwitansi', color: '#2c281f' },
+      { label: 'Bantuan & hubungi CS', color: '#2c281f' },
+      { label: 'Keluar', color: 'oklch(0.55 0.14 28)' }
+    ];
+
+    return {
+      tabs,
+      barBg: dark ? 'oklch(0.44 0.08 175)' : '#f3eee2',
+      barColor: dark ? '#ffffff' : '#2c281f',
+      subColor: dark ? 'rgba(255,255,255,0.8)' : '#9a917d',
+      notifBg: dark ? 'rgba(255,255,255,0.15)' : '#fff',
+      isBeranda: tab === 'beranda', isBayar: tab === 'bayar', isDokumen: tab === 'dokumen',
+      isPerjalanan: tab === 'perjalanan', isProfil: tab === 'profil',
+      trip, progress, actions, groupInfo, pay, termins, payNow: () => {},
+      docs, docSummary: '4 dari 5 dokumen sudah terverifikasi. Lengkapi sisanya sebelum 05 Agustus 2026.',
+      flights, hotels, checklist, profil, menu
+    };
+  }
+}
+</script>
+</body>
+</html>

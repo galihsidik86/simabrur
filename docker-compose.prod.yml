@@ -1,0 +1,40 @@
+# Produksi: docker compose -f docker-compose.prod.yml up -d --build
+# Wajib set env (mis. via file .env di sebelah file ini):
+#   DB_PASSWORD, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET (masing2 >= 32 char acak)
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: safar
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+      POSTGRES_DB: safar
+    volumes:
+      - safar_pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U safar -d safar"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgres://safar:${DB_PASSWORD}@db:5432/safar
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET}
+      # CORS_ORIGIN: https://app.contoh.co.id   # hanya bila frontend disajikan dari origin lain
+    ports:
+      - "${APP_PORT:-3001}:3001"
+    volumes:
+      - safar_uploads:/app/backend/uploads
+
+volumes:
+  safar_pgdata_prod:
+  safar_uploads:

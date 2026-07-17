@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:#efe8da;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#2c281f;}
+  a{color:oklch(0.5 0.09 165);text-decoration:none;}
+  ::-webkit-scrollbar{width:10px;height:10px;} ::-webkit-scrollbar-thumb{background:#d8cdb5;border-radius:6px;border:2px solid #efe8da;}
+</style>
+</helmet>
+<div style="min-height:100vh;">
+
+  <div style="background:#faf7f0; border-bottom:1px solid #e6ddca; padding:20px 32px 0;">
+    <div style="max-width:1200px; margin:0 auto;">
+      <div style="font-size:11.5px; color:#a89e88; margin-bottom:3px;">Operasional &amp; Kepatuhan</div>
+      <div style="font-family:'Marcellus',serif; font-size:26px; color:#26221b;">Laporan Operasional</div>
+      <div style="display:flex; gap:4px; margin-top:16px;">
+        <sc-for list="{{ subtabs }}" as="t" hint-placeholder-count="3">
+          <div onClick="{{ t.go }}" style="font-size:13px; font-weight:600; padding:11px 18px; cursor:pointer; color:{{ t.color }}; border-bottom:2.5px solid {{ t.bar }};">{{ t.label }}</div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:1200px; margin:0 auto; padding:24px 32px 50px;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:20px;">
+      <span style="font-size:12.5px; font-weight:600; padding:9px 14px; border-radius:9px; background:#fff; border:1px solid #e6ddca;">{{ filterLabel }}</span>
+      <span style="font-size:11.5px; color:#a89e88;">Per 16 Juli 2026</span>
+      <div style="margin-left:auto; display:flex; gap:8px;">
+        <span style="font-size:12.5px; font-weight:600; color:#6f6858; padding:9px 14px; border-radius:9px; background:#fff; border:1px solid #e6ddca; cursor:pointer;">Ekspor Excel</span>
+        <span style="font-size:12.5px; font-weight:600; color:#6f6858; padding:9px 14px; border-radius:9px; background:#fff; border:1px solid #e6ddca; cursor:pointer;">Ekspor PDF</span>
+      </div>
+    </div>
+
+    <!-- tiles -->
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px;">
+      <sc-for list="{{ tiles }}" as="t" hint-placeholder-count="4">
+        <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:12px; padding:15px 16px; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3); border-left:4px solid {{ t.accent }};">
+          <div style="font-size:11.5px; color:#9a917d;">{{ t.label }}</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:19px; font-weight:600; margin-top:6px; color:{{ t.color }};">{{ t.value }}</div>
+          <div style="font-size:10.5px; color:#a89e88; margin-top:2px;">{{ t.sub }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- ===== PIUTANG AGING ===== -->
+    <sc-if value="{{ isPiutang }}" hint-placeholder-val="{{ true }}">
+    <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:13px; overflow:hidden; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3);">
+      <div style="padding:16px 20px; border-bottom:1px solid #eee5d3; font-weight:600; font-size:14px;">Rincian Piutang Jamaah <span style="font-size:11px; color:#a89e88; font-weight:400;">— berdasarkan umur tunggakan</span></div>
+      <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+        <thead><tr style="background:#f6f1e6; color:#9a917d; font-size:10.5px; text-transform:uppercase; letter-spacing:0.4px; text-align:left;">
+          <th style="padding:11px 20px; font-weight:600;">Jamaah</th><th style="padding:11px 12px; font-weight:600;">Paket</th><th style="padding:11px 12px; font-weight:600; text-align:right;">Total</th><th style="padding:11px 12px; font-weight:600; text-align:right;">Terbayar</th><th style="padding:11px 12px; font-weight:600; text-align:right;">Sisa</th><th style="padding:11px 12px; font-weight:600;">Jatuh Tempo</th><th style="padding:11px 20px; font-weight:600;">Umur</th>
+        </tr></thead>
+        <tbody>
+          <sc-for list="{{ agingRows }}" as="r" hint-placeholder-count="7">
+            <tr style="border-top:1px solid #eee5d3;">
+              <td style="padding:12px 20px;"><div style="font-weight:600;">{{ r.name }}</div><div style="font-size:10.5px; color:#a89e88; font-family:'JetBrains Mono',monospace;">{{ r.reg }}</div></td>
+              <td style="padding:12px 12px; color:#6f6858;">{{ r.paket }}</td>
+              <td style="padding:12px 12px; text-align:right; font-family:'JetBrains Mono',monospace;">{{ r.total }}</td>
+              <td style="padding:12px 12px; text-align:right; font-family:'JetBrains Mono',monospace; color:oklch(0.46 0.07 158);">{{ r.paid }}</td>
+              <td style="padding:12px 12px; text-align:right; font-family:'JetBrains Mono',monospace; font-weight:600;">{{ r.sisa }}</td>
+              <td style="padding:12px 12px; color:#6f6858;">{{ r.due }}</td>
+              <td style="padding:12px 20px;"><span style="font-size:10.5px; font-weight:600; color:{{ r.ageColor }}; background:{{ r.ageBg }}; padding:3px 10px; border-radius:20px;">{{ r.age }}</span></td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </div>
+    </sc-if>
+
+    <!-- ===== KEPATUHAN DOKUMEN ===== -->
+    <sc-if value="{{ isDokumen }}" hint-placeholder-val="{{ true }}">
+    <div>
+      <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:13px; padding:18px 22px; margin-bottom:16px; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3);">
+        <div style="font-weight:600; font-size:14px; margin-bottom:14px;">Kelengkapan Dokumen per Keberangkatan</div>
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <sc-for list="{{ compliance }}" as="c" hint-placeholder-count="4">
+            <div>
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:12.5px; margin-bottom:6px;">
+                <span style="font-weight:600;">{{ c.name }} <span style="color:#a89e88; font-weight:400;">· {{ c.count }} jamaah</span></span>
+                <span style="display:flex; align-items:center; gap:12px;"><span style="font-size:11px; color:{{ c.warnColor }};">{{ c.warn }}</span><span style="font-family:'JetBrains Mono',monospace; font-weight:600;">{{ c.pct }}%</span></span>
+              </div>
+              <div style="height:9px; background:#f0eadc; border-radius:6px; overflow:hidden;"><div style="height:100%; width:{{ c.pct }}%; background:{{ c.barColor }};"></div></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:13px; overflow:hidden; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3);">
+        <div style="padding:16px 20px; border-bottom:1px solid #eee5d3; font-weight:600; font-size:14px;">Matriks Dokumen — Umrah Plus Turki (20 Agu 2026)</div>
+        <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+          <thead><tr style="background:#f6f1e6; color:#9a917d; font-size:10px; text-transform:uppercase; letter-spacing:0.3px; text-align:left;">
+            <th style="padding:11px 20px; font-weight:600;">Jamaah</th>
+            <sc-for list="{{ docTypes }}" as="d" hint-placeholder-count="6"><th style="padding:11px 6px; font-weight:600; text-align:center;">{{ d }}</th></sc-for>
+            <th style="padding:11px 20px; font-weight:600; text-align:right;">Status</th>
+          </tr></thead>
+          <tbody>
+            <sc-for list="{{ docMatrix }}" as="r" hint-placeholder-count="6">
+              <tr style="border-top:1px solid #eee5d3;">
+                <td style="padding:11px 20px; font-weight:600;">{{ r.name }}</td>
+                <sc-for list="{{ r.docs }}" as="d" hint-placeholder-count="6">
+                  <td style="padding:11px 6px; text-align:center;"><span title="{{ d.title }}" style="display:inline-flex; width:22px; height:22px; align-items:center; justify-content:center; border-radius:6px; font-size:11px; font-weight:700; color:{{ d.color }}; background:{{ d.bg }};">{{ d.mark }}</span></td>
+                </sc-for>
+                <td style="padding:11px 20px; text-align:right;"><span style="font-size:10.5px; font-weight:600; color:{{ r.stColor }}; background:{{ r.stBg }}; padding:3px 10px; border-radius:20px;">{{ r.status }}</span></td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+        <div style="padding:12px 20px; border-top:1px solid #eee5d3; display:flex; gap:18px; font-size:10.5px; color:#8c8371;">
+          <span style="display:flex; align-items:center; gap:6px;"><span style="width:14px;height:14px;border-radius:4px;background:oklch(0.94 0.04 158);color:oklch(0.44 0.08 158);display:inline-flex;align-items:center;justify-content:center;font-weight:700;">✓</span> Terverifikasi</span>
+          <span style="display:flex; align-items:center; gap:6px;"><span style="width:14px;height:14px;border-radius:4px;background:#f2ecdf;color:#a89e88;display:inline-flex;align-items:center;justify-content:center;font-weight:700;">·</span> Belum diunggah</span>
+          <span style="display:flex; align-items:center; gap:6px;"><span style="width:14px;height:14px;border-radius:4px;background:oklch(0.95 0.05 30);color:oklch(0.5 0.14 28);display:inline-flex;align-items:center;justify-content:center;font-weight:700;">!</span> Bermasalah / kedaluwarsa</span>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ===== KESIAPAN ===== -->
+    <sc-if value="{{ isKesiapan }}" hint-placeholder-val="{{ true }}">
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+      <sc-for list="{{ readiness }}" as="k" hint-placeholder-count="4">
+        <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:14px; padding:20px 22px; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3);">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
+            <div><div style="font-weight:600; font-size:14px;">{{ k.name }}</div><div style="font-size:11px; color:#a89e88;">{{ k.date }} · {{ k.jamaah }} jamaah</div></div>
+            <div style="text-align:right;"><div style="font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:700; color:{{ k.scoreColor }};">{{ k.score }}%</div><div style="font-size:10px; color:#a89e88;">kesiapan</div></div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:11px;">
+            <sc-for list="{{ k.metrics }}" as="m" hint-placeholder-count="4">
+              <div>
+                <div style="display:flex; justify-content:space-between; font-size:11.5px; margin-bottom:4px;"><span style="color:#6f6858;">{{ m.label }}</span><span style="font-family:'JetBrains Mono',monospace; font-weight:600; color:{{ m.valColor }};">{{ m.value }}</span></div>
+                <div style="height:6px; background:#f0eadc; border-radius:6px; overflow:hidden;"><div style="height:100%; width:{{ m.pct }}%; background:{{ m.barColor }};"></div></div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="margin-top:14px; padding-top:12px; border-top:1px solid #eee5d3; font-size:11px; color:{{ k.noteColor }};">{{ k.note }}</div>
+        </div>
+      </sc-for>
+    </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { tab: 'piutang' };
+
+  renderVals() {
+    const tab = this.state.tab;
+    const stab = (id, label) => ({ label, go: () => this.setState({ tab: id }),
+      color: tab === id ? '#26221b' : '#a89e88', bar: tab === id ? 'oklch(0.5 0.09 165)' : 'transparent' });
+    const subtabs = [stab('piutang', 'Piutang (Aging)'), stab('dokumen', 'Kepatuhan Dokumen'), stab('kesiapan', 'Kesiapan Keberangkatan')];
+
+    let tiles = [], filterLabel = '';
+    if (tab === 'piutang') {
+      filterLabel = 'Semua cabang ▾';
+      tiles = [
+        { label: 'Belum Jatuh Tempo', value: 'Rp 2,14 M', sub: '198 jamaah', accent: 'oklch(0.5 0.09 165)', color: '#2c281f' },
+        { label: '1–30 Hari', value: 'Rp 640 Jt', sub: '64 jamaah', accent: 'oklch(0.62 0.11 78)', color: '#2c281f' },
+        { label: '31–60 Hari', value: 'Rp 218 Jt', sub: '22 jamaah', accent: 'oklch(0.60 0.13 45)', color: '#2c281f' },
+        { label: '> 60 Hari', value: 'Rp 74 Jt', sub: '9 jamaah · tindak lanjut', accent: 'oklch(0.55 0.15 28)', color: 'oklch(0.5 0.14 28)' }
+      ];
+    } else if (tab === 'dokumen') {
+      filterLabel = 'Semua keberangkatan ▾';
+      tiles = [
+        { label: 'Lengkap & Terverifikasi', value: '1.042', sub: '81% dari jamaah aktif', accent: 'oklch(0.46 0.07 158)', color: 'oklch(0.44 0.08 158)' },
+        { label: 'Dokumen Pending', value: '242', sub: 'menunggu unggah/verifikasi', accent: 'oklch(0.62 0.11 78)', color: '#2c281f' },
+        { label: 'Paspor < 7 Bulan', value: '18', sub: 'perlu perpanjangan', accent: 'oklch(0.55 0.15 28)', color: 'oklch(0.5 0.14 28)' },
+        { label: 'Total Jamaah Aktif', value: '1.284', sub: '7 keberangkatan', accent: 'oklch(0.46 0.02 265)', color: '#2c281f' }
+      ];
+    } else {
+      filterLabel = 'Keberangkatan ≤ 90 hari ▾';
+      tiles = [
+        { label: 'Keberangkatan Aktif', value: '4', sub: '≤ 90 hari ke depan', accent: 'oklch(0.46 0.02 265)', color: '#2c281f' },
+        { label: 'Visa Terbit', value: '78 / 111', sub: '33 dalam proses', accent: 'oklch(0.52 0.09 245)', color: '#2c281f' },
+        { label: 'Sudah Lunas', value: '86%', sub: 'nilai pelunasan', accent: 'oklch(0.46 0.07 158)', color: 'oklch(0.44 0.08 158)' },
+        { label: 'Manifest Siap', value: '2 / 4', sub: 'grup siap terbit', accent: 'oklch(0.62 0.11 78)', color: '#2c281f' }
+      ];
+    }
+
+    const ageMap = {
+      belum: { age: 'Belum tempo', ageColor: 'oklch(0.42 0.07 158)', ageBg: 'oklch(0.95 0.03 158)' },
+      d30: { age: '1–30 hari', ageColor: 'oklch(0.45 0.08 78)', ageBg: 'oklch(0.95 0.04 82)' },
+      d60: { age: '31–60 hari', ageColor: 'oklch(0.48 0.1 45)', ageBg: 'oklch(0.96 0.04 55)' },
+      d90: { age: '> 60 hari', ageColor: '#fff', ageBg: 'oklch(0.55 0.15 28)' }
+    };
+    const ar = (name, reg, paket, total, paid, sisa, due, bucket) => Object.assign({ name, reg, paket, total, paid, sisa, due }, ageMap[bucket]);
+    const agingRows = [
+      ar('Hj. Siti Rohmah', 'UMR-2026-0418', 'Umrah Plus Turki', 'Rp 39,9 Jt', 'Rp 28,7 Jt', 'Rp 11,2 Jt', '10 Agu 2026', 'belum'),
+      ar('Nur Aini', 'UMR-2026-0430', 'Umrah Plus Aqsa', 'Rp 44,5 Jt', 'Rp 6,7 Jt', 'Rp 37,8 Jt', '25 Jul 2026', 'belum'),
+      ar('Rahmat Hidayat', 'UMR-2026-0433', 'Umrah Reguler', 'Rp 31,0 Jt', 'Rp 18,6 Jt', 'Rp 12,4 Jt', '30 Jun 2026', 'd30'),
+      ar('Budi Santoso', 'UMR-2026-0421', 'Umrah VIP', 'Rp 62,0 Jt', 'Rp 27,9 Jt', 'Rp 34,1 Jt', '18 Jun 2026', 'd30'),
+      ar('Dewi Lestari', 'UMR-2026-0425', 'Umrah Reguler', 'Rp 28,5 Jt', 'Rp 5,7 Jt', 'Rp 22,8 Jt', '15 Mei 2026', 'd60'),
+      ar('Ahmad Zaki', 'UMR-2026-0402', 'Umrah Reguler', 'Rp 28,5 Jt', 'Rp 20,0 Jt', 'Rp 8,5 Jt', '02 Apr 2026', 'd90'),
+      ar('Hj. Maryam Zahra', 'UMR-2026-0429', 'Umrah VIP', 'Rp 62,0 Jt', 'Rp 43,4 Jt', 'Rp 18,6 Jt', '05 Agu 2026', 'belum')
+    ];
+
+    const compliance = [
+      { name: 'Umrah Reguler', date: '12 Agu 2026', count: 45, pct: 96, warn: '1 paspor perlu perpanjang', warnColor: 'oklch(0.5 0.14 28)', barColor: 'oklch(0.5 0.09 158)' },
+      { name: 'Umrah Plus Turki', date: '20 Agu 2026', count: 34, pct: 88, warn: 'lengkap', warnColor: '#a89e88', barColor: 'oklch(0.5 0.09 165)' },
+      { name: 'Umrah VIP', date: '03 Sep 2026', count: 18, pct: 78, warn: '2 paspor bermasalah', warnColor: 'oklch(0.5 0.14 28)', barColor: 'oklch(0.62 0.11 78)' },
+      { name: 'Haji Khusus Furoda', date: '28 Mei 2027', count: 12, pct: 100, warn: 'lengkap', warnColor: 'oklch(0.44 0.08 158)', barColor: 'oklch(0.5 0.09 158)' }
+    ].map(c => Object.assign(c, { count: c.count, warn: c.warn }));
+
+    const docTypes = ['KTP', 'KK', 'PPR', 'FTO', 'VKS', 'NKH'];
+    const dChip = (st) => ({
+      ok: { mark: '✓', color: 'oklch(0.44 0.08 158)', bg: 'oklch(0.94 0.04 158)', title: 'Terverifikasi' },
+      no: { mark: '·', color: '#a89e88', bg: '#f2ecdf', title: 'Belum diunggah' },
+      bad: { mark: '!', color: 'oklch(0.5 0.14 28)', bg: 'oklch(0.95 0.05 30)', title: 'Bermasalah / kedaluwarsa' }
+    })[st];
+    const stMap = {
+      lengkap: { status: 'Lengkap', stColor: 'oklch(0.44 0.08 158)', stBg: 'oklch(0.95 0.03 158)' },
+      kurang: { status: 'Belum lengkap', stColor: 'oklch(0.48 0.03 90)', stBg: '#f2ecdf' },
+      masalah: { status: 'Perlu tindakan', stColor: 'oklch(0.5 0.14 28)', stBg: 'oklch(0.96 0.04 30)' }
+    };
+    const dm = (name, arr, st) => Object.assign({ name, docs: arr.map(dChip) }, stMap[st]);
+    const docMatrix = [
+      dm('Hj. Siti Rohmah', ['ok', 'ok', 'ok', 'ok', 'no', 'ok'], 'kurang'),
+      dm('H. Bambang Suryo', ['ok', 'ok', 'ok', 'ok', 'ok', 'ok'], 'lengkap'),
+      dm('Ir. Hendra W.', ['ok', 'ok', 'bad', 'ok', 'no', 'no'], 'masalah'),
+      dm('Hj. Aisyah Putri', ['ok', 'ok', 'ok', 'ok', 'ok', 'ok'], 'lengkap'),
+      dm('Slamet Riyadi', ['ok', 'ok', 'ok', 'no', 'no', 'ok'], 'kurang'),
+      dm('Dra. Kartini', ['ok', 'ok', 'ok', 'ok', 'ok', 'ok'], 'lengkap')
+    ];
+
+    const met = (label, value, pct, kind) => {
+      const c = kind === 'good' ? 'oklch(0.5 0.09 158)' : (kind === 'warn' ? 'oklch(0.62 0.11 78)' : 'oklch(0.58 0.14 30)');
+      return { label, value, pct, barColor: c, valColor: pct >= 90 ? 'oklch(0.44 0.08 158)' : '#3a3428' };
+    };
+    const score = (n) => n >= 90 ? 'oklch(0.44 0.08 158)' : (n >= 70 ? 'oklch(0.55 0.1 78)' : 'oklch(0.55 0.14 28)');
+    const readiness = [
+      { name: 'Umrah Reguler', date: '12 Agu 2026', jamaah: 45, s: 92,
+        metrics: [met('Pelunasan', '100%', 100, 'good'), met('Dokumen lengkap', '96%', 96, 'good'), met('Visa terbit', '40 / 45', 89, 'warn'), met('Tiket terbit', '45 / 45', 100, 'good')],
+        note: 'Manifest siap dikirim. Sisa 5 visa dalam proses biometrik.', noteColor: '#6f6858' },
+      { name: 'Umrah Plus Turki', date: '20 Agu 2026', jamaah: 34, s: 79,
+        metrics: [met('Pelunasan', '82%', 82, 'warn'), met('Dokumen lengkap', '88%', 88, 'warn'), met('Visa terbit', '24 / 34', 71, 'warn'), met('Tiket terbit', '30 / 34', 88, 'warn')],
+        note: '6 jamaah belum lunas · 1 kartu vaksin belum diunggah.', noteColor: 'oklch(0.5 0.1 78)' },
+      { name: 'Umrah VIP', date: '03 Sep 2026', jamaah: 18, s: 64,
+        metrics: [met('Pelunasan', '70%', 70, 'bad'), met('Dokumen lengkap', '78%', 78, 'warn'), met('Visa terbit', '8 / 18', 44, 'bad'), met('Tiket terbit', '12 / 18', 67, 'warn')],
+        note: '2 paspor bermasalah — perlu tindak lanjut segera.', noteColor: 'oklch(0.5 0.14 28)' },
+      { name: 'Haji Khusus Furoda', date: '28 Mei 2027', jamaah: 12, s: 98,
+        metrics: [met('Pelunasan', '100%', 100, 'good'), met('Dokumen lengkap', '100%', 100, 'good'), met('Visa terbit', '12 / 12', 100, 'good'), met('Tiket terbit', '11 / 12', 92, 'good')],
+        note: 'Seluruh dokumen & pelunasan tuntas. Menunggu 1 tiket final.', noteColor: 'oklch(0.44 0.08 158)' }
+    ].map(k => Object.assign(k, { score: k.s, scoreColor: score(k.s) }));
+
+    return {
+      subtabs, filterLabel, tiles,
+      isPiutang: tab === 'piutang', isDokumen: tab === 'dokumen', isKesiapan: tab === 'kesiapan',
+      agingRows, compliance, docTypes, docMatrix, readiness
+    };
+  }
+}
+</script>
+</body>
+</html>

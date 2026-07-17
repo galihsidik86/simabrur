@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:#efe8da;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#2c281f;}
+  a{color:oklch(0.5 0.09 165);text-decoration:none;} a:hover{color:oklch(0.42 0.09 165);}
+  ::-webkit-scrollbar{width:10px;height:10px;} ::-webkit-scrollbar-thumb{background:#d8cdb5;border-radius:6px;border:2px solid #efe8da;}
+</style>
+</helmet>
+<div style="display:flex; height:100vh; overflow:hidden;">
+
+  <!-- SIDEBAR -->
+  <aside style="width:256px; flex:0 0 256px; background:linear-gradient(180deg,#16211b,#1b2a20); color:#e8e0cf; display:flex; flex-direction:column; padding:0;">
+    <div style="padding:22px 22px 18px; border-bottom:1px solid rgba(255,255,255,0.07); display:flex; align-items:center; gap:12px;">
+      <div style="width:38px; height:38px; border-radius:10px; background:oklch(0.56 0.11 78); display:flex; align-items:center; justify-content:center; font-family:'Marcellus',serif; font-size:20px; color:#20180a;">S</div>
+      <div>
+        <div style="font-family:'Marcellus',serif; font-size:19px; letter-spacing:0.5px; line-height:1;">Safar</div>
+        <div style="font-size:10.5px; color:#9fb0a4; letter-spacing:1px; text-transform:uppercase; margin-top:3px;">Manajemen Umrah &amp; Haji</div>
+      </div>
+    </div>
+    <nav style="flex:1; padding:14px 12px; overflow-y:auto; display:flex; flex-direction:column; gap:2px;">
+      <sc-for list="{{ nav }}" as="it" hint-placeholder-count="7">
+        <div onClick="{{ it.go }}" style="display:flex; align-items:center; gap:11px; padding:10px 12px; border-radius:9px; cursor:pointer; background:{{ it.bg }}; border-left:3px solid {{ it.bar }};" style-hover="background:rgba(255,255,255,0.06);">
+          <span style="width:9px; height:9px; border-radius:3px; background:{{ it.dot }}; flex:0 0 auto;"></span>
+          <span style="font-size:13px; font-weight:{{ it.weight }}; color:{{ it.color }};">{{ it.label }}</span>
+        </div>
+      </sc-for>
+    </nav>
+    <div style="padding:14px 16px; border-top:1px solid rgba(255,255,255,0.07); display:flex; align-items:center; gap:11px;">
+      <div style="width:34px; height:34px; border-radius:50%; background:oklch(0.5 0.09 165); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff;">RA</div>
+      <div style="flex:1;">
+        <div style="font-size:12.5px; font-weight:600;">Rizki Amanullah</div>
+        <div style="font-size:10.5px; color:#9fb0a4;">Admin Pusat · Cabang Jakarta</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
+    <header style="height:66px; flex:0 0 66px; background:#faf7f0; border-bottom:1px solid #e6ddca; display:flex; align-items:center; padding:0 28px; gap:20px;">
+      <div style="flex:1;">
+        <div style="font-family:'Marcellus',serif; font-size:22px; color:#26221b; line-height:1;">{{ pageTitle }}</div>
+        <div style="font-size:11.5px; color:#9a917d; margin-top:3px;">{{ pageSub }}</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; background:#fff; border:1px solid #e6ddca; border-radius:9px; padding:8px 13px; width:250px; color:#9a917d;">
+        <span style="width:7px; height:7px; border:1.5px solid #b6ac94; border-radius:50%; display:inline-block;"></span>
+        <span style="font-size:12.5px;">Cari jamaah, paket, invoice…</span>
+      </div>
+      <div style="position:relative; width:40px; height:40px; border-radius:9px; background:#fff; border:1px solid #e6ddca; display:flex; align-items:center; justify-content:center;">
+        <span style="width:16px; height:16px; border:1.5px solid #8c8371; border-radius:5px 5px 0 0; display:inline-block;"></span>
+        <span style="position:absolute; top:8px; right:9px; width:8px; height:8px; border-radius:50%; background:oklch(0.56 0.13 30); border:1.5px solid #fff;"></span>
+      </div>
+    </header>
+
+    <div style="flex:1; overflow-y:auto; padding:26px 28px 40px;">
+
+      <!-- ============ DASHBOARD ============ -->
+      <sc-if value="{{ isDashboard }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px;">
+          <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
+            <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:13px; padding:18px 18px 16px; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3);">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <span style="font-size:12px; color:#9a917d; font-weight:500;">{{ k.label }}</span>
+                <span style="font-size:11px; font-weight:600; color:{{ k.deltaColor }}; background:{{ k.deltaBg }}; padding:2px 7px; border-radius:20px;">{{ k.delta }}</span>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:25px; font-weight:600; color:#26221b; margin-top:10px;">{{ k.value }}</div>
+              <div style="font-size:11px; color:#a89e88; margin-top:3px;">{{ k.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1.7fr 1fr; gap:16px; margin-top:16px;">
+          <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:13px; padding:20px 22px; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3);">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div style="font-weight:600; font-size:14px;">Arus Kas &amp; Pengakuan Pendapatan</div>
+              <div style="display:flex; gap:16px; font-size:11px; color:#8c8371;">
+                <span style="display:flex; align-items:center; gap:6px;"><span style="width:10px;height:10px;border-radius:3px;background:oklch(0.5 0.09 165);"></span>Penerimaan Kas</span>
+                <span style="display:flex; align-items:center; gap:6px;"><span style="width:10px;height:10px;border-radius:3px;background:oklch(0.62 0.11 78);"></span>Pendapatan Diakui</span>
+              </div>
+            </div>
+            <div style="display:flex; align-items:flex-end; gap:20px; height:186px; margin-top:22px; padding-bottom:22px; border-bottom:1px solid #eee5d3;">
+              <sc-for list="{{ cashflow }}" as="c" hint-placeholder-count="6">
+                <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; height:100%; justify-content:flex-end;">
+                  <div style="display:flex; align-items:flex-end; gap:5px; height:100%;">
+                    <div style="width:16px; height:{{ c.h1 }}px; background:oklch(0.5 0.09 165); border-radius:4px 4px 0 0;"></div>
+                    <div style="width:16px; height:{{ c.h2 }}px; background:oklch(0.62 0.11 78); border-radius:4px 4px 0 0;"></div>
+                  </div>
+                  <span style="font-size:11px; color:#9a917d;">{{ c.m }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:13px; padding:20px 22px; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3);">
+            <div style="font-weight:600; font-size:14px;">Piutang Jamaah (Aging)</div>
+            <div style="margin-top:16px; display:flex; flex-direction:column; gap:14px;">
+              <sc-for list="{{ aging }}" as="a" hint-placeholder-count="4">
+                <div>
+                  <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:5px;"><span style="color:#6f6858;">{{ a.label }}</span><span style="font-family:'JetBrains Mono',monospace; font-weight:600;">{{ a.amount }}</span></div>
+                  <div style="height:8px; background:#f0eadc; border-radius:6px; overflow:hidden;"><div style="height:100%; width:{{ a.pct }}%; background:{{ a.color }}; border-radius:6px;"></div></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1.4fr 1fr; gap:16px; margin-top:16px;">
+          <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:13px; padding:20px 22px; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3);">
+            <div style="font-weight:600; font-size:14px; margin-bottom:14px;">Profitabilitas per Paket</div>
+            <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+              <thead><tr style="color:#9a917d; font-size:10.5px; text-transform:uppercase; letter-spacing:0.4px; text-align:left;">
+                <th style="padding:6px 0; font-weight:600;">Paket</th><th style="padding:6px 0; font-weight:600; text-align:right;">Jamaah</th><th style="padding:6px 0; font-weight:600; text-align:right;">Omzet</th><th style="padding:6px 0; font-weight:600; text-align:right;">Margin</th>
+              </tr></thead>
+              <tbody>
+                <sc-for list="{{ profit }}" as="p" hint-placeholder-count="4">
+                  <tr style="border-top:1px solid #eee5d3;">
+                    <td style="padding:10px 0;"><div style="font-weight:600;">{{ p.name }}</div><div style="font-size:10.5px; color:#a89e88;">{{ p.type }}</div></td>
+                    <td style="padding:10px 0; text-align:right; font-family:'JetBrains Mono',monospace;">{{ p.jamaah }}</td>
+                    <td style="padding:10px 0; text-align:right; font-family:'JetBrains Mono',monospace;">{{ p.omzet }}</td>
+                    <td style="padding:10px 0; text-align:right;"><span style="font-family:'JetBrains Mono',monospace; font-weight:600; color:oklch(0.46 0.07 158); background:oklch(0.95 0.03 158); padding:2px 8px; border-radius:20px;">{{ p.margin }}</span></td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+
+          <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:13px; padding:20px 22px; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3);">
+            <div style="font-weight:600; font-size:14px; margin-bottom:14px;">Keberangkatan Mendatang</div>
+            <div style="display:flex; flex-direction:column; gap:13px;">
+              <sc-for list="{{ upcoming }}" as="u" hint-placeholder-count="4">
+                <div>
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div><span style="font-weight:600; font-size:12.5px;">{{ u.name }}</span><div style="font-size:10.5px; color:#a89e88;">{{ u.date }}</div></div>
+                    <span style="font-size:10.5px; font-weight:600; color:{{ u.statusColor }}; background:{{ u.statusBg }}; padding:3px 9px; border-radius:20px;">{{ u.status }}</span>
+                  </div>
+                  <div style="height:7px; background:#f0eadc; border-radius:6px; overflow:hidden; margin-top:7px;"><div style="height:100%; width:{{ u.pct }}%; background:{{ u.barColor }};"></div></div>
+                  <div style="font-size:10.5px; color:#9a917d; margin-top:4px; font-family:'JetBrains Mono',monospace;">{{ u.seats }} kursi terisi</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ PAKET ============ -->
+      <sc-if value="{{ isPaket }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;">
+          <div style="display:flex; gap:8px;">
+            <sc-for list="{{ paketTabs }}" as="t" hint-placeholder-count="4">
+              <span style="font-size:12.5px; font-weight:600; padding:7px 14px; border-radius:8px; cursor:pointer; color:{{ t.color }}; background:{{ t.bg }}; border:1px solid {{ t.border }};">{{ t.label }}</span>
+            </sc-for>
+          </div>
+          <span style="font-size:13px; font-weight:600; color:#fff; background:oklch(0.5 0.09 165); padding:9px 16px; border-radius:9px; cursor:pointer;">+ Tambah Paket</span>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px;">
+          <sc-for list="{{ pakets }}" as="p" hint-placeholder-count="6">
+            <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:13px; overflow:hidden; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3);">
+              <div style="height:96px; background:{{ p.grad }}; position:relative; display:flex; align-items:flex-end; padding:14px 16px;">
+                <span style="position:absolute; top:12px; right:12px; font-size:10.5px; font-weight:600; color:{{ p.statusColor }}; background:{{ p.statusBg }}; padding:3px 10px; border-radius:20px;">{{ p.status }}</span>
+                <div><div style="font-size:10px; color:rgba(255,255,255,0.85); text-transform:uppercase; letter-spacing:1px;">{{ p.category }}</div><div style="font-family:'Marcellus',serif; font-size:19px; color:#fff;">{{ p.name }}</div></div>
+              </div>
+              <div style="padding:16px;">
+                <div style="font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:600; color:#26221b;">{{ p.price }}</div>
+                <div style="font-size:11px; color:#a89e88; margin-bottom:12px;">/ jamaah · {{ p.duration }}</div>
+                <div style="display:flex; flex-direction:column; gap:6px; font-size:11.5px; color:#6f6858;">
+                  <div style="display:flex; justify-content:space-between;"><span style="color:#a89e88;">Hotel</span><span style="font-weight:500;">{{ p.hotel }}</span></div>
+                  <div style="display:flex; justify-content:space-between;"><span style="color:#a89e88;">Maskapai</span><span style="font-weight:500;">{{ p.airline }}</span></div>
+                  <div style="display:flex; justify-content:space-between;"><span style="color:#a89e88;">Keberangkatan</span><span style="font-weight:500;">{{ p.depart }}</span></div>
+                </div>
+                <div style="margin-top:13px; padding-top:13px; border-top:1px solid #eee5d3;">
+                  <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:5px;"><span style="color:#a89e88;">Kuota terisi</span><span style="font-family:'JetBrains Mono',monospace; font-weight:600;">{{ p.seats }}</span></div>
+                  <div style="height:7px; background:#f0eadc; border-radius:6px; overflow:hidden;"><div style="height:100%; width:{{ p.pct }}%; background:{{ p.barColor }};"></div></div>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ JAMAAH ============ -->
+      <sc-if value="{{ isJamaah }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <div style="display:flex; gap:8px; margin-bottom:18px;">
+          <sc-for list="{{ jamaahTabs }}" as="t" hint-placeholder-count="3">
+            <span style="font-size:12.5px; font-weight:600; padding:7px 14px; border-radius:8px; cursor:pointer; color:{{ t.color }}; background:{{ t.bg }}; border:1px solid {{ t.border }};">{{ t.label }}</span>
+          </sc-for>
+        </div>
+        <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:13px; overflow:hidden; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3);">
+          <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+            <thead><tr style="background:#f6f1e6; color:#9a917d; font-size:10.5px; text-transform:uppercase; letter-spacing:0.4px; text-align:left;">
+              <th style="padding:12px 20px; font-weight:600;">No. Registrasi</th><th style="padding:12px 12px; font-weight:600;">Jamaah</th><th style="padding:12px 12px; font-weight:600;">Paket</th><th style="padding:12px 12px; font-weight:600;">Kelengkapan Dokumen</th><th style="padding:12px 12px; font-weight:600;">Pembayaran</th><th style="padding:12px 20px; font-weight:600;">Status</th>
+            </tr></thead>
+            <tbody>
+              <sc-for list="{{ jamaahList }}" as="j" hint-placeholder-count="7">
+                <tr style="border-top:1px solid #eee5d3;">
+                  <td style="padding:13px 20px; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#6f6858;">{{ j.reg }}</td>
+                  <td style="padding:13px 12px;"><div style="font-weight:600;">{{ j.name }}</div><div style="font-size:10.5px; color:#a89e88;">{{ j.meta }}</div></td>
+                  <td style="padding:13px 12px;">{{ j.package }}</td>
+                  <td style="padding:13px 12px;"><div style="display:flex; gap:4px;">
+                    <sc-for list="{{ j.docs }}" as="d" hint-placeholder-count="5">
+                      <span title="{{ d.name }}" style="width:24px; height:22px; border-radius:5px; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:700; color:{{ d.color }}; background:{{ d.bg }}; border:1px solid {{ d.border }};">{{ d.abbr }}</span>
+                    </sc-for>
+                  </div></td>
+                  <td style="padding:13px 12px; width:150px;">
+                    <div style="display:flex; justify-content:space-between; font-size:10.5px; margin-bottom:4px;"><span style="color:#a89e88;">{{ j.payPct }}%</span><span style="font-family:'JetBrains Mono',monospace; color:#6f6858;">{{ j.paid }}</span></div>
+                    <div style="height:6px; background:#f0eadc; border-radius:6px; overflow:hidden;"><div style="height:100%; width:{{ j.payPct }}%; background:{{ j.payColor }};"></div></div>
+                  </td>
+                  <td style="padding:13px 20px;"><span style="font-size:10.5px; font-weight:600; color:{{ j.stColor }}; background:{{ j.stBg }}; padding:3px 10px; border-radius:20px;">{{ j.status }}</span></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ PEMBAYARAN ============ -->
+      <sc-if value="{{ isPembayaran }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:18px;">
+          <sc-for list="{{ payTiles }}" as="t" hint-placeholder-count="3">
+            <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:13px; padding:18px; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3); border-left:4px solid {{ t.accent }};">
+              <div style="font-size:12px; color:#9a917d;">{{ t.label }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:23px; font-weight:600; margin-top:8px;">{{ t.value }}</div>
+              <div style="font-size:11px; color:#a89e88; margin-top:3px;">{{ t.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:13px; overflow:hidden; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3);">
+          <div style="padding:16px 20px; border-bottom:1px solid #eee5d3; font-weight:600; font-size:14px;">Kartu Piutang Jamaah</div>
+          <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+            <thead><tr style="background:#f6f1e6; color:#9a917d; font-size:10.5px; text-transform:uppercase; letter-spacing:0.4px; text-align:left;">
+              <th style="padding:11px 20px; font-weight:600;">Jamaah</th><th style="padding:11px 12px; font-weight:600; text-align:right;">Total Tagihan</th><th style="padding:11px 12px; font-weight:600; text-align:right;">Terbayar</th><th style="padding:11px 12px; font-weight:600; text-align:right;">Sisa</th><th style="padding:11px 12px; font-weight:600;">Jatuh Tempo</th><th style="padding:11px 20px; font-weight:600;">Status</th>
+            </tr></thead>
+            <tbody>
+              <sc-for list="{{ payments }}" as="p" hint-placeholder-count="6">
+                <tr style="border-top:1px solid #eee5d3;">
+                  <td style="padding:13px 20px;"><div style="font-weight:600;">{{ p.name }}</div><div style="font-size:10.5px; color:#a89e88; font-family:'JetBrains Mono',monospace;">{{ p.reg }}</div></td>
+                  <td style="padding:13px 12px; text-align:right; font-family:'JetBrains Mono',monospace;">{{ p.total }}</td>
+                  <td style="padding:13px 12px; text-align:right; font-family:'JetBrains Mono',monospace; color:oklch(0.46 0.07 158);">{{ p.paid }}</td>
+                  <td style="padding:13px 12px; text-align:right; font-family:'JetBrains Mono',monospace; font-weight:600;">{{ p.remain }}</td>
+                  <td style="padding:13px 12px; color:#6f6858;">{{ p.dueDate }}</td>
+                  <td style="padding:13px 20px;"><span style="font-size:10.5px; font-weight:600; color:{{ p.stColor }}; background:{{ p.stBg }}; padding:3px 10px; border-radius:20px;">{{ p.status }}</span></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ KEUANGAN ============ -->
+      <sc-if value="{{ isKeuangan }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:18px;">
+          <sc-for list="{{ finTiles }}" as="t" hint-placeholder-count="3">
+            <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:13px; padding:18px; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3); border-left:4px solid {{ t.accent }};">
+              <div style="font-size:12px; color:#9a917d;">{{ t.label }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:23px; font-weight:600; margin-top:8px;">{{ t.value }}</div>
+              <div style="font-size:11px; color:#a89e88; margin-top:3px;">{{ t.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+          <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:13px; padding:20px 22px; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3);">
+            <div style="font-weight:600; font-size:14px; margin-bottom:14px;">Laba-Rugi per Keberangkatan <span style="font-size:11px; color:#a89e88; font-weight:400;">(cost center)</span></div>
+            <div style="display:flex; flex-direction:column; gap:12px;">
+              <sc-for list="{{ ccProfit }}" as="c" hint-placeholder-count="4">
+                <div style="border:1px solid #eee5d3; border-radius:10px; padding:13px 15px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:9px;"><span style="font-weight:600; font-size:12.5px;">{{ c.name }}</span><span style="font-size:10.5px; color:#a89e88;">{{ c.date }}</span></div>
+                  <div style="display:flex; gap:18px; font-size:11.5px;">
+                    <div><div style="color:#a89e88; font-size:10px;">Pendapatan</div><div style="font-family:'JetBrains Mono',monospace; font-weight:600;">{{ c.rev }}</div></div>
+                    <div><div style="color:#a89e88; font-size:10px;">HPP</div><div style="font-family:'JetBrains Mono',monospace; font-weight:600;">{{ c.cogs }}</div></div>
+                    <div><div style="color:#a89e88; font-size:10px;">Laba Kotor</div><div style="font-family:'JetBrains Mono',monospace; font-weight:600; color:oklch(0.46 0.07 158);">{{ c.gp }}</div></div>
+                    <div style="margin-left:auto; text-align:right;"><div style="color:#a89e88; font-size:10px;">Margin</div><div style="font-family:'JetBrains Mono',monospace; font-weight:600;">{{ c.margin }}</div></div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:13px; padding:20px 22px; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3);">
+            <div style="font-weight:600; font-size:14px; margin-bottom:14px;">Jurnal Otomatis Terbaru</div>
+            <div style="display:flex; flex-direction:column; gap:11px;">
+              <sc-for list="{{ journalFeed }}" as="j" hint-placeholder-count="5">
+                <div style="display:flex; gap:12px; padding-bottom:11px; border-bottom:1px solid #f2ecdf;">
+                  <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#a89e88; flex:0 0 62px;">{{ j.date }}</span>
+                  <div style="flex:1;">
+                    <div style="font-size:12px; font-weight:500;">{{ j.desc }}</div>
+                    <div style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#8c8371; margin-top:2px;">{{ j.entry }}</div>
+                  </div>
+                  <span style="font-family:'JetBrains Mono',monospace; font-size:11.5px; font-weight:600;">{{ j.amount }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ OPERASIONAL ============ -->
+      <sc-if value="{{ isOperasional }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:18px;">
+          <span style="font-size:12.5px; color:#9a917d;">Keberangkatan:</span>
+          <span style="font-size:13px; font-weight:600; padding:8px 14px; border-radius:9px; background:#fff; border:1px solid #e6ddca;">Umrah Plus Turki — 20 Agu 2026 ▾</span>
+          <span style="font-size:11.5px; color:#6f6858; margin-left:auto;">Rombongan: <b>Grup A &amp; B</b> · Muthawwif: <b>Ust. Fadhil</b> · TL: <b>Bpk. Surya</b></span>
+        </div>
+        <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:13px; overflow:hidden; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3);">
+          <div style="padding:16px 20px; border-bottom:1px solid #eee5d3; font-weight:600; font-size:14px;">Manifest Keberangkatan <span style="font-size:11px; color:#a89e88; font-weight:400;">— data untuk pengajuan visa &amp; maskapai</span></div>
+          <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+            <thead><tr style="background:#f6f1e6; color:#9a917d; font-size:10.5px; text-transform:uppercase; letter-spacing:0.4px; text-align:left;">
+              <th style="padding:11px 20px; font-weight:600;">Jamaah</th><th style="padding:11px 12px; font-weight:600;">No. Paspor</th><th style="padding:11px 12px; font-weight:600;">Berlaku s/d</th><th style="padding:11px 12px; font-weight:600;">Visa</th><th style="padding:11px 12px; font-weight:600;">Tiket</th><th style="padding:11px 20px; font-weight:600;">Kamar</th>
+            </tr></thead>
+            <tbody>
+              <sc-for list="{{ manifest }}" as="m" hint-placeholder-count="6">
+                <tr style="border-top:1px solid #eee5d3;">
+                  <td style="padding:12px 20px; font-weight:600;">{{ m.name }}</td>
+                  <td style="padding:12px 12px; font-family:'JetBrains Mono',monospace; color:#6f6858;">{{ m.passport }}</td>
+                  <td style="padding:12px 12px; color:{{ m.expColor }};">{{ m.expiry }}</td>
+                  <td style="padding:12px 12px;"><span style="font-size:10.5px; font-weight:600; color:{{ m.visaColor }}; background:{{ m.visaBg }}; padding:3px 9px; border-radius:20px;">{{ m.visa }}</span></td>
+                  <td style="padding:12px 12px; font-family:'JetBrains Mono',monospace; color:#6f6858;">{{ m.ticket }}</td>
+                  <td style="padding:12px 20px;">{{ m.room }}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ============ MARKETING ============ -->
+      <sc-if value="{{ isMarketing }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:18px;">
+          <sc-for list="{{ mktTiles }}" as="t" hint-placeholder-count="3">
+            <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:13px; padding:18px; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3); border-left:4px solid {{ t.accent }};">
+              <div style="font-size:12px; color:#9a917d;">{{ t.label }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:23px; font-weight:600; margin-top:8px;">{{ t.value }}</div>
+              <div style="font-size:11px; color:#a89e88; margin-top:3px;">{{ t.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:13px; overflow:hidden; box-shadow:0 4px 16px -10px rgba(60,50,20,0.3);">
+          <div style="padding:16px 20px; border-bottom:1px solid #eee5d3; font-weight:600; font-size:14px;">Kinerja Agen &amp; Komisi</div>
+          <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+            <thead><tr style="background:#f6f1e6; color:#9a917d; font-size:10.5px; text-transform:uppercase; letter-spacing:0.4px; text-align:left;">
+              <th style="padding:11px 20px; font-weight:600;">Agen</th><th style="padding:11px 12px; font-weight:600;">Kode Referral</th><th style="padding:11px 12px; font-weight:600; text-align:right;">Leads</th><th style="padding:11px 12px; font-weight:600; text-align:right;">Konversi</th><th style="padding:11px 12px; font-weight:600; text-align:right;">Jamaah</th><th style="padding:11px 20px; font-weight:600; text-align:right;">Komisi</th>
+            </tr></thead>
+            <tbody>
+              <sc-for list="{{ agents }}" as="a" hint-placeholder-count="6">
+                <tr style="border-top:1px solid #eee5d3;">
+                  <td style="padding:12px 20px; font-weight:600;">{{ a.name }}</td>
+                  <td style="padding:12px 12px; font-family:'JetBrains Mono',monospace; color:oklch(0.5 0.09 165);">{{ a.code }}</td>
+                  <td style="padding:12px 12px; text-align:right; font-family:'JetBrains Mono',monospace;">{{ a.leads }}</td>
+                  <td style="padding:12px 12px; text-align:right; font-family:'JetBrains Mono',monospace;">{{ a.conv }}</td>
+                  <td style="padding:12px 12px; text-align:right; font-family:'JetBrains Mono',monospace;">{{ a.jamaah }}</td>
+                  <td style="padding:12px 20px; text-align:right; font-family:'JetBrains Mono',monospace; font-weight:600;">{{ a.commission }}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      </sc-if>
+
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { view: 'dashboard' };
+
+  navDefs() {
+    return [
+      ['dashboard', 'Dashboard', 'oklch(0.62 0.11 78)'],
+      ['paket', 'Paket & Jadwal', 'oklch(0.52 0.08 165)'],
+      ['jamaah', 'Jamaah & Pendaftaran', 'oklch(0.52 0.09 245)'],
+      ['pembayaran', 'Pembayaran', 'oklch(0.60 0.10 78)'],
+      ['operasional', 'Operasional & Manifest', 'oklch(0.56 0.11 45)'],
+      ['marketing', 'Marketing & Komisi', 'oklch(0.50 0.10 322)'],
+      ['keuangan', 'Keuangan & Akuntansi', 'oklch(0.50 0.08 158)']
+    ];
+  }
+
+  titles() {
+    return {
+      dashboard: ['Dashboard Eksekutif', 'Ringkasan omzet, jamaah, profitabilitas & arus kas — Juli 2026'],
+      paket: ['Paket & Jadwal Keberangkatan', 'Kelola paket Umrah/Haji, harga, kuota & status'],
+      jamaah: ['Jamaah & Pendaftaran', 'Data jamaah, kelengkapan dokumen & status pendaftaran'],
+      pembayaran: ['Manajemen Pembayaran', 'Kartu piutang, termin, dan jatuh tempo jamaah'],
+      operasional: ['Operasional & Manifest', 'Manifest, visa, tiket & pembagian rombongan'],
+      marketing: ['Marketing, Agen & Komisi', 'Kinerja agen mitra, referral & perhitungan komisi'],
+      keuangan: ['Keuangan & Akuntansi', 'Liabilitas jamaah, pengakuan pendapatan & laba per keberangkatan']
+    };
+  }
+
+  renderVals() {
+    const view = this.state.view;
+    const nav = this.navDefs().map(n => {
+      const active = n[0] === view;
+      return {
+        label: n[1], dot: n[2], go: () => this.setState({ view: n[0] }),
+        bg: active ? 'rgba(255,255,255,0.08)' : 'transparent',
+        bar: active ? 'oklch(0.62 0.11 78)' : 'transparent',
+        color: active ? '#fff' : '#c3cfc6',
+        weight: active ? '600' : '500'
+      };
+    });
+    const tt = this.titles()[view];
+
+    const chip = (color, bg, border) => ({ color, bg, border });
+    const tab = (label, on) => on
+      ? { label, color: '#fff', bg: 'oklch(0.5 0.09 165)', border: 'oklch(0.5 0.09 165)' }
+      : { label, color: '#6f6858', bg: '#fff', border: '#e6ddca' };
+
+    const kpis = [
+      { label: 'Omzet Juli 2026', value: 'Rp 4,82 M', sub: 'vs Rp 4,29 M bulan lalu', delta: '+12,4%', deltaColor: 'oklch(0.46 0.07 158)', deltaBg: 'oklch(0.95 0.03 158)' },
+      { label: 'Jamaah Aktif', value: '1.284', sub: '+86 pendaftaran bulan ini', delta: '+7,2%', deltaColor: 'oklch(0.46 0.07 158)', deltaBg: 'oklch(0.95 0.03 158)' },
+      { label: 'Margin Rata-rata', value: '24,6%', sub: 'profitabilitas 7 paket aktif', delta: '+1,8 pt', deltaColor: 'oklch(0.46 0.07 158)', deltaBg: 'oklch(0.95 0.03 158)' },
+      { label: 'Kas & Bank', value: 'Rp 9,17 M', sub: 'IDR + USD + SAR (ekuiv.)', delta: '3 rek.', deltaColor: '#8c8371', deltaBg: '#f2ecdf' }
+    ];
+    const cfRaw = [['Feb', 62, 40], ['Mar', 70, 52], ['Apr', 58, 66], ['Mei', 84, 60], ['Jun', 76, 88], ['Jul', 100, 72]];
+    const cashflow = cfRaw.map(c => ({ m: c[0], h1: Math.round(c[1] * 1.4), h2: Math.round(c[2] * 1.4) }));
+    const aging = [
+      { label: 'Belum jatuh tempo', amount: 'Rp 2,14 M', pct: 100, color: 'oklch(0.5 0.09 165)' },
+      { label: '1–30 hari', amount: 'Rp 640 Jt', pct: 46, color: 'oklch(0.62 0.11 78)' },
+      { label: '31–60 hari', amount: 'Rp 218 Jt', pct: 22, color: 'oklch(0.60 0.13 45)' },
+      { label: '> 60 hari', amount: 'Rp 74 Jt', pct: 9, color: 'oklch(0.55 0.15 28)' }
+    ];
+    const profit = [
+      { name: 'Umrah Reguler 9 Hari', type: 'Umrah · Reguler', jamaah: '214', omzet: 'Rp 1,64 M', margin: '21%' },
+      { name: 'Umrah Plus Turki', type: 'Umrah · Plus', jamaah: '68', omzet: 'Rp 1,12 M', margin: '27%' },
+      { name: 'Umrah VIP 12 Hari', type: 'Umrah · VIP', jamaah: '24', omzet: 'Rp 0,89 M', margin: '33%' },
+      { name: 'Haji Khusus Furoda', type: 'Haji · Khusus', jamaah: '12', omzet: 'Rp 1,17 M', margin: '29%' }
+    ];
+    const upStatus = (s) => {
+      if (s === 'Full') return { statusColor: '#fff', statusBg: 'oklch(0.55 0.15 28)', barColor: 'oklch(0.55 0.15 28)' };
+      if (s === 'Hampir penuh') return { statusColor: 'oklch(0.45 0.12 55)', statusBg: 'oklch(0.94 0.05 70)', barColor: 'oklch(0.62 0.11 78)' };
+      return { statusColor: 'oklch(0.42 0.07 158)', statusBg: 'oklch(0.95 0.03 158)', barColor: 'oklch(0.5 0.09 165)' };
+    };
+    const upRaw = [
+      ['Umrah Reguler 9 Hari', '12 Agustus 2026', 45, 45, 'Full'],
+      ['Umrah Plus Turki', '20 Agustus 2026', 40, 34, 'Hampir penuh'],
+      ['Umrah VIP 12 Hari', '03 September 2026', 24, 18, 'Terbuka'],
+      ['Haji Khusus Furoda', '28 Mei 2027', 20, 12, 'Terbuka']
+    ];
+    const upcoming = upRaw.map(u => Object.assign({
+      name: u[0], date: u[1], status: u[4], seats: u[2] + '/' + u[3] === u[2] + '/' + u[2] ? u[3] + '/' + u[2] : u[3] + '/' + u[2],
+      pct: Math.round(u[3] / u[2] * 100)
+    }, upStatus(u[4])));
+    upcoming.forEach((u, i) => { u.seats = upRaw[i][3] + ' / ' + upRaw[i][2]; });
+
+    // PAKET
+    const paketTabs = [tab('Semua', true), tab('Umrah', false), tab('Haji', false), tab('Ditutup', false)];
+    const pStatus = (s) => s === 'Terbuka'
+      ? { statusColor: 'oklch(0.42 0.07 158)', statusBg: 'rgba(255,255,255,0.9)' }
+      : (s === 'Hampir Penuh' ? { statusColor: 'oklch(0.45 0.12 55)', statusBg: 'rgba(255,255,255,0.92)' } : { statusColor: 'oklch(0.5 0.15 28)', statusBg: 'rgba(255,255,255,0.92)' });
+    const pkRaw = [
+      ['Reguler 9 Hari', 'Umrah Reguler', 'Rp 28,5 Jt', '9 hari', 'Zowar Int’l ⭐3', 'Saudia', '12 Agu 2026', 45, 45, 'Penuh', 'linear-gradient(135deg,oklch(0.5 0.09 165),oklch(0.42 0.08 175))'],
+      ['Plus Turki', 'Umrah Plus', 'Rp 39,9 Jt', '13 hari', 'Grand Makkah ⭐4', 'Turkish Air', '20 Agu 2026', 40, 34, 'Hampir Penuh', 'linear-gradient(135deg,oklch(0.52 0.09 245),oklch(0.44 0.08 255))'],
+      ['VIP 12 Hari', 'Umrah VIP', 'Rp 62,0 Jt', '12 hari', 'Fairmont ⭐5', 'Emirates', '03 Sep 2026', 24, 18, 'Terbuka', 'linear-gradient(135deg,oklch(0.50 0.10 322),oklch(0.42 0.09 330))'],
+      ['Furoda 2027', 'Haji Khusus', 'Rp 245 Jt', '25 hari', 'Hilton Suites ⭐5', 'Saudia', '28 Mei 2027', 20, 12, 'Terbuka', 'linear-gradient(135deg,oklch(0.46 0.07 158),oklch(0.4 0.06 165))'],
+      ['Plus Aqsa', 'Umrah Plus', 'Rp 44,5 Jt', '12 hari', 'Movenpick ⭐4', 'Royal Jordanian', '15 Okt 2026', 40, 9, 'Terbuka', 'linear-gradient(135deg,oklch(0.56 0.11 45),oklch(0.48 0.10 40))'],
+      ['Reguler Akhir Tahun', 'Umrah Reguler', 'Rp 31,0 Jt', '9 hari', 'Dar Al Eiman ⭐3', 'Lion Air', '26 Des 2026', 45, 21, 'Terbuka', 'linear-gradient(135deg,oklch(0.56 0.09 78),oklch(0.5 0.09 88))']
+    ];
+    const pakets = pkRaw.map(p => Object.assign({
+      name: p[0], category: p[1], price: p[2], duration: p[3], hotel: p[4], airline: p[5], depart: p[6],
+      seats: p[8] + ' / ' + p[7], pct: Math.round(p[8] / p[7] * 100), status: p[9],
+      grad: p[10], barColor: p[8] / p[7] >= 1 ? 'oklch(0.55 0.15 28)' : (p[8] / p[7] >= 0.8 ? 'oklch(0.62 0.11 78)' : 'oklch(0.5 0.09 165)')
+    }, pStatus(p[9])));
+
+    // JAMAAH
+    const jamaahTabs = [tab('Semua Jamaah', true), tab('Dokumen Belum Lengkap', false), tab('Lunas', false)];
+    const dMap = {
+      ok: { color: 'oklch(0.42 0.07 158)', bg: 'oklch(0.94 0.04 158)', border: 'oklch(0.85 0.06 158)' },
+      wait: { color: 'oklch(0.48 0.03 90)', bg: '#f2ecdf', border: '#e2d8c2' },
+      bad: { color: 'oklch(0.5 0.15 28)', bg: 'oklch(0.95 0.05 30)', border: 'oklch(0.85 0.08 30)' }
+    };
+    const doc = (abbr, name, st) => Object.assign({ abbr, name }, dMap[st]);
+    const jSt = (s) => s === 'Lunas'
+      ? { stColor: 'oklch(0.42 0.07 158)', stBg: 'oklch(0.95 0.03 158)' }
+      : (s === 'Cicilan' ? { stColor: 'oklch(0.45 0.10 78)', stBg: 'oklch(0.95 0.04 82)' } : { stColor: 'oklch(0.5 0.13 28)', stBg: 'oklch(0.96 0.04 30)' });
+    const jRaw = [
+      ['UMR-2026-0412', 'H. Ahmad Fauzi', 'L · 54 th · Jakarta', 'Umrah Reguler', ['ok','ok','ok','ok','ok'], 100, 'Rp 28,5 Jt', 'Lunas'],
+      ['UMR-2026-0418', 'Hj. Siti Rohmah', 'P · 49 th · Bekasi', 'Umrah Plus Turki', ['ok','ok','ok','ok','wait'], 72, 'Rp 28,7 Jt', 'Cicilan'],
+      ['UMR-2026-0421', 'Budi Santoso', 'L · 38 th · Depok', 'Umrah VIP', ['ok','ok','wait','ok','wait'], 45, 'Rp 27,9 Jt', 'Cicilan'],
+      ['UMR-2026-0425', 'Dewi Lestari', 'P · 31 th · Tangerang', 'Umrah Reguler', ['ok','ok','bad','wait','ok'], 20, 'Rp 5,7 Jt', 'DP'],
+      ['HAJ-2027-0033', 'H. Sulaiman Yusuf', 'L · 61 th · Jakarta', 'Haji Khusus Furoda', ['ok','ok','ok','ok','ok'], 100, 'Rp 245 Jt', 'Lunas'],
+      ['UMR-2026-0430', 'Nur Aini', 'P · 44 th · Bogor', 'Umrah Plus Aqsa', ['ok','wait','wait','ok','wait'], 15, 'Rp 6,7 Jt', 'DP'],
+      ['UMR-2026-0433', 'Rahmat Hidayat', 'L · 27 th · Jakarta', 'Umrah Reguler', ['ok','ok','ok','ok','wait'], 60, 'Rp 18,6 Jt', 'Cicilan']
+    ];
+    const jamaahList = jRaw.map(j => Object.assign({
+      reg: j[0], name: j[1], meta: j[2], package: j[3],
+      docs: [doc('KTP', 'KTP', j[4][0]), doc('KK', 'Kartu Keluarga', j[4][1]), doc('PPR', 'Paspor', j[4][2]), doc('FTO', 'Pas Foto', j[4][3]), doc('VKS', 'Vaksin Meningitis', j[4][4])],
+      payPct: j[5], paid: j[6], status: j[7],
+      payColor: j[5] >= 100 ? 'oklch(0.5 0.09 165)' : (j[5] >= 50 ? 'oklch(0.62 0.11 78)' : 'oklch(0.6 0.13 40)')
+    }, jSt(j[7])));
+
+    // PEMBAYARAN
+    const payTiles = [
+      { label: 'Total Piutang Aktif', value: 'Rp 3,07 M', sub: '312 jamaah belum lunas', accent: 'oklch(0.56 0.11 45)' },
+      { label: 'Jatuh Tempo Minggu Ini', value: 'Rp 486 Jt', sub: '28 jamaah · reminder terkirim', accent: 'oklch(0.62 0.11 78)' },
+      { label: 'Terkumpul Bulan Ini', value: 'Rp 4,82 M', sub: '+12,4% vs bulan lalu', accent: 'oklch(0.5 0.09 165)' }
+    ];
+    const paySt = (s) => ({
+      'Lunas': { stColor: 'oklch(0.42 0.07 158)', stBg: 'oklch(0.95 0.03 158)' },
+      'Terjadwal': { stColor: 'oklch(0.45 0.06 245)', stBg: 'oklch(0.95 0.03 245)' },
+      'Jatuh Tempo': { stColor: 'oklch(0.5 0.13 28)', stBg: 'oklch(0.96 0.04 30)' },
+      'Terlambat': { stColor: '#fff', stBg: 'oklch(0.55 0.15 28)' }
+    })[s];
+    const payRaw = [
+      ['H. Ahmad Fauzi', 'UMR-2026-0412', 'Rp 28,5 Jt', 'Rp 28,5 Jt', 'Rp 0', 'Lunas', 'Lunas'],
+      ['Hj. Siti Rohmah', 'UMR-2026-0418', 'Rp 39,9 Jt', 'Rp 28,7 Jt', 'Rp 11,2 Jt', '10 Jul 2026', 'Terjadwal'],
+      ['Budi Santoso', 'UMR-2026-0421', 'Rp 62,0 Jt', 'Rp 27,9 Jt', 'Rp 34,1 Jt', '18 Jul 2026', 'Jatuh Tempo'],
+      ['Dewi Lestari', 'UMR-2026-0425', 'Rp 28,5 Jt', 'Rp 5,7 Jt', 'Rp 22,8 Jt', '05 Jul 2026', 'Terlambat'],
+      ['Nur Aini', 'UMR-2026-0430', 'Rp 44,5 Jt', 'Rp 6,7 Jt', 'Rp 37,8 Jt', '25 Jul 2026', 'Terjadwal'],
+      ['Rahmat Hidayat', 'UMR-2026-0433', 'Rp 31,0 Jt', 'Rp 18,6 Jt', 'Rp 12,4 Jt', '15 Jul 2026', 'Jatuh Tempo']
+    ];
+    const payments = payRaw.map(p => Object.assign({
+      name: p[0], reg: p[1], total: p[2], paid: p[3], remain: p[4], dueDate: p[5], status: p[6]
+    }, paySt(p[6])));
+
+    // KEUANGAN
+    const finTiles = [
+      { label: 'Uang Muka Jamaah (Liabilitas)', value: 'Rp 21,4 M', sub: 'Akun 2-1100 · dana belum diakui', accent: 'oklch(0.52 0.09 245)' },
+      { label: 'Pendapatan Diakui (YTD)', value: 'Rp 28,9 M', sub: 'PSAK 72 · atas keberangkatan', accent: 'oklch(0.46 0.07 158)' },
+      { label: 'Laba Kotor (YTD)', value: 'Rp 7,1 M', sub: 'Margin rata-rata 24,6%', accent: 'oklch(0.56 0.09 78)' }
+    ];
+    const ccRaw = [
+      ['Umrah Reguler — Jun', '18 Jun 2026', 'Rp 1,28 M', 'Rp 1,01 M', 'Rp 270 Jt', '21%'],
+      ['Umrah Plus Turki — Mei', '22 Mei 2026', 'Rp 1,04 M', 'Rp 760 Jt', 'Rp 281 Jt', '27%'],
+      ['Umrah VIP — Apr', '10 Apr 2026', 'Rp 892 Jt', 'Rp 598 Jt', 'Rp 294 Jt', '33%'],
+      ['Haji Khusus — 2025', '05 Jun 2025', 'Rp 2,94 M', 'Rp 2,09 M', 'Rp 853 Jt', '29%']
+    ];
+    const ccProfit = ccRaw.map(c => ({ name: c[0], date: c[1], rev: c[2], cogs: c[3], gp: c[4], margin: c[5] }));
+    const journalFeed = [
+      { date: '15 Jul', desc: 'Penerimaan pelunasan — H. Ahmad Fauzi', entry: 'Dr Bank IDR · Cr Uang Muka Jamaah', amount: 'Rp 25,0 Jt' },
+      { date: '14 Jul', desc: 'Pembayaran hotel — Grup Umrah Reguler Agu', entry: 'Dr Uang Muka Vendor · Cr Bank IDR', amount: 'Rp 210 Jt' },
+      { date: '12 Jul', desc: 'Pengakuan pendapatan — Keberangkatan Jun', entry: 'Dr Uang Muka Jamaah · Cr Pdpt Jasa Umrah', amount: 'Rp 1,28 M' },
+      { date: '12 Jul', desc: 'Pengakuan HPP — Keberangkatan Jun', entry: 'Dr Beban Hotel/Tiket/Visa · Cr U.M. Vendor', amount: 'Rp 1,01 M' },
+      { date: '11 Jul', desc: 'Komisi agen — Barokah Tour', entry: 'Dr Beban Komisi · Cr Hutang Komisi', amount: 'Rp 4,2 Jt' }
+    ];
+
+    // OPERASIONAL
+    const visaMap = {
+      Terbit: { visaColor: 'oklch(0.42 0.07 158)', visaBg: 'oklch(0.95 0.03 158)' },
+      Proses: { visaColor: 'oklch(0.45 0.06 245)', visaBg: 'oklch(0.95 0.03 245)' },
+      Biometrik: { visaColor: 'oklch(0.45 0.10 78)', visaBg: 'oklch(0.95 0.04 82)' }
+    };
+    const mRaw = [
+      ['H. Ahmad Fauzi', 'C4821094', '12 Feb 2028', 'Terbit', 'TK-0451', 'Double 402'],
+      ['Hj. Siti Rohmah', 'C5120388', '30 Sep 2027', 'Terbit', 'TK-0452', 'Double 402'],
+      ['Budi Santoso', 'B9042175', '05 Nov 2026', 'Biometrik', '—', 'Triple 511'],
+      ['Nur Aini', 'C6621043', '18 Mar 2029', 'Proses', '—', 'Quad 517'],
+      ['Rahmat Hidayat', 'C7710922', '22 Jul 2028', 'Terbit', 'TK-0455', 'Triple 511'],
+      ['Hj. Maryam Zahra', 'C4419087', '14 Jan 2027', 'Proses', '—', 'Quad 517']
+    ];
+    const manifest = mRaw.map(m => Object.assign({
+      name: m[0], passport: m[1], expiry: m[2], visa: m[3], ticket: m[4], room: m[5],
+      expColor: m[2].indexOf('2026') > -1 ? 'oklch(0.5 0.13 28)' : '#6f6858'
+    }, visaMap[m[3]]));
+
+    // MARKETING
+    const mktTiles = [
+      { label: 'Agen Aktif', value: '48', sub: '+6 mitra baru bulan ini', accent: 'oklch(0.50 0.10 322)' },
+      { label: 'Leads dari Referral', value: '1.062', sub: 'Konversi rata-rata 38%', accent: 'oklch(0.52 0.09 245)' },
+      { label: 'Komisi Terhutang', value: 'Rp 168 Jt', sub: 'Akun 2-1400 · 48 agen', accent: 'oklch(0.56 0.09 78)' }
+    ];
+    const agRaw = [
+      ['Barokah Tour', 'BRKH-07', '184', '44%', '81', 'Rp 42,6 Jt'],
+      ['Amanah Wisata', 'AMNH-12', '146', '39%', '57', 'Rp 31,2 Jt'],
+      ['Sakinah Travel Mitra', 'SKNH-03', '128', '41%', '52', 'Rp 27,8 Jt'],
+      ['Hj. Fatimah (Perorangan)', 'FTMH-21', '64', '52%', '33', 'Rp 14,9 Jt'],
+      ['Rahmah Umrah Network', 'RHMH-09', '212', '28%', '59', 'Rp 33,4 Jt'],
+      ['Cahaya Madinah', 'CHYM-15', '98', '34%', '33', 'Rp 18,1 Jt']
+    ];
+    const agents = agRaw.map(a => ({ name: a[0], code: a[1], leads: a[2], conv: a[3], jamaah: a[4], commission: a[5] }));
+
+    return {
+      nav, pageTitle: tt[0], pageSub: tt[1],
+      isDashboard: view === 'dashboard', isPaket: view === 'paket', isJamaah: view === 'jamaah',
+      isPembayaran: view === 'pembayaran', isKeuangan: view === 'keuangan',
+      isOperasional: view === 'operasional', isMarketing: view === 'marketing',
+      kpis, cashflow, aging, profit, upcoming,
+      paketTabs, pakets, jamaahTabs, jamaahList, payTiles, payments,
+      finTiles, ccProfit, journalFeed, manifest, mktTiles, agents
+    };
+  }
+}
+</script>
+</body>
+</html>

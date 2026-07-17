@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:#ece4d3;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#2c281f;}
+  a{color:oklch(0.5 0.09 165);text-decoration:none;} a:hover{color:oklch(0.42 0.09 165);}
+  input,select{font-family:inherit;}
+  .fld{width:100%; padding:11px 13px; border:1px solid #d9cfb9; border-radius:9px; background:#fffdf8; font-size:13.5px; color:#2c281f; outline:none;}
+  .fld:focus{border-color:oklch(0.5 0.09 165); box-shadow:0 0 0 3px oklch(0.92 0.04 165);}
+  .lbl{font-size:11.5px; font-weight:600; color:#6f6858; margin-bottom:6px; display:block;}
+</style>
+</helmet>
+<div style="min-height:100vh; display:flex; flex-direction:column;">
+
+  <!-- BRAND BAR -->
+  <header style="background:linear-gradient(180deg,#16211b,#1b2a20); color:#e8e0cf; padding:16px 32px; display:flex; align-items:center; gap:13px;">
+    <div style="width:36px; height:36px; border-radius:10px; background:oklch(0.56 0.11 78); display:flex; align-items:center; justify-content:center; font-family:'Marcellus',serif; font-size:19px; color:#20180a;">S</div>
+    <div style="flex:1;">
+      <div style="font-family:'Marcellus',serif; font-size:18px; letter-spacing:0.5px; line-height:1;">Safar — Pendaftaran Online</div>
+      <div style="font-size:10.5px; color:#9fb0a4; letter-spacing:0.8px; text-transform:uppercase; margin-top:3px;">Umrah &amp; Haji Khusus</div>
+    </div>
+    <span style="font-size:12px; color:#9fb0a4;">Butuh bantuan? <b style="color:#e8e0cf;">0811-2200-345</b></span>
+  </header>
+
+  <div style="max-width:1060px; width:100%; margin:0 auto; padding:30px 24px 60px;">
+
+    <!-- STEPPER -->
+    <sc-if value="{{ notDone }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex; align-items:center; margin-bottom:28px;">
+      <sc-for list="{{ steps }}" as="s" hint-placeholder-count="6">
+        <div style="display:flex; align-items:center; flex:{{ s.flex }};">
+          <div style="display:flex; flex-direction:column; align-items:center; gap:7px; flex:0 0 auto;">
+            <div style="width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; background:{{ s.bg }}; color:{{ s.fg }}; border:2px solid {{ s.border }};">{{ s.mark }}</div>
+            <span style="font-size:10.5px; font-weight:600; color:{{ s.labelColor }}; white-space:nowrap;">{{ s.label }}</span>
+          </div>
+          <div style="height:2px; flex:1; background:{{ s.lineColor }}; margin:0 6px 22px;"></div>
+        </div>
+      </sc-for>
+    </div>
+    </sc-if>
+
+    <!-- MAIN GRID -->
+    <div style="display:grid; grid-template-columns:{{ gridCols }}; gap:20px; align-items:start;">
+
+      <!-- FORM COLUMN -->
+      <div style="background:#fffdf8; border:1px solid #e5dcc8; border-radius:16px; box-shadow:0 10px 30px -18px rgba(60,50,20,0.4); overflow:hidden;">
+
+        <!-- STEP 1: PAKET -->
+        <sc-if value="{{ isS1 }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:26px 28px;">
+          <div style="font-family:'Marcellus',serif; font-size:22px; margin-bottom:4px;">Pilih Paket &amp; Keberangkatan</div>
+          <div style="font-size:12.5px; color:#9a917d; margin-bottom:20px;">Tentukan paket yang Anda inginkan. Sisa kuota diperbarui secara real-time.</div>
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <sc-for list="{{ pkgOptions }}" as="p" hint-placeholder-count="4">
+              <div onClick="{{ p.go }}" style="display:flex; align-items:center; gap:16px; padding:16px 18px; border:2px solid {{ p.border }}; background:{{ p.bg }}; border-radius:13px; cursor:pointer;">
+                <div style="width:20px; height:20px; border-radius:50%; border:2px solid {{ p.radioBorder }}; background:{{ p.radioBg }}; flex:0 0 auto; display:flex; align-items:center; justify-content:center;"><span style="width:8px; height:8px; border-radius:50%; background:{{ p.dotColor }};"></span></div>
+                <div style="flex:1;">
+                  <div style="font-weight:600; font-size:14.5px;">{{ p.name }}</div>
+                  <div style="font-size:11.5px; color:#9a917d; margin-top:2px;">{{ p.detail }}</div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-family:'JetBrains Mono',monospace; font-weight:600; font-size:16px;">{{ p.price }}</div>
+                  <div style="font-size:10.5px; color:{{ p.seatColor }}; margin-top:2px;">{{ p.seats }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- STEP 2: DATA DIRI -->
+        <sc-if value="{{ isS2 }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:26px 28px;">
+          <div style="font-family:'Marcellus',serif; font-size:22px; margin-bottom:4px;">Data Diri Jamaah</div>
+          <div style="font-size:12.5px; color:#9a917d; margin-bottom:20px;">Isi <b>persis sesuai paspor</b>. Kesalahan penulisan dapat menghambat pengurusan visa.</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
+            <div style="grid-column:1 / -1;"><label class="lbl">Nama Lengkap (sesuai paspor)</label><input class="fld" data-k="nama" value="{{ form.nama }}" onInput="{{ onField }}" placeholder="mis. AHMAD FAUZI BIN SUDIRMAN"></div>
+            <div><label class="lbl">NIK (16 digit)</label><input class="fld" data-k="nik" value="{{ form.nik }}" onInput="{{ onField }}" placeholder="3175xxxxxxxxxxxx"></div>
+            <div><label class="lbl">No. HP / WhatsApp</label><input class="fld" data-k="hp" value="{{ form.hp }}" onInput="{{ onField }}" placeholder="0812xxxxxxxx"></div>
+            <div><label class="lbl">Tempat Lahir</label><input class="fld" data-k="tmpt" value="{{ form.tmpt }}" onInput="{{ onField }}" placeholder="Jakarta"></div>
+            <div><label class="lbl">Tanggal Lahir</label><input class="fld" type="date" data-k="tgl" value="{{ form.tgl }}" onInput="{{ onField }}"></div>
+            <div>
+              <label class="lbl">Jenis Kelamin</label>
+              <div style="display:flex; gap:10px;">
+                <sc-for list="{{ genderOptions }}" as="g" hint-placeholder-count="2">
+                  <div onClick="{{ g.go }}" style="flex:1; text-align:center; padding:11px; border:2px solid {{ g.border }}; background:{{ g.bg }}; color:{{ g.color }}; border-radius:9px; cursor:pointer; font-size:13px; font-weight:600;">{{ g.label }}</div>
+                </sc-for>
+              </div>
+            </div>
+            <div><label class="lbl">Email</label><input class="fld" data-k="email" value="{{ form.email }}" onInput="{{ onField }}" placeholder="nama@email.com"></div>
+            <div style="grid-column:1 / -1;"><label class="lbl">Alamat Domisili</label><input class="fld" data-k="alamat" value="{{ form.alamat }}" onInput="{{ onField }}" placeholder="Alamat lengkap"></div>
+            <div><label class="lbl">Kontak Darurat (Nama)</label><input class="fld" data-k="darurat" value="{{ form.darurat }}" onInput="{{ onField }}" placeholder="Nama keluarga"></div>
+            <div><label class="lbl">No. HP Kontak Darurat</label><input class="fld" data-k="daruratHp" value="{{ form.daruratHp }}" onInput="{{ onField }}" placeholder="0812xxxxxxxx"></div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- STEP 3: DOKUMEN -->
+        <sc-if value="{{ isS3 }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:26px 28px;">
+          <div style="font-family:'Marcellus',serif; font-size:22px; margin-bottom:4px;">Unggah Dokumen</div>
+          <div style="font-size:12.5px; color:#9a917d; margin-bottom:20px;">Format JPG/PNG/PDF, maks. 5 MB per file. Klik untuk mengunggah.</div>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <sc-for list="{{ docRows }}" as="d" hint-placeholder-count="6">
+              <div onClick="{{ d.go }}" style="display:flex; align-items:center; gap:14px; padding:14px 16px; border:1.5px dashed {{ d.border }}; background:{{ d.bg }}; border-radius:11px; cursor:pointer;">
+                <div style="width:34px; height:34px; border-radius:8px; background:{{ d.iconBg }}; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:{{ d.iconColor }};">{{ d.abbr }}</div>
+                <div style="flex:1;"><div style="font-weight:600; font-size:13px;">{{ d.name }}</div><div style="font-size:11px; color:#a89e88;">{{ d.hint }}</div></div>
+                <span style="font-size:11.5px; font-weight:600; color:{{ d.statColor }};">{{ d.stat }}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="margin-top:22px; padding:18px; background:#faf7f0; border:1px solid #ece3d0; border-radius:12px;">
+            <div style="font-weight:600; font-size:13.5px; margin-bottom:13px;">Validasi Paspor</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:13px;">
+              <div><label class="lbl">No. Paspor</label><input class="fld" data-k="paspor" value="{{ form.paspor }}" onInput="{{ onField }}" placeholder="C1234567"></div>
+              <div><label class="lbl">Tanggal Terbit</label><input class="fld" type="date" data-k="pIssue" value="{{ form.pIssue }}" onInput="{{ onField }}"></div>
+              <div><label class="lbl">Berlaku Sampai</label><input class="fld" type="date" data-k="pExpiry" value="{{ form.pExpiry }}" onInput="{{ onField }}"></div>
+            </div>
+            <div style="margin-top:12px; display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:9px; background:{{ passport.bg }}; border:1px solid {{ passport.border }};">
+              <span style="width:18px; height:18px; border-radius:50%; background:{{ passport.dot }}; color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex:0 0 auto;">{{ passport.mark }}</span>
+              <span style="font-size:12px; color:{{ passport.textColor }}; font-weight:500;">{{ passport.msg }}</span>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- STEP 4: KAMAR & MAHRAM -->
+        <sc-if value="{{ isS4 }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:26px 28px;">
+          <div style="font-family:'Marcellus',serif; font-size:22px; margin-bottom:4px;">Kamar &amp; Mahram</div>
+          <div style="font-size:12.5px; color:#9a917d; margin-bottom:20px;">Pilih tipe kamar dan lengkapi data mahram bila diperlukan.</div>
+          <label class="lbl">Tipe Kamar Hotel</label>
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:22px;">
+            <sc-for list="{{ roomOptions }}" as="r" hint-placeholder-count="3">
+              <div onClick="{{ r.go }}" style="padding:16px; border:2px solid {{ r.border }}; background:{{ r.bg }}; border-radius:12px; cursor:pointer; text-align:center;">
+                <div style="font-weight:600; font-size:14px; color:{{ r.color }};">{{ r.label }}</div>
+                <div style="font-size:11px; color:#9a917d; margin:4px 0 8px;">{{ r.desc }}</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:12.5px; font-weight:600; color:{{ r.upColor }};">{{ r.upcharge }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <label class="lbl">Data Mahram / Pendamping</label>
+          <div style="display:grid; grid-template-columns:1.4fr 1fr; gap:13px;">
+            <input class="fld" data-k="mahram" value="{{ form.mahram }}" onInput="{{ onField }}" placeholder="Nama mahram (mis. suami / anak laki-laki)">
+            <input class="fld" data-k="mahramRel" value="{{ form.mahramRel }}" onInput="{{ onField }}" placeholder="Hubungan (mis. Suami)">
+          </div>
+          <div style="font-size:11.5px; color:#a89e88; margin-top:9px;">Jamaah perempuan di bawah 45 tahun wajib didampingi mahram sesuai ketentuan.</div>
+        </div>
+        </sc-if>
+
+        <!-- STEP 5: PEMBAYARAN -->
+        <sc-if value="{{ isS5 }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:26px 28px;">
+          <div style="font-family:'Marcellus',serif; font-size:22px; margin-bottom:4px;">Skema &amp; Metode Pembayaran</div>
+          <div style="font-size:12.5px; color:#9a917d; margin-bottom:20px;">Dana Anda dikelola sebagai amanah (akad wakalah) hingga jasa diberikan.</div>
+          <label class="lbl">Skema Pembayaran</label>
+          <div style="display:flex; flex-direction:column; gap:11px; margin-bottom:22px;">
+            <sc-for list="{{ schemeOptions }}" as="s" hint-placeholder-count="3">
+              <div onClick="{{ s.go }}" style="display:flex; align-items:center; gap:14px; padding:15px 17px; border:2px solid {{ s.border }}; background:{{ s.bg }}; border-radius:12px; cursor:pointer;">
+                <div style="width:20px; height:20px; border-radius:50%; border:2px solid {{ s.radioBorder }}; flex:0 0 auto; display:flex; align-items:center; justify-content:center;"><span style="width:8px; height:8px; border-radius:50%; background:{{ s.dotColor }};"></span></div>
+                <div style="flex:1;"><div style="font-weight:600; font-size:13.5px;">{{ s.label }}</div><div style="font-size:11.5px; color:#9a917d;">{{ s.desc }}</div></div>
+                <div style="font-family:'JetBrains Mono',monospace; font-weight:600; font-size:14px;">{{ s.amount }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <label class="lbl">Metode Pembayaran</label>
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+            <sc-for list="{{ methodOptions }}" as="m" hint-placeholder-count="3">
+              <div onClick="{{ m.go }}" style="padding:14px; border:2px solid {{ m.border }}; background:{{ m.bg }}; border-radius:11px; cursor:pointer; text-align:center; font-size:12.5px; font-weight:600; color:{{ m.color }};">{{ m.label }}</div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- STEP 6: KONFIRMASI -->
+        <sc-if value="{{ isS6 }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:26px 28px;">
+          <div style="font-family:'Marcellus',serif; font-size:22px; margin-bottom:4px;">Konfirmasi Pendaftaran</div>
+          <div style="font-size:12.5px; color:#9a917d; margin-bottom:20px;">Periksa kembali data Anda sebelum menyelesaikan pendaftaran.</div>
+          <div style="border:1px solid #eee5d3; border-radius:12px; overflow:hidden;">
+            <sc-for list="{{ reviewRows }}" as="r" hint-placeholder-count="7">
+              <div style="display:flex; padding:12px 16px; border-bottom:1px solid #f2ecdf; font-size:12.5px;">
+                <span style="flex:0 0 190px; color:#9a917d;">{{ r.k }}</span>
+                <span style="flex:1; font-weight:500;">{{ r.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div onClick="{{ toggleAgree }}" style="display:flex; align-items:flex-start; gap:11px; margin-top:18px; cursor:pointer;">
+            <div style="width:20px; height:20px; border-radius:6px; border:2px solid {{ agreeBorder }}; background:{{ agreeBg }}; flex:0 0 auto; display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; font-weight:700; margin-top:1px;">{{ agreeMark }}</div>
+            <span style="font-size:12px; color:#6f6858; line-height:1.5;">Saya menyatakan data yang diisi benar, dan menyetujui <b>akad wakalah/ijarah</b> serta syarat &amp; ketentuan penyelenggaraan ibadah oleh Safar Travel.</span>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- SUCCESS -->
+        <sc-if value="{{ isDone }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:44px 32px; text-align:center;">
+          <div style="width:74px; height:74px; border-radius:50%; background:oklch(0.95 0.05 158); border:2px solid oklch(0.6 0.09 158); margin:0 auto 20px; display:flex; align-items:center; justify-content:center; color:oklch(0.46 0.1 158); font-size:34px;">✓</div>
+          <div style="font-family:'Marcellus',serif; font-size:26px;">Pendaftaran Berhasil</div>
+          <div style="font-size:13px; color:#9a917d; margin-top:6px; max-width:420px; margin-left:auto; margin-right:auto;">Terima kasih. Data Anda telah kami terima dan menunggu verifikasi tim kami.</div>
+          <div style="margin:22px auto; padding:16px 26px; background:#faf7f0; border:1px dashed #d9cfb9; border-radius:12px; display:inline-block;">
+            <div style="font-size:11px; color:#9a917d; text-transform:uppercase; letter-spacing:1px;">Nomor Registrasi</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:600; color:oklch(0.46 0.07 158); margin-top:4px;">{{ regNo }}</div>
+          </div>
+          <div style="max-width:460px; margin:18px auto 0; text-align:left; display:flex; flex-direction:column; gap:11px;">
+            <sc-for list="{{ nextSteps }}" as="n" hint-placeholder-count="3">
+              <div style="display:flex; gap:12px; align-items:center; padding:12px 15px; background:#fffdf8; border:1px solid #eee5d3; border-radius:10px;">
+                <span style="width:26px; height:26px; border-radius:50%; background:oklch(0.95 0.03 78); color:oklch(0.5 0.09 78); font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:center; flex:0 0 auto;">{{ n.num }}</span>
+                <div><div style="font-weight:600; font-size:12.5px;">{{ n.title }}</div><div style="font-size:11px; color:#9a917d;">{{ n.desc }}</div></div>
+              </div>
+            </sc-for>
+          </div>
+          <div onClick="{{ restart }}" style="display:inline-block; margin-top:26px; font-size:13px; font-weight:600; color:#fff; background:oklch(0.5 0.09 165); padding:12px 26px; border-radius:10px; cursor:pointer;">Selesai</div>
+        </div>
+        </sc-if>
+
+        <!-- NAV FOOTER -->
+        <sc-if value="{{ notDone }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:18px 28px; border-top:1px solid #eee5d3; background:#faf7f0;">
+          <div onClick="{{ prev }}" style="font-size:13px; font-weight:600; color:{{ backColor }}; cursor:{{ backCursor }}; padding:11px 20px; border-radius:10px; border:1px solid {{ backBorder }};">← Kembali</div>
+          <div onClick="{{ next }}" style="font-size:13px; font-weight:600; color:#fff; background:{{ nextBg }}; padding:12px 26px; border-radius:10px; cursor:{{ nextCursor }};">{{ nextLabel }}</div>
+        </div>
+        </sc-if>
+      </div>
+
+      <!-- SUMMARY SIDEBAR -->
+      <sc-if value="{{ notDone }}" hint-placeholder-val="{{ true }}">
+      <div style="background:#fffdf8; border:1px solid #e5dcc8; border-radius:16px; box-shadow:0 10px 30px -18px rgba(60,50,20,0.4); overflow:hidden; position:sticky; top:20px;">
+        <div style="padding:16px 20px; background:linear-gradient(135deg,oklch(0.5 0.09 165),oklch(0.42 0.08 172)); color:#fff;">
+          <div style="font-size:11px; text-transform:uppercase; letter-spacing:1px; opacity:0.85;">Ringkasan</div>
+          <div style="font-family:'Marcellus',serif; font-size:18px; margin-top:3px;">{{ sum.pkgName }}</div>
+          <div style="font-size:11.5px; opacity:0.9; margin-top:2px;">{{ sum.pkgDate }}</div>
+        </div>
+        <div style="padding:18px 20px; display:flex; flex-direction:column; gap:11px; font-size:12.5px;">
+          <div style="display:flex; justify-content:space-between;"><span style="color:#9a917d;">Harga paket</span><span style="font-family:'JetBrains Mono',monospace; font-weight:500;">{{ sum.base }}</span></div>
+          <div style="display:flex; justify-content:space-between;"><span style="color:#9a917d;">Kamar ({{ sum.roomLabel }})</span><span style="font-family:'JetBrains Mono',monospace; font-weight:500;">{{ sum.roomUp }}</span></div>
+          <div style="display:flex; justify-content:space-between; padding-top:11px; border-top:1px solid #eee5d3;"><span style="font-weight:600;">Total</span><span style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:14px;">{{ sum.total }}</span></div>
+          <div style="display:flex; justify-content:space-between; padding:11px 13px; background:oklch(0.96 0.03 78); border-radius:9px; margin-top:4px;"><span style="font-weight:600; color:oklch(0.45 0.08 70);">Bayar sekarang</span><span style="font-family:'JetBrains Mono',monospace; font-weight:700; color:oklch(0.45 0.08 70);">{{ sum.dueNow }}</span></div>
+        </div>
+        <div style="padding:0 20px 18px;">
+          <div style="font-size:11px; color:#a89e88; line-height:1.5; padding-top:14px; border-top:1px solid #eee5d3;">Pembayaran dicatat sebagai <b>Uang Muka Jamaah</b> dan baru diakui sebagai pendapatan saat keberangkatan (PSAK 72).</div>
+        </div>
+      </div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    step: 1,
+    pkg: 0,
+    room: 'triple',
+    scheme: 'dp',
+    method: 'va',
+    gender: 'L',
+    agree: false,
+    submitted: false,
+    regNo: '',
+    docs: { ktp: false, kk: false, paspor: false, foto: false, nikah: false, vaksin: false },
+    form: { nama: '', nik: '', hp: '', tmpt: '', tgl: '', email: '', alamat: '', darurat: '', daruratHp: '',
+      paspor: '', pIssue: '', pExpiry: '', mahram: '', mahramRel: '' }
+  };
+
+  pkgData() {
+    return [
+      { name: 'Umrah Reguler 9 Hari', detail: 'Zowar Int’l ⭐3 · Saudia · 12 Agu 2026', base: 28.5, date: '12 Agustus 2026', seats: 'Sisa 3 kursi', tight: true },
+      { name: 'Umrah Plus Turki', detail: 'Grand Makkah ⭐4 · Turkish · 20 Agu 2026', base: 39.9, date: '20 Agustus 2026', seats: 'Sisa 6 kursi', tight: true },
+      { name: 'Umrah VIP 12 Hari', detail: 'Fairmont ⭐5 · Emirates · 03 Sep 2026', base: 62.0, date: '03 September 2026', seats: 'Sisa 6 kursi', tight: false },
+      { name: 'Haji Khusus Furoda', detail: 'Hilton Suites ⭐5 · Saudia · 28 Mei 2027', base: 245.0, date: '28 Mei 2027', seats: 'Sisa 8 kursi', tight: false }
+    ];
+  }
+  roomData() {
+    return [
+      { id: 'quad', label: 'Quad', desc: '4 orang / kamar', up: 0 },
+      { id: 'triple', label: 'Triple', desc: '3 orang / kamar', up: 3.5 },
+      { id: 'double', label: 'Double', desc: '2 orang / kamar', up: 8.0 }
+    ];
+  }
+  docData() {
+    return [
+      { id: 'ktp', abbr: 'KTP', name: 'KTP', hint: 'Kartu Tanda Penduduk' },
+      { id: 'kk', abbr: 'KK', name: 'Kartu Keluarga', hint: 'KK terbaru' },
+      { id: 'paspor', abbr: 'PPR', name: 'Paspor', hint: 'Halaman identitas, min. berlaku 7 bulan' },
+      { id: 'foto', abbr: 'FTO', name: 'Pas Foto 4×6', hint: 'Latar putih, 80% wajah' },
+      { id: 'nikah', abbr: 'NKH', name: 'Buku Nikah', hint: 'Bila bepergian dengan pasangan (opsional)' },
+      { id: 'vaksin', abbr: 'VKS', name: 'Kartu Vaksin Meningitis', hint: 'Sertifikat ICV' }
+    ];
+  }
+
+  fmt(n) { return 'Rp ' + n.toFixed(1).replace('.', ',') + ' Jt'; }
+
+  onField = (e) => {
+    const k = e.target.dataset.k, v = e.target.value;
+    this.setState(s => ({ form: Object.assign({}, s.form, { [k]: v }) }));
+  };
+
+  passportInfo() {
+    const pkg = this.pkgData()[this.state.pkg];
+    const dep = new Date(pkg.date.replace('Januari','Jan').replace('Februari','Feb'));
+    // parse Indonesian date via known list
+    const months = { 'Januari':0,'Februari':1,'Maret':2,'April':3,'Mei':4,'Juni':5,'Juli':6,'Agustus':7,'September':8,'Oktober':9,'November':10,'Desember':11 };
+    const parts = pkg.date.split(' ');
+    const depDate = new Date(parseInt(parts[2]), months[parts[1]], parseInt(parts[0]));
+    const exp = this.state.form.pExpiry;
+    if (!exp) return { bg: '#f2ecdf', border: '#e2d8c2', dot: '#b6ac94', mark: 'i', textColor: '#8c8371', msg: 'Masukkan tanggal berlaku paspor untuk validasi otomatis (syarat min. 7 bulan dari keberangkatan).' };
+    const expDate = new Date(exp);
+    const limit = new Date(depDate); limit.setMonth(limit.getMonth() + 7);
+    if (expDate >= limit) {
+      const ok = { bg: 'oklch(0.95 0.04 158)', border: 'oklch(0.85 0.06 158)', dot: 'oklch(0.5 0.1 158)', mark: '✓', textColor: 'oklch(0.4 0.08 158)' };
+      ok.msg = 'Paspor valid — masa berlaku memenuhi syarat minimal 7 bulan setelah keberangkatan.';
+      return ok;
+    }
+    return { bg: 'oklch(0.96 0.04 30)', border: 'oklch(0.85 0.08 30)', dot: 'oklch(0.55 0.15 28)', mark: '!', textColor: 'oklch(0.48 0.13 28)',
+      msg: 'Paspor tidak memenuhi syarat — masa berlaku kurang dari 7 bulan setelah keberangkatan. Harap perpanjang paspor.' };
+  }
+
+  next = () => {
+    if (this.state.step < 6) { this.setState(s => ({ step: s.step + 1 })); return; }
+    if (!this.state.agree) return;
+    const rand = Math.floor(1000 + Math.random() * 9000);
+    const prefix = this.state.pkg === 3 ? 'HAJ-2027-' : 'UMR-2026-';
+    this.setState({ submitted: true, regNo: prefix + '0' + rand });
+  };
+  prev = () => { if (this.state.step > 1) this.setState(s => ({ step: s.step - 1 })); };
+  restart = () => this.setState({ step: 1, submitted: false, agree: false });
+  toggleAgree = () => this.setState(s => ({ agree: !s.agree }));
+
+  renderVals() {
+    const st = this.state, pkgs = this.pkgData(), rooms = this.roomData();
+    const done = st.submitted;
+    const stepLabels = ['Paket', 'Data Diri', 'Dokumen', 'Kamar', 'Pembayaran', 'Konfirmasi'];
+    const steps = stepLabels.map((l, i) => {
+      const n = i + 1, active = n === st.step, doneStep = n < st.step;
+      return {
+        label: l, mark: doneStep ? '✓' : String(n), flex: i === 5 ? '0 0 auto' : '1',
+        bg: doneStep ? 'oklch(0.5 0.09 165)' : (active ? 'oklch(0.56 0.11 78)' : '#f0eadc'),
+        fg: (doneStep || active) ? '#fff' : '#a89e88',
+        border: doneStep ? 'oklch(0.5 0.09 165)' : (active ? 'oklch(0.56 0.11 78)' : '#e2d8c2'),
+        labelColor: active ? '#2c281f' : '#a89e88',
+        lineColor: doneStep ? 'oklch(0.5 0.09 165)' : '#e2d8c2'
+      };
+    });
+
+    const pkgOptions = pkgs.map((p, i) => {
+      const sel = i === st.pkg;
+      return {
+        name: p.name, detail: p.detail, price: this.fmt(p.base), seats: p.seats,
+        seatColor: p.tight ? 'oklch(0.55 0.15 28)' : 'oklch(0.46 0.07 158)',
+        go: () => this.setState({ pkg: i }),
+        border: sel ? 'oklch(0.5 0.09 165)' : '#e5dcc8', bg: sel ? 'oklch(0.97 0.02 165)' : '#fffdf8',
+        radioBorder: sel ? 'oklch(0.5 0.09 165)' : '#c9bfa8', radioBg: '#fff',
+        dotColor: sel ? 'oklch(0.5 0.09 165)' : 'transparent'
+      };
+    });
+
+    const genderOptions = ['L', 'P'].map(g => {
+      const sel = st.gender === g;
+      return { label: g === 'L' ? 'Laki-laki' : 'Perempuan', go: () => this.setState({ gender: g }),
+        border: sel ? 'oklch(0.5 0.09 165)' : '#d9cfb9', bg: sel ? 'oklch(0.97 0.02 165)' : '#fffdf8', color: sel ? 'oklch(0.42 0.08 165)' : '#6f6858' };
+    });
+
+    const docRows = this.docData().map(d => {
+      const up = st.docs[d.id];
+      return { abbr: d.abbr, name: d.name, hint: d.hint, go: () => this.setState(s => ({ docs: Object.assign({}, s.docs, { [d.id]: !s.docs[d.id] }) })),
+        border: up ? 'oklch(0.7 0.06 158)' : '#d9cfb9', bg: up ? 'oklch(0.97 0.03 158)' : '#fffdf8',
+        iconBg: up ? 'oklch(0.5 0.09 158)' : '#f0eadc', iconColor: up ? '#fff' : '#a89e88',
+        stat: up ? '✓ Terunggah' : 'Unggah file', statColor: up ? 'oklch(0.46 0.09 158)' : 'oklch(0.5 0.09 165)' };
+    });
+
+    const roomOptions = rooms.map(r => {
+      const sel = st.room === r.id;
+      return { label: r.label, desc: r.desc, upcharge: r.up === 0 ? 'Termasuk' : '+ ' + this.fmt(r.up), go: () => this.setState({ room: r.id }),
+        border: sel ? 'oklch(0.5 0.09 165)' : '#e5dcc8', bg: sel ? 'oklch(0.97 0.02 165)' : '#fffdf8',
+        color: sel ? 'oklch(0.42 0.08 165)' : '#2c281f', upColor: r.up === 0 ? 'oklch(0.46 0.07 158)' : '#6f6858' };
+    });
+
+    const base = pkgs[st.pkg].base;
+    const roomObj = rooms.find(r => r.id === st.room);
+    const total = base + roomObj.up;
+    const schemeDefs = [
+      { id: 'dp', label: 'Uang Muka (DP)', desc: 'Bayar DP, sisanya sebelum keberangkatan', amount: this.fmt(5.0), due: 5.0 },
+      { id: 'cicil', label: 'Cicilan 6× Termin', desc: 'DP + 5 termin bulanan otomatis', amount: this.fmt(5.0), due: 5.0 },
+      { id: 'lunas', label: 'Lunas', desc: 'Bayar penuh sekarang', amount: this.fmt(total), due: total }
+    ];
+    const schemeOptions = schemeDefs.map(s => {
+      const sel = st.scheme === s.id;
+      return { label: s.label, desc: s.desc, amount: s.amount, go: () => this.setState({ scheme: s.id }),
+        border: sel ? 'oklch(0.5 0.09 165)' : '#e5dcc8', bg: sel ? 'oklch(0.97 0.02 165)' : '#fffdf8',
+        radioBorder: sel ? 'oklch(0.5 0.09 165)' : '#c9bfa8', dotColor: sel ? 'oklch(0.5 0.09 165)' : 'transparent' };
+    });
+    const dueNow = schemeDefs.find(s => s.id === st.scheme).due;
+
+    const methodDefs = [['va', 'Transfer / VA'], ['card', 'Kartu Kredit'], ['manual', 'Transfer Manual']];
+    const methodOptions = methodDefs.map(m => {
+      const sel = st.method === m[0];
+      return { label: m[1], go: () => this.setState({ method: m[0] }),
+        border: sel ? 'oklch(0.5 0.09 165)' : '#d9cfb9', bg: sel ? 'oklch(0.97 0.02 165)' : '#fffdf8', color: sel ? 'oklch(0.42 0.08 165)' : '#6f6858' };
+    });
+
+    const schemeLabel = schemeDefs.find(s => s.id === st.scheme).label;
+    const methodLabel = methodDefs.find(m => m[0] === st.method)[1];
+    const docCount = Object.values(st.docs).filter(Boolean).length;
+    const reviewRows = [
+      { k: 'Paket', v: pkgs[st.pkg].name },
+      { k: 'Keberangkatan', v: pkgs[st.pkg].date },
+      { k: 'Nama Jamaah', v: st.form.nama || '—' },
+      { k: 'NIK', v: st.form.nik || '—' },
+      { k: 'No. Paspor', v: st.form.paspor || '—' },
+      { k: 'Tipe Kamar', v: roomObj.label },
+      { k: 'Dokumen Terunggah', v: docCount + ' dari 6 dokumen' },
+      { k: 'Skema Pembayaran', v: schemeLabel + ' · ' + methodLabel },
+      { k: 'Bayar Sekarang', v: this.fmt(dueNow) }
+    ];
+
+    const canProceed = st.step < 6 || st.agree;
+    return {
+      steps, notDone: !done, isDone: done,
+      isS1: !done && st.step === 1, isS2: !done && st.step === 2, isS3: !done && st.step === 3,
+      isS4: !done && st.step === 4, isS5: !done && st.step === 5, isS6: !done && st.step === 6,
+      gridCols: '1fr 320px',
+      pkgOptions, genderOptions, docRows, roomOptions, schemeOptions, methodOptions, reviewRows,
+      form: st.form, onField: this.onField, passport: this.passportInfo(),
+      next: this.next, prev: this.prev, restart: this.restart, toggleAgree: this.toggleAgree,
+      nextLabel: st.step === 6 ? 'Selesaikan Pendaftaran' : 'Lanjutkan →',
+      nextBg: canProceed ? 'oklch(0.5 0.09 165)' : '#c9bfa8',
+      nextCursor: canProceed ? 'pointer' : 'not-allowed',
+      backColor: st.step === 1 ? '#c9bfa8' : '#6f6858',
+      backBorder: st.step === 1 ? '#eee5d3' : '#d9cfb9',
+      backCursor: st.step === 1 ? 'not-allowed' : 'pointer',
+      agree: st.agree, agreeBg: st.agree ? 'oklch(0.5 0.09 165)' : '#fff', agreeBorder: st.agree ? 'oklch(0.5 0.09 165)' : '#c9bfa8', agreeMark: st.agree ? '✓' : '',
+      regNo: st.regNo,
+      nextSteps: [
+        { num: '1', title: 'Bayar ' + schemeLabel, desc: this.fmt(dueNow) + ' via ' + methodLabel + ' — instruksi dikirim via WhatsApp' },
+        { num: '2', title: 'Lengkapi dokumen', desc: (6 - docCount) + ' dokumen lagi perlu diunggah' },
+        { num: '3', title: 'Verifikasi tim', desc: 'Status pendaftaran dapat dipantau di portal jamaah' }
+      ],
+      sum: {
+        pkgName: pkgs[st.pkg].name, pkgDate: pkgs[st.pkg].date,
+        base: this.fmt(base), roomLabel: roomObj.label, roomUp: roomObj.up === 0 ? 'Termasuk' : '+ ' + this.fmt(roomObj.up),
+        total: this.fmt(total), dueNow: this.fmt(dueNow)
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

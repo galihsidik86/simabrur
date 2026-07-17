@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:#efe8da;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#2c281f;}
+  a{color:oklch(0.5 0.09 165);text-decoration:none;}
+  .fld{width:100%; padding:10px 12px; border:1px solid #d9cfb9; border-radius:9px; background:#fffdf8; font-size:13px; color:#2c281f; outline:none;}
+  .fld:focus{border-color:oklch(0.5 0.09 165); box-shadow:0 0 0 3px oklch(0.93 0.04 165);}
+  .lbl{font-size:11px; font-weight:600; color:#6f6858; margin-bottom:5px; display:block;}
+  select.fld{appearance:none; background-image:linear-gradient(45deg,transparent 50%,#a89e88 50%),linear-gradient(135deg,#a89e88 50%,transparent 50%); background-position:calc(100% - 16px) 17px,calc(100% - 11px) 17px; background-size:5px 5px,5px 5px; background-repeat:no-repeat;}
+  ::-webkit-scrollbar{width:10px;height:10px;} ::-webkit-scrollbar-thumb{background:#d8cdb5;border-radius:6px;border:2px solid #efe8da;}
+</style>
+</helmet>
+<div style="min-height:100vh;">
+
+  <div style="background:#faf7f0; border-bottom:1px solid #e6ddca; padding:20px 32px;">
+    <div style="max-width:1180px; margin:0 auto;">
+      <div style="font-size:11.5px; color:#a89e88; margin-bottom:3px;">Keuangan &amp; Akuntansi · Input Transaksi</div>
+      <div style="font-family:'Marcellus',serif; font-size:26px; color:#26221b;">Catat Transaksi &amp; Jurnal Otomatis</div>
+    </div>
+  </div>
+
+  <div style="max-width:1180px; margin:0 auto; padding:24px 32px 50px;">
+
+    <!-- TYPE SELECTOR -->
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:22px;">
+      <sc-for list="{{ types }}" as="t" hint-placeholder-count="4">
+        <div onClick="{{ t.go }}" style="padding:15px 16px; border:2px solid {{ t.border }}; background:{{ t.bg }}; border-radius:13px; cursor:pointer; box-shadow:{{ t.shadow }};">
+          <div style="display:flex; align-items:center; gap:9px;">
+            <span style="width:11px; height:11px; border-radius:4px; background:{{ t.dot }};"></span>
+            <span style="font-weight:600; font-size:13.5px; color:{{ t.titleColor }};">{{ t.label }}</span>
+          </div>
+          <div style="font-size:11px; color:#9a917d; margin-top:6px;">{{ t.desc }}</div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1.35fr 1fr; gap:20px; align-items:start;">
+
+      <!-- FORM -->
+      <div style="background:#fffdf8; border:1px solid #e9e0cd; border-radius:15px; padding:24px 26px; box-shadow:0 8px 24px -14px rgba(60,50,20,0.35);">
+        <div style="font-family:'Marcellus',serif; font-size:19px; margin-bottom:3px;">{{ formTitle }}</div>
+        <div style="font-size:12px; color:#9a917d; margin-bottom:20px;">{{ formHint }}</div>
+
+        <!-- TERIMA PEMBAYARAN -->
+        <sc-if value="{{ isTerima }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
+          <div style="grid-column:1 / -1;"><label class="lbl">Jamaah</label>
+            <select class="fld" data-k="jamaah" defaultValue="{{ form.jamaah }}" onChange="{{ onField }}">
+              <option>Hj. Siti Rohmah — UMR-2026-0418</option><option>H. Ahmad Fauzi — UMR-2026-0412</option><option>Budi Santoso — UMR-2026-0421</option>
+            </select></div>
+          <div><label class="lbl">Jenis Pembayaran</label>
+            <select class="fld" data-k="jenis" defaultValue="{{ form.jenis }}" onChange="{{ onField }}"><option>Uang Muka (DP)</option><option>Termin / Cicilan</option><option>Pelunasan</option></select></div>
+          <div><label class="lbl">Tanggal Terima</label><input class="fld" type="date" data-k="tanggal" value="{{ form.tanggal }}" onInput="{{ onField }}"></div>
+          <div><label class="lbl">Rekening Tujuan</label>
+            <select class="fld" data-k="bank" defaultValue="{{ form.bank }}" onChange="{{ onField }}"><option>1-1200 · Bank IDR (BSI)</option><option>1-1210 · Bank USD</option><option>1-1220 · Bank SAR</option><option>1-1100 · Kas</option></select></div>
+          <div><label class="lbl">Metode</label>
+            <select class="fld" data-k="metode" defaultValue="{{ form.metode }}" onChange="{{ onField }}"><option>Transfer / VA</option><option>Setor Tunai</option><option>Kartu</option></select></div>
+          <div style="grid-column:1 / -1;"><label class="lbl">Jumlah Diterima (Rp)</label><input class="fld" data-k="amount" value="{{ amountRaw }}" onInput="{{ onAmount }}" placeholder="0" style="font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:600;"></div>
+        </div>
+        </sc-if>
+
+        <!-- BIAYA -->
+        <sc-if value="{{ isBiaya }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
+          <div><label class="lbl">Vendor / Penerima</label>
+            <select class="fld" data-k="vendor" defaultValue="{{ form.vendor }}" onChange="{{ onField }}"><option>Grand Al Massa Hotel</option><option>Turkish Airlines</option><option>Kedutaan / Visa Agent</option><option>Katering Al Baik</option><option>Operasional Kantor</option></select></div>
+          <div><label class="lbl">Cost Center / Keberangkatan</label>
+            <select class="fld" data-k="costcenter" defaultValue="{{ form.costcenter }}" onChange="{{ onField }}"><option>Umrah Reguler — Agu 2026</option><option>Umrah Plus Turki — Agu 2026</option><option>Umum / non-CC</option></select></div>
+          <div><label class="lbl">Rekening Sumber</label>
+            <select class="fld" data-k="biayaBank" defaultValue="{{ form.biayaBank }}" onChange="{{ onField }}"><option>1-1200 · Bank IDR (BSI)</option><option>1-1210 · Bank USD</option><option>1-1220 · Bank SAR</option><option>1-1100 · Kas</option></select></div>
+          <div><label class="lbl">Kurs {{ kursLabel }}</label><input class="fld" value="{{ kursRaw }}" onInput="{{ onKurs }}" placeholder="1" disabled="{{ kursDisabled }}" style="font-family:'JetBrains Mono',monospace; font-weight:600;"></div>
+          <sc-if value="{{ isForeign }}" hint-placeholder-val="{{ true }}">
+          <div style="grid-column:1 / -1; display:flex; align-items:center; gap:10px; padding:11px 14px; background:oklch(0.97 0.02 78); border:1px solid oklch(0.9 0.03 78); border-radius:10px; cursor:pointer;" onClick="{{ toggleSettle }}">
+            <div style="width:38px; height:22px; border-radius:20px; background:{{ settleTrackBg }}; position:relative; flex:0 0 auto;"><span style="position:absolute; top:2px; left:{{ settleKnob }}; width:18px; height:18px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.25);"></span></div>
+            <div style="flex:1;"><div style="font-size:12.5px; font-weight:600;">Pelunasan hutang vendor (realisasi selisih kurs)</div><div style="font-size:10.5px; color:#9a917d;">{{ settleHint }}</div></div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ showKursHutang }}" hint-placeholder-val="{{ true }}">
+          <div style="grid-column:1 / -1;"><label class="lbl">Kurs saat pengakuan hutang (Rp / {{ curLabel }})</label><input class="fld" value="{{ kursHutangRaw }}" onInput="{{ onKursHutang }}" style="font-family:'JetBrains Mono',monospace; font-weight:600; max-width:230px;"></div>
+          </sc-if>
+          <div style="grid-column:1 / -1;">
+            <label class="lbl">Rincian Biaya <span style="font-weight:400; color:#a89e88;">— nominal dalam {{ curLabel }}, bisa lebih dari satu akun</span></label>
+            <div style="display:flex; flex-direction:column; gap:9px;">
+              <sc-for list="{{ biayaRows }}" as="r" hint-placeholder-count="2">
+                <div style="display:flex; gap:9px; align-items:center;">
+                  <select class="fld" style="flex:1;" defaultValue="{{ r.acct }}" onChange="{{ r.onAcct }}">
+                    <option>1-1400 · Uang Muka Vendor</option><option>5-1000 · Beban Tiket</option><option>5-2000 · Beban Hotel</option><option>5-3000 · Beban Visa</option><option>5-4000 · Beban Katering</option><option>5-5000 · Transport &amp; Handling</option><option>6-5000 · Beban Adm &amp; Umum</option>
+                  </select>
+                  <input class="fld" style="width:150px; font-family:'JetBrains Mono',monospace; font-weight:600; text-align:right;" value="{{ r.amountRaw }}" onInput="{{ r.onAmount }}" placeholder="0">
+                  <span onClick="{{ r.remove }}" style="display:{{ r.canRemove }}; width:32px; height:38px; flex:0 0 auto; align-items:center; justify-content:center; color:#b6ac94; font-size:16px; cursor:pointer;" style-hover="color:oklch(0.55 0.14 28);">✕</span>
+                </div>
+              </sc-for>
+            </div>
+            <div onClick="{{ addBiayaLine }}" style="margin-top:11px; display:inline-block; font-size:12.5px; font-weight:600; color:oklch(0.5 0.09 165); cursor:pointer;">+ Tambah baris akun</div>
+            <div style="margin-top:13px; display:flex; justify-content:space-between; align-items:center; padding:12px 15px; background:#faf7f0; border:1px solid #ece3d0; border-radius:10px;"><span style="font-weight:600; font-size:12.5px;">Total dibayar</span><span style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:15px;">{{ biayaTotalFmt }}</span></div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- PENDAPATAN -->
+        <sc-if value="{{ isPendapatan }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
+          <div style="grid-column:1 / -1;"><label class="lbl">Keberangkatan (Cost Center)</label>
+            <select class="fld" data-k="costcenter" defaultValue="{{ form.costcenter }}" onChange="{{ onField }}"><option>Umrah Reguler — 18 Jun 2026 (214 jamaah)</option><option>Umrah Plus Turki — 20 Agu 2026 (34 jamaah)</option><option>Haji Khusus Furoda — 28 Mei 2027</option></select></div>
+          <div><label class="lbl">Akun Pendapatan</label>
+            <select class="fld" data-k="revAcct" defaultValue="{{ form.revAcct }}" onChange="{{ onField }}"><option>4-1000 · Pendapatan Jasa Umrah</option><option>4-2000 · Pendapatan Jasa Haji Khusus</option></select></div>
+          <div><label class="lbl">Tanggal Penyelesaian Jasa</label><input class="fld" type="date" data-k="tanggal" value="{{ form.tanggal }}" onInput="{{ onField }}"></div>
+          <div style="grid-column:1 / -1;"><label class="lbl">Nilai Pendapatan Diakui (Rp)</label><input class="fld" data-k="amount" value="{{ amountRaw }}" onInput="{{ onAmount }}" placeholder="0" style="font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:600;"></div>
+          <div style="grid-column:1 / -1; font-size:11px; color:#8c8371; background:oklch(0.97 0.02 158); border:1px solid oklch(0.9 0.03 158); border-radius:10px; padding:11px 14px; line-height:1.5;">PSAK 72 — pendapatan diakui saat kewajiban pelaksanaan terpenuhi (keberangkatan). Reklas Uang Muka Jamaah → Pendapatan. Umumnya diikuti jurnal pengakuan HPP.</div>
+        </div>
+        </sc-if>
+
+        <!-- KOMISI -->
+        <sc-if value="{{ isKomisi }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
+          <div style="grid-column:1 / -1;"><label class="lbl">Agen / Mitra</label>
+            <select class="fld" data-k="agent" defaultValue="{{ form.agent }}" onChange="{{ onField }}"><option>Barokah Tour — BRKH-07</option><option>Amanah Wisata — AMNH-12</option><option>Hj. Fatimah (Perorangan) — FTMH-21</option></select></div>
+          <div><label class="lbl">Terkait Keberangkatan</label>
+            <select class="fld" data-k="costcenter" defaultValue="{{ form.costcenter }}" onChange="{{ onField }}"><option>Umrah Reguler — Jun 2026</option><option>Umrah Plus Turki — Agu 2026</option></select></div>
+          <div><label class="lbl">Tanggal</label><input class="fld" type="date" data-k="tanggal" value="{{ form.tanggal }}" onInput="{{ onField }}"></div>
+          <div><label class="lbl">Dasar Komisi / Omzet (Rp)</label><input class="fld" data-k="base" value="{{ baseRaw }}" onInput="{{ onBase }}" placeholder="0" style="font-family:'JetBrains Mono',monospace; font-weight:600;"></div>
+          <div><label class="lbl">Persentase Komisi (%)</label><input class="fld" data-k="pct" value="{{ form.pct }}" onInput="{{ onPct }}" placeholder="3" style="font-family:'JetBrains Mono',monospace; font-weight:600;"></div>
+          <div style="grid-column:1 / -1; display:flex; justify-content:space-between; align-items:center; padding:13px 16px; background:oklch(0.97 0.02 322); border:1px solid oklch(0.9 0.03 322); border-radius:10px;"><span style="font-size:12.5px; font-weight:600; color:oklch(0.42 0.08 322);">Komisi terhitung</span><span style="font-family:'JetBrains Mono',monospace; font-size:17px; font-weight:700; color:oklch(0.42 0.08 322);">{{ komisiFmt }}</span></div>
+        </div>
+        </sc-if>
+      </div>
+
+      <!-- JOURNAL PREVIEW -->
+      <div style="background:#16211b; border-radius:15px; overflow:hidden; box-shadow:0 8px 24px -12px rgba(20,30,20,0.5); position:sticky; top:20px;">
+        <div style="padding:16px 20px; border-bottom:1px solid rgba(255,255,255,0.08);">
+          <div style="font-size:10.5px; color:#9fb0a4; text-transform:uppercase; letter-spacing:1px;">Preview Jurnal Otomatis</div>
+          <div style="display:flex; justify-content:space-between; align-items:baseline; margin-top:5px;">
+            <span style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:600; color:oklch(0.72 0.11 78);">{{ preview.no }}</span>
+            <span style="font-size:11px; color:#c3cfc6;">{{ preview.date }}</span>
+          </div>
+          <div style="font-size:11.5px; color:#e8e0cf; margin-top:5px;">{{ preview.desc }}</div>
+        </div>
+        <div style="padding:6px 0;">
+          <div style="display:flex; padding:7px 20px; font-size:9.5px; color:#7d8d82; text-transform:uppercase; letter-spacing:0.5px;">
+            <span style="flex:1;">Akun</span><span style="width:96px; text-align:right;">Debit</span><span style="width:96px; text-align:right;">Kredit</span>
+          </div>
+          <sc-for list="{{ preview.lines }}" as="l" hint-placeholder-count="2">
+            <div style="display:flex; padding:9px 20px; border-top:1px solid rgba(255,255,255,0.05);">
+              <span style="flex:1; font-size:11.5px;"><span style="font-family:'JetBrains Mono',monospace; color:{{ l.codeColor }}; padding-left:{{ l.indent }}px;">{{ l.code }}</span> <span style="color:#e8e0cf;">{{ l.name }}</span> <span style="color:#7d8d82; font-size:9.5px; font-family:'JetBrains Mono',monospace;">{{ l.valas }}</span></span>
+              <span style="width:96px; text-align:right; font-family:'JetBrains Mono',monospace; font-size:11px; color:#fff;">{{ l.debit }}</span>
+              <span style="width:96px; text-align:right; font-family:'JetBrains Mono',monospace; font-size:11px; color:#fff;">{{ l.credit }}</span>
+            </div>
+          </sc-for>
+          <div style="display:flex; padding:10px 20px; border-top:1px solid rgba(255,255,255,0.12); background:rgba(255,255,255,0.03);">
+            <span style="flex:1; font-size:10.5px; font-weight:600; color:{{ balColor }};">{{ balLabel }}</span>
+            <span style="width:96px; text-align:right; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; color:#fff;">{{ preview.totalD }}</span>
+            <span style="width:96px; text-align:right; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; color:#fff;">{{ preview.totalC }}</span>
+          </div>
+        </div>
+        <div style="padding:16px 20px; border-top:1px solid rgba(255,255,255,0.08);">
+          <div style="font-size:10.5px; color:#9fb0a4; line-height:1.55; margin-bottom:14px;">{{ preview.note }}</div>
+          <div style="display:flex; gap:10px;">
+            <div style="flex:1; text-align:center; padding:11px; border-radius:9px; background:oklch(0.62 0.11 78); color:#20180a; font-weight:700; font-size:13px; cursor:pointer;">Simpan &amp; Posting</div>
+            <div style="padding:11px 16px; border-radius:9px; border:1px solid rgba(255,255,255,0.18); color:#c3cfc6; font-weight:600; font-size:13px; cursor:pointer;">Batal</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    txType: 'terima',
+    amount: 25000000,
+    base: 141000000,
+    form: {
+      jamaah: 'Hj. Siti Rohmah — UMR-2026-0418', jenis: 'Uang Muka (DP)', tanggal: '2026-06-10',
+      bank: '1-1200 · Bank IDR (BSI)', metode: 'Transfer / VA',
+      vendor: 'Grand Al Massa Hotel', costcenter: 'Umrah Reguler — Agu 2026',
+      biayaBank: '1-1220 · Bank SAR',
+      revAcct: '4-1000 · Pendapatan Jasa Umrah', agent: 'Barokah Tour — BRKH-07', pct: '3'
+    },
+    kurs: 4150, kursHutang: 4100, settleHutang: false,
+    biayaLines: [
+      { acct: '5-2000 · Beban Hotel', amount: 45000 },
+      { acct: '5-4000 · Beban Katering', amount: 12000 }
+    ]
+  };
+
+  acctColor(code) {
+    const m = { '1': 'oklch(0.7 0.08 165)', '2': 'oklch(0.72 0.09 245)', '3': 'oklch(0.7 0.02 265)',
+      '4': 'oklch(0.72 0.09 158)', '5': 'oklch(0.75 0.09 82)', '6': 'oklch(0.72 0.11 45)', '7': 'oklch(0.7 0.1 322)' };
+    return m[code[0]] || '#c3cfc6';
+  }
+  fmt(n) { return 'Rp ' + Math.round(n).toLocaleString('id-ID'); }
+  fmtShort(n) {
+    if (n >= 1e9) return (n / 1e9).toFixed(2).replace('.', ',') + ' M';
+    if (n >= 1e6) return (n / 1e6).toFixed(1).replace('.', ',') + ' Jt';
+    return n.toLocaleString('id-ID');
+  }
+
+  onField = (e) => { const k = e.target.dataset.k, v = e.target.value; this.setState(s => ({ form: Object.assign({}, s.form, { [k]: v }) })); };
+  onAmount = (e) => { const n = parseInt(e.target.value.replace(/\D/g, ''), 10); this.setState({ amount: isNaN(n) ? 0 : n }); };
+  onBase = (e) => { const n = parseInt(e.target.value.replace(/\D/g, ''), 10); this.setState({ base: isNaN(n) ? 0 : n }); };
+  onPct = (e) => { this.setState(s => ({ form: Object.assign({}, s.form, { pct: e.target.value.replace(/[^0-9.]/g, '') }) })); };
+  setLine = (i, k, v) => this.setState(s => { const arr = s.biayaLines.slice(); arr[i] = Object.assign({}, arr[i], { [k]: v }); return { biayaLines: arr }; });
+  removeLine = (i) => this.setState(s => ({ biayaLines: s.biayaLines.filter((_, j) => j !== i) }));
+  onKurs = (e) => { const n = parseInt(e.target.value.replace(/\D/g, ''), 10); this.setState({ kurs: isNaN(n) ? 0 : n }); };
+  onKursHutang = (e) => { const n = parseInt(e.target.value.replace(/\D/g, ''), 10); this.setState({ kursHutang: isNaN(n) ? 0 : n }); };
+  toggleSettle = () => this.setState(s => ({ settleHutang: !s.settleHutang }));
+  setType = (t) => this.setState({ txType: t });
+
+  splitAcct(opt) {
+    opt = opt || '';
+    const parts = opt.split(' · ');
+    if (parts.length === 2) return { code: parts[0].trim(), name: parts[1].trim() };
+    return { code: '', name: opt };
+  }
+
+  renderVals() {
+    const st = this.state, f = st.form;
+    const typeDefs = [
+      ['terima', 'Terima Pembayaran', 'Penerimaan dari jamaah', 'oklch(0.55 0.09 245)'],
+      ['biaya', 'Pembayaran Biaya', 'Ke vendor / operasional', 'oklch(0.58 0.12 45)'],
+      ['pendapatan', 'Pengakuan Pendapatan', 'Saat keberangkatan (PSAK 72)', 'oklch(0.5 0.09 158)'],
+      ['komisi', 'Pengakuan Komisi', 'Komisi agen mitra', 'oklch(0.52 0.1 322)']
+    ];
+    const types = typeDefs.map(t => {
+      const on = st.txType === t[0];
+      return { label: t[1], desc: t[2], dot: t[3], go: () => this.setType(t[0]),
+        border: on ? t[3] : '#e5dcc8', bg: on ? '#fffdf8' : '#f7f2e8',
+        titleColor: on ? '#26221b' : '#6f6858', shadow: on ? '0 6px 18px -10px rgba(60,50,20,0.35)' : 'none' };
+    });
+
+    const komisi = Math.round(st.base * (parseFloat(f.pct) || 0) / 100);
+    const bcode = this.splitAcct(f.biayaBank).code;
+    const cur = bcode === '1-1220' ? 'SAR' : (bcode === '1-1210' ? 'USD' : 'IDR');
+    const isForeign = cur !== 'IDR';
+    const kurs = isForeign ? (st.kurs || 0) : 1;
+    const fmtCur = (n) => cur + ' ' + Math.round(n).toLocaleString('id-ID');
+
+    const L = (code, name, isDebit, a, valas) => ({ code, name, codeColor: this.acctColor(code),
+      debit: isDebit ? this.fmtShort(a) : '', credit: isDebit ? '' : this.fmtShort(a), indent: isDebit ? 0 : 14, valas: valas || '' });
+
+    const first = (v, sep) => (v || '').split(sep)[0];
+    let lines = [], desc = '', note = '', no = 'JV-2026-06XX', total = 0;
+    const bankT = this.splitAcct(f.bank);
+    if (st.txType === 'terima') {
+      total = st.amount;
+      desc = 'Penerimaan ' + f.jenis + ' — ' + first(f.jamaah, ' — ');
+      lines = [L(bankT.code, bankT.name, true, total), L('2-1100', 'Uang Muka Jamaah', false, total)];
+      note = 'Kas masuk dicatat sebagai LIABILITAS (Uang Muka Jamaah), belum sebagai pendapatan — sesuai akad wakalah.';
+    } else if (st.txType === 'biaya') {
+      const bank = this.splitAcct(f.biayaBank);
+      const foreignTotal = st.biayaLines.reduce((a, l) => a + (l.amount || 0), 0);
+      const totalIDR = Math.round(foreignTotal * kurs);
+      if (isForeign && st.settleHutang) {
+        const idrHutang = Math.round(foreignTotal * (st.kursHutang || 0));
+        const idrBank = totalIDR;
+        const selisih = idrBank - idrHutang;
+        desc = 'Pelunasan hutang vendor ' + f.vendor + ' (' + cur + ')';
+        lines = [L('2-1300', 'Hutang Vendor', true, idrHutang, fmtCur(foreignTotal))];
+        if (selisih > 0) lines.push(L('7-1000', 'Rugi Selisih Kurs', true, selisih, ''));
+        else if (selisih < 0) lines.push(L('7-1000', 'Laba Selisih Kurs', false, -selisih, ''));
+        lines.push(L(bank.code, bank.name, false, idrBank, fmtCur(foreignTotal)));
+        total = idrHutang + (selisih > 0 ? selisih : 0);
+        note = 'Hutang diakui pada kurs Rp ' + (st.kursHutang || 0).toLocaleString('id-ID') + '/' + cur + ', dibayar pada kurs Rp ' + kurs.toLocaleString('id-ID') + '/' + cur + '. Selisih ' + this.fmt(Math.abs(selisih)) + ' → ' + (selisih >= 0 ? 'Rugi' : 'Laba') + ' Selisih Kurs (7-1000).';
+      } else {
+        total = totalIDR;
+        desc = 'Pembayaran ' + f.vendor + (st.biayaLines.length > 1 ? ' (' + st.biayaLines.length + ' akun)' : '');
+        const dLines = st.biayaLines.map(l => { const a = this.splitAcct(l.acct); return L(a.code, a.name, true, Math.round(l.amount * kurs), isForeign ? fmtCur(l.amount) : ''); });
+        lines = dLines.concat([L(bank.code, bank.name, false, totalIDR, isForeign ? fmtCur(foreignTotal) : '')]);
+        const hasAdvance = st.biayaLines.some(l => l.acct.indexOf('1-1400') === 0);
+        note = isForeign
+          ? 'Pembayaran ' + cur + ' dicatat pada mata uang fungsional IDR memakai kurs Rp ' + kurs.toLocaleString('id-ID') + '/' + cur + '. Aktifkan "pelunasan hutang" bila melunasi hutang vendor dengan kurs berbeda (selisih kurs 7-1000).'
+          : (hasAdvance
+            ? 'Sebagian didebit ke Uang Muka Vendor (aset), dibebankan ke HPP saat keberangkatan. Total dikreditkan ke ' + bank.name + '.'
+            : 'Satu pembayaran dipecah ke beberapa akun beban pada cost center ' + f.costcenter + '. Total dikreditkan ke ' + bank.name + '.');
+      }
+    } else if (st.txType === 'pendapatan') {
+      total = st.amount;
+      const rev = this.splitAcct(f.revAcct);
+      desc = 'Pengakuan pendapatan — ' + first(f.costcenter, ' (');
+      lines = [L('2-1100', 'Uang Muka Jamaah', true, total), L(rev.code, rev.name, false, total)];
+      note = 'PSAK 72 — reklas liabilitas menjadi pendapatan saat jasa selesai. Diikuti jurnal pengakuan HPP (Dr Beban · Cr Uang Muka Vendor).';
+    } else {
+      total = komisi;
+      desc = 'Komisi agen — ' + first(f.agent, ' — ');
+      lines = [L('6-2000', 'Beban Komisi Agen', true, total), L('2-1400', 'Hutang Komisi Agen', false, total)];
+      note = 'Komisi ' + (f.pct || 0) + '% × ' + this.fmt(st.base) + ' diakui sebagai beban & hutang; dibayar terpisah saat jatuh tempo.';
+    }
+
+    const balanced = total > 0;
+    const fTot = st.biayaLines.reduce((a, l) => a + (l.amount || 0), 0);
+    return {
+      types,
+      formTitle: typeDefs.find(t => t[0] === st.txType)[1],
+      formHint: 'Lengkapi data transaksi — jurnal terbentuk otomatis di panel kanan.',
+      isTerima: st.txType === 'terima', isBiaya: st.txType === 'biaya',
+      isPendapatan: st.txType === 'pendapatan', isKomisi: st.txType === 'komisi',
+      form: f, onField: this.onField, onAmount: this.onAmount, onBase: this.onBase, onPct: this.onPct,
+      amountRaw: st.amount ? st.amount.toLocaleString('id-ID') : '',
+      baseRaw: st.base ? st.base.toLocaleString('id-ID') : '',
+      komisiFmt: this.fmt(komisi),
+      biayaRows: st.biayaLines.map((l, i) => ({
+        acct: l.acct, amountRaw: l.amount ? l.amount.toLocaleString('id-ID') : '',
+        onAcct: (e) => this.setLine(i, 'acct', e.target.value),
+        onAmount: (e) => { const n = parseInt(e.target.value.replace(/\D/g, ''), 10); this.setLine(i, 'amount', isNaN(n) ? 0 : n); },
+        remove: () => this.removeLine(i), canRemove: st.biayaLines.length > 1 ? 'flex' : 'none'
+      })),
+      biayaTotalFmt: isForeign ? (fmtCur(fTot) + ' ≈ ' + this.fmt(fTot * kurs)) : this.fmt(fTot),
+      addBiayaLine: () => this.setState(s => ({ biayaLines: s.biayaLines.concat([{ acct: '5-3000 · Beban Visa', amount: 0 }]) })),
+      isForeign, curLabel: cur, kursLabel: isForeign ? '(Rp / ' + cur + ')' : '(kurs IDR = 1)',
+      kursDisabled: !isForeign, kursRaw: isForeign ? (st.kurs || 0).toLocaleString('id-ID') : '1', onKurs: this.onKurs,
+      settleHutang: st.settleHutang, toggleSettle: this.toggleSettle,
+      settleTrackBg: st.settleHutang ? 'oklch(0.56 0.1 45)' : '#d3c9b2', settleKnob: st.settleHutang ? '18px' : '2px',
+      settleHint: st.settleHutang ? 'Debit Hutang Vendor pada kurs awal; selisih ke 7-1000' : 'Aktifkan bila melunasi hutang vendor dengan kurs berbeda',
+      showKursHutang: isForeign && st.settleHutang, kursHutangRaw: (st.kursHutang || 0).toLocaleString('id-ID'), onKursHutang: this.onKursHutang,
+      preview: { no, date: (f.tanggal || '2026-06-10'), desc, lines, note, totalD: this.fmtShort(total), totalC: this.fmtShort(total) },
+      balLabel: balanced ? '● Seimbang' : '○ Isi jumlah',
+      balColor: balanced ? 'oklch(0.72 0.09 158)' : '#c3a24f'
+    };
+  }
+}
+</script>
+</body>
+</html>

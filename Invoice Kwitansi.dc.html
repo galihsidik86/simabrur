@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  doc-page:not(:defined){visibility:hidden;}
+  a{color:oklch(0.5 0.09 165);}
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="a4" margin="0.6in" hint-size="100%,100%">
+  <div style="font-family:'Plus Jakarta Sans',sans-serif; color:#2c281f; font-size:12px; line-height:1.5;">
+
+    <!-- ===== INVOICE ===== -->
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:18px; border-bottom:2px solid #16211b;">
+      <div style="display:flex; gap:13px; align-items:center;">
+        <div style="width:46px; height:46px; border-radius:12px; background:oklch(0.56 0.11 78); display:flex; align-items:center; justify-content:center; font-family:'Marcellus',serif; font-size:24px; color:#20180a;">S</div>
+        <div>
+          <div style="font-family:'Marcellus',serif; font-size:20px; line-height:1;">PT Safar Barokah Wisata</div>
+          <div style="font-size:10.5px; color:#8c8371; margin-top:4px; line-height:1.45;">Jl. Warung Buncit Raya No. 42, Jakarta Selatan 12740<br>Izin PPIU Kemenag No. U-431 Tahun 2023 · Terdaftar SISKOPATUH<br>Telp 021-7900-345 · info@safarwisata.co.id</div>
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-family:'Marcellus',serif; font-size:30px; color:oklch(0.46 0.07 158); line-height:1;">INVOICE</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:12px; margin-top:8px;">INV/2026/06/0418</div>
+        <div style="font-size:10.5px; color:#8c8371; margin-top:3px;">Tanggal terbit: 10 Juni 2026</div>
+        <div style="font-size:10.5px; color:#8c8371;">Jatuh tempo: 10 Juli 2026</div>
+      </div>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; margin-top:20px; gap:30px;">
+      <div style="flex:1;">
+        <div style="font-size:10px; color:#9a917d; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;">Ditagihkan Kepada</div>
+        <div style="font-weight:600; font-size:14px;">Hj. Siti Rohmah</div>
+        <div style="font-size:11px; color:#6f6858; margin-top:3px; line-height:1.5;">No. Registrasi UMR-2026-0418<br>Jl. Merdeka No. 18, Bekasi<br>0812-xxxx-4471</div>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:10px; color:#9a917d; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;">Detail Keberangkatan</div>
+        <div style="font-weight:600; font-size:14px;">Umrah Plus Turki — 13 Hari</div>
+        <div style="font-size:11px; color:#6f6858; margin-top:3px; line-height:1.5;">Keberangkatan 20 Agustus 2026<br>Grup B · Kamar Triple (511)<br>Muthawwif: Ust. Fadhil</div>
+      </div>
+    </div>
+
+    <table style="width:100%; border-collapse:collapse; margin-top:22px; font-size:11.5px;">
+      <thead><tr style="background:#16211b; color:#f3eee2; text-align:left;">
+        <th style="padding:10px 14px; font-weight:600;">Deskripsi</th>
+        <th style="padding:10px 14px; font-weight:600; text-align:center; width:60px;">Qty</th>
+        <th style="padding:10px 14px; font-weight:600; text-align:right; width:130px;">Harga Satuan</th>
+        <th style="padding:10px 14px; font-weight:600; text-align:right; width:140px;">Jumlah</th>
+      </tr></thead>
+      <tbody>
+        <sc-for list="{{ items }}" as="i" hint-placeholder-count="3">
+          <tr style="border-bottom:1px solid #eee5d3;">
+            <td style="padding:11px 14px;"><div style="font-weight:600;">{{ i.name }}</div><div style="font-size:10px; color:#a89e88;">{{ i.detail }}</div></td>
+            <td style="padding:11px 14px; text-align:center; font-family:'JetBrains Mono',monospace;">{{ i.qty }}</td>
+            <td style="padding:11px 14px; text-align:right; font-family:'JetBrains Mono',monospace;">{{ i.price }}</td>
+            <td style="padding:11px 14px; text-align:right; font-family:'JetBrains Mono',monospace;">{{ i.amount }}</td>
+          </tr>
+        </sc-for>
+      </tbody>
+    </table>
+
+    <div style="display:flex; justify-content:space-between; margin-top:20px; gap:30px;">
+      <div style="flex:1;">
+        <div style="font-size:10px; color:#9a917d; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Riwayat &amp; Jadwal Pembayaran</div>
+        <table style="width:100%; border-collapse:collapse; font-size:10.5px;">
+          <sc-for list="{{ termins }}" as="t" hint-placeholder-count="4">
+            <tr style="border-bottom:1px solid #f2ecdf;">
+              <td style="padding:6px 0;">{{ t.label }}</td>
+              <td style="padding:6px 8px; color:#a89e88;">{{ t.date }}</td>
+              <td style="padding:6px 0; text-align:right; font-family:'JetBrains Mono',monospace;">{{ t.amount }}</td>
+              <td style="padding:6px 0 6px 10px; text-align:right; font-weight:600; color:{{ t.color }};">{{ t.status }}</td>
+            </tr>
+          </sc-for>
+        </table>
+      </div>
+      <div style="flex:0 0 260px;">
+        <div style="background:#faf7f0; border:1px solid #ece3d0; border-radius:10px; padding:14px 16px;">
+          <div style="display:flex; justify-content:space-between; padding:5px 0; font-size:11.5px;"><span style="color:#8c8371;">Subtotal</span><span style="font-family:'JetBrains Mono',monospace;">Rp 39.900.000</span></div>
+          <div style="display:flex; justify-content:space-between; padding:5px 0; font-size:11.5px;"><span style="color:#8c8371;">Sudah dibayar</span><span style="font-family:'JetBrains Mono',monospace; color:oklch(0.46 0.07 158);">− Rp 28.700.000</span></div>
+          <div style="display:flex; justify-content:space-between; padding:11px 0 0; margin-top:8px; border-top:1.5px solid #ddd2ba;"><span style="font-weight:700;">Sisa Tagihan</span><span style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:15px; color:oklch(0.5 0.13 28);">Rp 11.200.000</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:20px; padding:14px 16px; background:oklch(0.97 0.02 245); border:1px solid oklch(0.9 0.03 245); border-radius:10px; font-size:10.5px; color:#4a5568; line-height:1.6;">
+      <b>Instruksi Pembayaran:</b> Transfer ke Bank Syariah Indonesia (BSI) Virtual Account <b style="font-family:'JetBrains Mono',monospace;">8801 0418 0000 0418</b> a.n. PT Safar Barokah Wisata. Konfirmasi otomatis via sistem. Pembayaran diterima dan dikelola sebagai <b>Uang Muka Jamaah (akad wakalah/ijarah)</b>, diakui sebagai pendapatan saat penyelenggaraan jasa sesuai PSAK 72.
+    </div>
+
+    <div style="display:flex; justify-content:flex-end; margin-top:30px;">
+      <div style="text-align:center; width:200px;">
+        <div style="font-size:11px; color:#6f6858;">Jakarta, 10 Juni 2026</div>
+        <div style="height:56px;"></div>
+        <div style="font-weight:600; font-size:12px; border-top:1px solid #c9bfa8; padding-top:6px;">Divisi Keuangan</div>
+        <div style="font-size:10.5px; color:#a89e88;">PT Safar Barokah Wisata</div>
+      </div>
+    </div>
+
+    <!-- ===== KWITANSI (page 2) ===== -->
+    <div style="break-before:page; padding-top:6px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:16px; border-bottom:2px solid #16211b;">
+        <div style="display:flex; gap:13px; align-items:center;">
+          <div style="width:46px; height:46px; border-radius:12px; background:oklch(0.56 0.11 78); display:flex; align-items:center; justify-content:center; font-family:'Marcellus',serif; font-size:24px; color:#20180a;">S</div>
+          <div>
+            <div style="font-family:'Marcellus',serif; font-size:20px; line-height:1;">PT Safar Barokah Wisata</div>
+            <div style="font-size:10.5px; color:#8c8371; margin-top:4px;">Izin PPIU Kemenag No. U-431 Tahun 2023 · Terdaftar SISKOPATUH</div>
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-family:'Marcellus',serif; font-size:30px; color:oklch(0.56 0.09 78); line-height:1;">KWITANSI</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:12px; margin-top:8px;">KWT/2026/06/1183</div>
+        </div>
+      </div>
+
+      <div style="margin-top:26px; display:flex; flex-direction:column; gap:18px;">
+        <div style="display:flex; align-items:baseline;">
+          <span style="flex:0 0 180px; color:#8c8371; font-size:12px;">Telah terima dari</span>
+          <span style="flex:1; font-weight:600; font-size:15px; border-bottom:1px dotted #c9bfa8; padding-bottom:4px;">Hj. Siti Rohmah</span>
+        </div>
+        <div style="display:flex; align-items:baseline;">
+          <span style="flex:0 0 180px; color:#8c8371; font-size:12px;">Uang sejumlah</span>
+          <span style="flex:1; padding-bottom:4px; border-bottom:1px dotted #c9bfa8;"><span style="display:inline-block; background:oklch(0.96 0.03 78); border:1px solid oklch(0.88 0.05 78); border-radius:8px; padding:7px 16px; font-family:'JetBrains Mono',monospace; font-weight:700; font-size:17px; color:oklch(0.45 0.08 70);">Rp 11.800.000</span></span>
+        </div>
+        <div style="display:flex; align-items:baseline;">
+          <span style="flex:0 0 180px; color:#8c8371; font-size:12px;">Terbilang</span>
+          <span style="flex:1; font-style:italic; font-weight:600; font-size:13px; border-bottom:1px dotted #c9bfa8; padding-bottom:4px;">Sebelas juta delapan ratus ribu rupiah</span>
+        </div>
+        <div style="display:flex; align-items:baseline;">
+          <span style="flex:0 0 180px; color:#8c8371; font-size:12px;">Untuk pembayaran</span>
+          <span style="flex:1; font-size:12.5px; border-bottom:1px dotted #c9bfa8; padding-bottom:4px; line-height:1.5;">Termin ke-2 paket <b>Umrah Plus Turki</b> (No. Reg UMR-2026-0418) · keberangkatan 20 Agustus 2026</span>
+        </div>
+        <div style="display:flex; align-items:baseline;">
+          <span style="flex:0 0 180px; color:#8c8371; font-size:12px;">Metode</span>
+          <span style="flex:1; font-size:12.5px; border-bottom:1px dotted #c9bfa8; padding-bottom:4px;">Transfer BSI Virtual Account · diterima 10 Juni 2026</span>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:34px;">
+        <div style="background:#faf7f0; border:1px solid #ece3d0; border-radius:10px; padding:14px 18px; font-size:11.5px;">
+          <div style="display:flex; justify-content:space-between; gap:40px; padding:3px 0;"><span style="color:#8c8371;">Total tagihan</span><span style="font-family:'JetBrains Mono',monospace;">Rp 39.900.000</span></div>
+          <div style="display:flex; justify-content:space-between; gap:40px; padding:3px 0;"><span style="color:#8c8371;">Total terbayar</span><span style="font-family:'JetBrains Mono',monospace; color:oklch(0.46 0.07 158);">Rp 28.700.000</span></div>
+          <div style="display:flex; justify-content:space-between; gap:40px; padding:5px 0 0; margin-top:5px; border-top:1px solid #ddd2ba;"><span style="font-weight:700;">Sisa</span><span style="font-family:'JetBrains Mono',monospace; font-weight:700;">Rp 11.200.000</span></div>
+        </div>
+        <div style="text-align:center; width:210px;">
+          <div style="font-size:11px; color:#6f6858;">Jakarta, 10 Juni 2026</div>
+          <div style="height:60px; display:flex; align-items:center; justify-content:center;"><div style="width:78px; height:78px; border:2px dashed #d3c9b2; border-radius:50%; color:#c2b79f; font-size:9px; display:flex; align-items:center; justify-content:center; transform:rotate(-8deg);">STEMPEL</div></div>
+          <div style="font-weight:600; font-size:12px; border-top:1px solid #c9bfa8; padding-top:6px;">Penerima / Kasir</div>
+          <div style="font-size:10.5px; color:#a89e88;">PT Safar Barokah Wisata</div>
+        </div>
+      </div>
+
+      <div style="margin-top:30px; font-size:9.5px; color:#a89e88; text-align:center; line-height:1.5;">Kwitansi ini sah sebagai bukti pembayaran yang terhubung dengan sistem akuntansi Safar. Jurnal otomatis: Dr Bank BSI · Cr Uang Muka Jamaah (2-1100).</div>
+    </div>
+
+  </div>
+</x-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const items = [
+      { name: 'Paket Umrah Plus Turki — 13 Hari', detail: 'Hotel ⭐4 Makkah/Madinah + city tour Istanbul · Turkish Airlines', qty: '1', price: 'Rp 36.400.000', amount: 'Rp 36.400.000' },
+      { name: 'Upgrade Kamar Triple', detail: '3 orang / kamar · selisih dari kuota Quad', qty: '1', price: 'Rp 3.500.000', amount: 'Rp 3.500.000' }
+    ];
+    const done = { color: 'oklch(0.46 0.07 158)', status: 'Lunas' };
+    const due = { color: 'oklch(0.5 0.13 28)', status: 'Belum' };
+    const termins = [
+      { label: 'Uang Muka (DP)', date: '10 Mar 2026', amount: 'Rp 5.000.000', color: done.color, status: done.status },
+      { label: 'Termin 1', date: '10 Mei 2026', amount: 'Rp 11.900.000', color: done.color, status: done.status },
+      { label: 'Termin 2', date: '10 Jun 2026', amount: 'Rp 11.800.000', color: done.color, status: done.status },
+      { label: 'Termin 3 (pelunasan)', date: '10 Jul 2026', amount: 'Rp 11.200.000', color: due.color, status: due.status }
+    ];
+    return { items, termins };
+  }
+}
+</script>
+</body>
+</html>

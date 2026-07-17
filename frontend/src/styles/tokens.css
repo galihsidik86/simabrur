@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens Safar — diekstrak 1:1 dari mockup .dc.html (JANGAN ubah nilai
+ * tanpa mencocokkan ke mockup). Referensi: PLAN.md §2.
+ */
+@theme {
+  /* Surface & border */
+  --color-cream: #efe8da;
+  --color-card: #fffdf8;
+  --color-panel: #faf7f0;
+  --color-thead: #f6f1e6;
+  --color-track: #f0eadc;
+  --color-line: #e9e0cd;
+  --color-line-2: #e6ddca;
+  --color-line-3: #eee5d3;
+  --color-field: #d9cfb9;
+
+  /* Teks */
+  --color-ink: #2c281f;
+  --color-ink-strong: #26221b;
+  --color-muted: #6f6858;
+  --color-muted-2: #8c8371;
+  --color-muted-3: #9a917d;
+  --color-muted-4: #a89e88;
+
+  /* Sidebar / panel gelap */
+  --color-forest: #16211b;
+  --color-forest-2: #1b2a20;
+  --color-forest-text: #e8e0cf;
+  --color-forest-muted: #9fb0a4;
+  --color-forest-nav: #c3cfc6;
+
+  /* Aksen */
+  --color-primary: oklch(0.5 0.09 165);
+  --color-primary-deep: oklch(0.42 0.09 165);
+  --color-gold: oklch(0.56 0.11 78);
+  --color-gold-bright: oklch(0.62 0.11 78);
+  --color-success: oklch(0.46 0.07 158);
+  --color-success-bg: oklch(0.95 0.03 158);
+  --color-danger: oklch(0.55 0.15 28);
+  --color-danger-deep: oklch(0.5 0.13 28);
+  --color-danger-bg: oklch(0.96 0.04 30);
+
+  /* Aksen modul (dot sidebar & border kartu) */
+  --color-mod-dashboard: oklch(0.62 0.11 78);
+  --color-mod-paket: oklch(0.52 0.08 165);
+  --color-mod-jamaah: oklch(0.52 0.09 245);
+  --color-mod-pembayaran: oklch(0.6 0.1 78);
+  --color-mod-operasional: oklch(0.56 0.11 45);
+  --color-mod-marketing: oklch(0.5 0.1 322);
+  --color-mod-keuangan: oklch(0.5 0.08 158);
+  --color-mod-sistem: oklch(0.46 0.02 265);
+
+  /* Skala warna kelas akun (COA) */
+  --color-acc-1: oklch(0.52 0.08 165);
+  --color-acc-2: oklch(0.52 0.09 245);
+  --color-acc-3: oklch(0.46 0.02 265);
+  --color-acc-4: oklch(0.46 0.07 158);
+  --color-acc-5: oklch(0.56 0.09 78);
+  --color-acc-6: oklch(0.56 0.11 45);
+  --color-acc-7: oklch(0.5 0.1 322);
+
+  /* Tipografi */
+  --font-display: "Marcellus", serif;
+  --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* Bentuk */
+  --radius-card: 13px;
+  --radius-control: 9px;
+  --radius-pill: 20px;
+  --shadow-card: 0 4px 16px -10px rgba(60, 50, 20, 0.3);
+  --shadow-float: 0 10px 30px -18px rgba(60, 50, 20, 0.4);
+}
+
+body {
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  margin: 0;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #d8cdb5; border-radius: 6px; border: 2px solid #efe8da; }
+
+/* Field & label standar mockup (.fld / .lbl) */
+.fld {
+  padding: 11px 13px;
+  border: 1px solid var(--color-field);
+  border-radius: var(--radius-control);
+  background: var(--color-card);
+  font-size: 13.5px;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+.fld:focus { box-shadow: 0 0 0 3px oklch(0.92 0.04 165); }
+.lbl {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-muted);
+  display: block;
+  margin-bottom: 6px;
+}

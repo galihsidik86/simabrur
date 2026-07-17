@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: safar-db
+    environment:
+      POSTGRES_USER: safar
+      POSTGRES_PASSWORD: safar_dev
+      POSTGRES_DB: safar
+    ports:
+      # 5434 di host: 5432 dipakai PostgreSQL native, 5433 dipakai kontainer lain (tp-db)
+      - "5434:5432"
+    volumes:
+      - safar_pgdata:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U safar -d safar"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  safar_pgdata:

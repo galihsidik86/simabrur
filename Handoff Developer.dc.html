@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  doc-page:not(:defined){visibility:hidden;}
+  a{color:oklch(0.5 0.09 165);}
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="a4" margin="0.6in" hint-size="100%,100%">
+  <div slot="header" style="display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid #e5ddca; font-size:9.5px; color:#a1987f; font-family:'Plus Jakarta Sans',sans-serif; letter-spacing:0.4px; text-transform:uppercase;">
+    <span>Safar — Handoff Developer</span><span>SIM Travel Haji &amp; Umrah · v1.0</span>
+  </div>
+  <div slot="footer" style="text-align:center; padding:7px 0; border-top:1px solid #e5ddca; font-size:9px; color:#b0a68f; font-family:'JetBrains Mono',monospace;">Dokumen Teknis · Rahasia · untuk tim pengembang</div>
+
+  <div style="font-family:'Plus Jakarta Sans',sans-serif; color:#2c281f; font-size:11.5px; line-height:1.55; padding-top:16px;">
+
+    <div style="font-family:'Marcellus',serif; font-size:30px; color:#26221b; line-height:1.1;">Panduan Handoff Developer</div>
+    <div style="font-size:13px; color:#8c8371; margin-top:6px;">Sistem Informasi Manajemen Travel Haji &amp; Umrah — spesifikasi API, arsitektur aplikasi, struktur folder, model data, dan roadmap implementasi bertahap.</div>
+
+    <div style="{{ h2 }}">1 · Arsitektur &amp; Tech Stack</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:12px;">
+      <sc-for list="{{ stack }}" as="s" hint-placeholder-count="6">
+        <div style="break-inside:avoid; padding:11px 14px; background:#faf7f0; border:1px solid #ece3d0; border-radius:9px;">
+          <div style="font-size:10px; color:#a89e88; text-transform:uppercase; letter-spacing:0.5px;">{{ s.k }}</div>
+          <div style="font-weight:600; font-size:12px; margin-top:2px;">{{ s.v }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="margin-top:12px; font-size:11px; color:#5a5445; line-height:1.6;">Arsitektur <b>modular monolith</b> berbasis REST API: setiap modul bisnis berdiri sebagai modul terisolasi (controller → service → repository) sehingga mudah dipecah menjadi service terpisah di kemudian hari. Frontend SPA React terpisah, mengonsumsi API via JSON. Seluruh mutasi keuangan &amp; perubahan data sensitif tercatat di <b>audit log</b>.</div>
+
+    <div style="{{ h2 }}">2 · Struktur Folder</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:12px;">
+      <div style="break-inside:avoid;"><div style="{{ h3 }}">Backend — Node.js / Express</div><pre style="{{ pre }}">{{ treeBackend }}</pre></div>
+      <div style="break-inside:avoid;"><div style="{{ h3 }}">Frontend — React + Tailwind</div><pre style="{{ pre }}">{{ treeFrontend }}</pre></div>
+    </div>
+
+    <div style="{{ h2 }}">3 · Konvensi API</div>
+    <div style="margin-top:10px; display:flex; flex-direction:column; gap:7px;">
+      <sc-for list="{{ conventions }}" as="c" hint-placeholder-count="5">
+        <div style="display:flex; gap:10px; font-size:11px;"><span style="flex:0 0 150px; color:#8c8371; font-weight:600;">{{ c.k }}</span><span style="flex:1; color:#3a3428;">{{ c.v }}</span></div>
+      </sc-for>
+    </div>
+    <pre style="{{ pre }}">{{ envelope }}</pre>
+
+    <div style="{{ h2 }}">4 · Spesifikasi Endpoint per Modul</div>
+    <sc-for list="{{ groups }}" as="g" hint-placeholder-count="8">
+      <div style="break-inside:avoid; margin-top:15px;">
+        <div style="display:flex; align-items:center; gap:9px; margin-bottom:7px;">
+          <span style="width:10px; height:10px; border-radius:3px; background:{{ g.color }};"></span>
+          <span style="font-weight:700; font-size:12.5px;">{{ g.module }}</span>
+          <span style="font-size:10px; color:#a89e88; font-family:'JetBrains Mono',monospace;">{{ g.base }}</span>
+        </div>
+        <table style="width:100%; border-collapse:collapse; font-size:10.5px;">
+          <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+            <tr style="border-bottom:1px solid #f2ecdf;">
+              <td style="padding:5px 8px 5px 0; width:60px; vertical-align:top;"><span style="font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:700; color:#fff; background:{{ r.mColor }}; padding:2px 6px; border-radius:4px;">{{ r.method }}</span></td>
+              <td style="padding:5px 10px 5px 0; font-family:'JetBrains Mono',monospace; font-size:10px; color:#3a3428; vertical-align:top; width:230px;">{{ r.path }}</td>
+              <td style="padding:5px 0; color:#6f6858; vertical-align:top;">{{ r.desc }}</td>
+            </tr>
+          </sc-for>
+        </table>
+      </div>
+    </sc-for>
+
+    <div style="{{ h2 }}">5 · Contoh Request / Response</div>
+    <sc-for list="{{ examples }}" as="e" hint-placeholder-count="3">
+      <div style="break-inside:avoid; margin-top:12px;">
+        <div style="{{ h3 }}"><span style="font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:700; color:#fff; background:{{ e.mColor }}; padding:2px 6px; border-radius:4px;">{{ e.method }}</span> &nbsp;{{ e.path }}</div>
+        <div style="font-size:10.5px; color:#8c8371; margin:4px 0 6px;">{{ e.desc }}</div>
+        <pre style="{{ pre }}">{{ e.body }}</pre>
+      </div>
+    </sc-for>
+
+    <div style="{{ h2 }}">6 · Model Data Inti (ERD)</div>
+    <div style="margin-top:10px; font-size:11px; color:#5a5445; line-height:1.6;">Skema PostgreSQL ternormalisasi. Relasi lengkap (crow's foot) tersedia pada artefak <b>ERD Sistem Travel</b>. Tabel inti per modul:</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px;">
+      <sc-for list="{{ dataModel }}" as="d" hint-placeholder-count="7">
+        <div style="break-inside:avoid; padding:10px 13px; background:#faf7f0; border:1px solid #ece3d0; border-radius:9px; border-left:3px solid {{ d.color }};">
+          <div style="font-weight:600; font-size:11.5px;">{{ d.module }}</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; color:#6f6858; margin-top:4px; line-height:1.5;">{{ d.tables }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="margin-top:12px; padding:11px 14px; background:oklch(0.97 0.02 158); border:1px solid oklch(0.9 0.03 158); border-radius:9px; font-size:10.5px; color:#4a4436; line-height:1.55;"><b>Aturan akuntansi kunci:</b> penerimaan jamaah → <b>Uang Muka Jamaah (2-1100)</b> sebagai liabilitas; pendapatan diakui saat keberangkatan (PSAK 72); transaksi valas dicatat pada mata uang fungsional IDR memakai kurs, selisih ke <b>7-1000</b>; setiap keberangkatan = <b>cost center</b>. Jurnal terbentuk otomatis dari transaksi (lihat modul <span style="font-family:'JetBrains Mono',monospace;">/transactions/*</span>).</div>
+
+    <div style="{{ h2 }}">7 · RBAC &amp; Keamanan</div>
+    <table style="width:100%; border-collapse:collapse; font-size:10.5px; margin-top:10px;">
+      <thead><tr style="background:#16211b; color:#f3eee2; text-align:left;">
+        <th style="padding:7px 12px; font-weight:600;">Role</th><th style="padding:7px 12px; font-weight:600;">Akses Utama</th>
+      </tr></thead>
+      <tbody>
+        <sc-for list="{{ roles }}" as="r" hint-placeholder-count="5">
+          <tr style="border-bottom:1px solid #eee5d3;">
+            <td style="padding:7px 12px; font-weight:600; white-space:nowrap;">{{ r.role }}</td>
+            <td style="padding:7px 12px; color:#5a5445;">{{ r.access }}</td>
+          </tr>
+        </sc-for>
+      </tbody>
+    </table>
+    <div style="margin-top:10px; font-size:10.5px; color:#5a5445; line-height:1.6;">Autentikasi <b>JWT</b> (access + refresh token), otorisasi via middleware RBAC per-endpoint. <b>Audit log</b> mencatat aktor, aksi, entitas, nilai lama/baru untuk seluruh transaksi keuangan &amp; perubahan data sensitif. Bukti bayar &amp; dokumen jamaah disimpan di object storage dengan URL bertanda-tangan (signed URL).</div>
+
+    <div style="{{ h2 }}">8 · Roadmap Implementasi</div>
+    <div style="margin-top:12px; display:flex; flex-direction:column; gap:9px;">
+      <sc-for list="{{ roadmap }}" as="p" hint-placeholder-count="6">
+        <div style="break-inside:avoid; display:flex; gap:13px; align-items:flex-start; padding:11px 14px; background:#fffdf8; border:1px solid #ece3d0; border-radius:9px;">
+          <span style="flex:0 0 auto; width:26px; height:26px; border-radius:50%; background:{{ p.color }}; color:#fff; font-weight:700; font-size:11px; display:flex; align-items:center; justify-content:center;">{{ p.n }}</span>
+          <div style="flex:1;"><div style="font-weight:600; font-size:11.5px;">{{ p.title }}</div><div style="font-size:10.5px; color:#6f6858; margin-top:2px;">{{ p.detail }}</div></div>
+        </div>
+      </sc-for>
+    </div>
+
+  </div>
+</x-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const h2 = "font-family:'Marcellus',serif; font-size:19px; color:oklch(0.46 0.07 158); margin:26px 0 2px; padding-bottom:5px; border-bottom:2px solid oklch(0.46 0.07 158);";
+    const h3 = "font-weight:600; font-size:12px; color:#26221b; margin-bottom:4px;";
+    const pre = "background:#16211b; color:#e8e0cf; font-family:'JetBrains Mono',monospace; font-size:9.5px; line-height:1.55; padding:13px 15px; border-radius:9px; overflow-x:auto; white-space:pre; margin:8px 0 0; break-inside:avoid;";
+
+    const stack = [
+      { k: 'Backend', v: 'Node.js + Express (REST API)' },
+      { k: 'Frontend', v: 'React + Tailwind CSS (SPA)' },
+      { k: 'Database', v: 'PostgreSQL (relasional ternormalisasi)' },
+      { k: 'Auth', v: 'JWT + RBAC middleware' },
+      { k: 'Integrasi', v: 'WhatsApp API, Email (SMTP), Payment Gateway' },
+      { k: 'Job / Async', v: 'Queue untuk reminder & sinkronisasi kurs' }
+    ];
+
+    const treeBackend = [
+      'backend/',
+      '├─ src/',
+      '│  ├─ config/          env, db, storage',
+      '│  ├─ modules/',
+      '│  │  ├─ auth/',
+      '│  │  ├─ packages/',
+      '│  │  ├─ jamaah/',
+      '│  │  ├─ payments/',
+      '│  │  ├─ operations/',
+      '│  │  ├─ marketing/',
+      '│  │  ├─ accounting/',
+      '│  │  └─ reports/',
+      '│  │     └─ *.controller.js',
+      '│  │        *.service.js',
+      '│  │        *.repository.js',
+      '│  │        *.routes.js',
+      '│  │        *.validation.js',
+      '│  ├─ middleware/     auth, rbac, audit, error',
+      '│  ├─ jobs/           reminders, kurs-sync',
+      '│  ├─ db/             migrations, seeds',
+      '│  └─ utils/',
+      '└─ tests/'
+    ].join('\n');
+
+    const treeFrontend = [
+      'frontend/',
+      '├─ src/',
+      '│  ├─ api/            axios client / modul',
+      '│  ├─ components/     UI primitives',
+      '│  ├─ features/',
+      '│  │  ├─ packages/',
+      '│  │  ├─ jamaah/',
+      '│  │  ├─ payments/',
+      '│  │  ├─ operations/',
+      '│  │  ├─ marketing/',
+      '│  │  ├─ accounting/',
+      '│  │  └─ reports/',
+      '│  ├─ pages/',
+      '│  ├─ layouts/',
+      '│  ├─ hooks/',
+      '│  ├─ store/          state global',
+      '│  └─ routes/         guard RBAC',
+      '└─ public/'
+    ].join('\n');
+
+    const conventions = [
+      { k: 'Base URL', v: 'https://api.safar.co.id/v1' },
+      { k: 'Autentikasi', v: 'Header  Authorization: Bearer <access_token>' },
+      { k: 'Format', v: 'JSON · camelCase pada body, snake_case pada kolom DB' },
+      { k: 'Pagination', v: '?page=1&limit=20  → meta { page, limit, total }' },
+      { k: 'Idempotensi', v: 'Header Idempotency-Key pada POST pembayaran' },
+      { k: 'Error', v: 'HTTP status + { success:false, error:{ code, message } }' }
+    ];
+    const envelope = [
+      '// Response envelope standar',
+      '{',
+      '  "success": true,',
+      '  "data": { ... },',
+      '  "meta": { "page": 1, "limit": 20, "total": 312 }',
+      '}'
+    ].join('\n');
+
+    const M = { GET: 'oklch(0.46 0.07 158)', POST: 'oklch(0.5 0.09 245)', PUT: 'oklch(0.55 0.1 78)', PATCH: 'oklch(0.55 0.1 78)', DELETE: 'oklch(0.55 0.15 28)' };
+    const r = (method, path, desc) => ({ method, path, desc, mColor: M[method] });
+    const groups = [
+      { module: 'Autentikasi', color: 'oklch(0.46 0.02 265)', base: '/auth', rows: [
+        r('POST', '/auth/login', 'Login, kembalikan access + refresh token'),
+        r('POST', '/auth/refresh', 'Perbarui access token'),
+        r('GET', '/auth/me', 'Profil & role pengguna aktif') ] },
+      { module: 'Paket & Jadwal', color: 'oklch(0.52 0.08 165)', base: '/packages · /departures', rows: [
+        r('GET', '/packages', 'Daftar paket (filter type/category)'),
+        r('POST', '/packages', 'Buat paket + komponen HPP'),
+        r('GET', '/packages/:id/costs', 'Rincian HPP & margin'),
+        r('GET', '/departures', 'Jadwal keberangkatan + status'),
+        r('GET', '/departures/:id/availability', 'Sisa kuota real-time') ] },
+      { module: 'Jamaah & Pendaftaran', color: 'oklch(0.52 0.09 245)', base: '/jamaah · /registrations', rows: [
+        r('POST', '/registrations', 'Daftar jamaah ke keberangkatan'),
+        r('GET', '/jamaah/:id', 'Detail jamaah + mahram'),
+        r('POST', '/jamaah/:id/documents', 'Unggah dokumen (multipart)'),
+        r('PATCH', '/documents/:id/verify', 'Verifikasi dokumen'),
+        r('GET', '/registrations/:id/passport-check', 'Validasi paspor ≥ 7 bulan') ] },
+      { module: 'Pembayaran', color: 'oklch(0.56 0.09 78)', base: '/invoices · /payments', rows: [
+        r('POST', '/invoices', 'Terbitkan invoice + jadwal termin'),
+        r('POST', '/payments', 'Catat pembayaran + upload bukti'),
+        r('PATCH', '/payments/:id/verify', 'Verifikasi & posting jurnal'),
+        r('POST', '/payments/webhook', 'Callback payment gateway'),
+        r('GET', '/receivables/aging', 'Piutang per umur tunggakan') ] },
+      { module: 'Operasional & Manifest', color: 'oklch(0.56 0.11 45)', base: '/operations', rows: [
+        r('GET', '/departures/:id/manifest', 'Manifest keberangkatan'),
+        r('POST', '/visas', 'Ajukan/track visa & biometrik'),
+        r('POST', '/tickets', 'Terbitkan tiket (PNR)'),
+        r('POST', '/group-staff', 'Tugaskan muthawwif / TL'),
+        r('GET', '/checklists', 'Checklist perlengkapan jamaah') ] },
+      { module: 'Marketing & Komisi', color: 'oklch(0.50 0.10 322)', base: '/agents · /commissions', rows: [
+        r('POST', '/agents', 'Registrasi agen + kode referral'),
+        r('GET', '/agents/:id/performance', 'Leads, konversi, komisi'),
+        r('POST', '/leads', 'Catat lead dari referral'),
+        r('POST', '/commissions/:id/approve', 'Setujui & posting komisi') ] },
+      { module: 'Keuangan & Akuntansi', color: 'oklch(0.46 0.07 158)', base: '/accounting', rows: [
+        r('GET', '/accounts', 'Bagan akun (COA)'),
+        r('POST', '/transactions/receipt', 'Terima pembayaran → jurnal otomatis'),
+        r('POST', '/transactions/expense', 'Bayar biaya (multi-akun, valas) → jurnal'),
+        r('POST', '/transactions/revenue-recognition', 'Pengakuan pendapatan (PSAK 72)'),
+        r('POST', '/journals', 'Jurnal manual'),
+        r('GET', '/ledger/:code', 'Buku besar per akun'),
+        r('POST', '/bank-reconciliations/:id/match', 'Cocokkan mutasi bank') ] },
+      { module: 'Laporan', color: 'oklch(0.46 0.02 265)', base: '/reports', rows: [
+        r('GET', '/reports/income-statement', 'Laba rugi per periode'),
+        r('GET', '/reports/balance-sheet', 'Neraca per tanggal'),
+        r('GET', '/reports/profit-by-package', 'Laba per paket (cost center)'),
+        r('GET', '/reports/document-compliance', 'Kepatuhan dokumen'),
+        r('GET', '/reports/export', 'Ekspor Excel / PDF') ] }
+    ];
+
+    const ex = (method, path, desc, body) => ({ method, path, desc, body, mColor: M[method] });
+    const examples = [
+      ex('POST', '/registrations', 'Pendaftaran jamaah baru ke keberangkatan.', [
+        '// Request',
+        '{',
+        '  "jamaahId": "uuid",',
+        '  "departureId": "uuid",',
+        '  "roomType": "triple",',
+        '  "paymentScheme": "installment",',
+        '  "source": "agent:BRKH-07"',
+        '}',
+        '',
+        '// Response 201',
+        '{ "success": true, "data": {',
+        '  "regNumber": "UMR-2026-0418",',
+        '  "status": "pending_documents",',
+        '  "invoiceId": "uuid" } }'
+      ].join('\n')),
+      ex('POST', '/transactions/expense', 'Pembayaran biaya multi-akun dalam valas (SAR) → jurnal otomatis IDR.', [
+        '// Request',
+        '{',
+        '  "vendorId": "uuid",',
+        '  "costCenterId": "uuid",',
+        '  "sourceAccount": "1-1220",   // Bank SAR',
+        '  "currency": "SAR",',
+        '  "exchangeRate": 4150,',
+        '  "lines": [',
+        '    { "account": "5-2000", "amount": 45000 },',
+        '    { "account": "5-4000", "amount": 12000 }',
+        '  ]',
+        '}',
+        '',
+        '// Response 201 — jurnal (IDR fungsional)',
+        '{ "journalNo": "JV-2026-0614", "balanced": true,',
+        '  "lines": [',
+        '    { "account":"5-2000", "debit":186750000 },',
+        '    { "account":"5-4000", "debit":49800000 },',
+        '    { "account":"1-1220", "credit":236550000 } ] }'
+      ].join('\n'))
+    ];
+
+    const dataModel = [
+      { module: 'Paket & Jadwal', color: 'oklch(0.52 0.08 165)', tables: 'packages, departures, package_costs, hotels, airlines' },
+      { module: 'Jamaah', color: 'oklch(0.52 0.09 245)', tables: 'jamaah, registrations, documents, groups' },
+      { module: 'Pembayaran', color: 'oklch(0.56 0.09 78)', tables: 'invoices, payment_schedules, payments' },
+      { module: 'Operasional', color: 'oklch(0.56 0.11 45)', tables: 'manifests, visas, tickets, group_staff, checklists' },
+      { module: 'Marketing', color: 'oklch(0.50 0.10 322)', tables: 'agents, leads, commissions' },
+      { module: 'Keuangan', color: 'oklch(0.46 0.07 158)', tables: 'accounts, journals, journal_lines, cost_centers, vendors, vendor_bills, bank_accounts' },
+      { module: 'Sistem', color: 'oklch(0.46 0.02 265)', tables: 'users, branches, roles, audit_logs' }
+    ];
+
+    const roles = [
+      { role: 'Admin', access: 'Konfigurasi sistem, kelola user & role, akses seluruh modul' },
+      { role: 'Marketing', access: 'Paket, leads, agen, komisi, laporan penjualan' },
+      { role: 'Operasional', access: 'Jamaah, dokumen, manifest, visa, tiket, rombongan' },
+      { role: 'Keuangan', access: 'Pembayaran, jurnal, rekonsiliasi, laporan keuangan' },
+      { role: 'Pimpinan', access: 'Dashboard & seluruh laporan (read-only)' },
+      { role: 'Jamaah', access: 'Portal pribadi: status, pembayaran, dokumen, perjalanan' }
+    ];
+
+    const pc = ['oklch(0.52 0.08 165)', 'oklch(0.56 0.09 78)', 'oklch(0.46 0.07 158)', 'oklch(0.56 0.11 45)', 'oklch(0.50 0.10 322)', 'oklch(0.46 0.02 265)'];
+    const roadmap = [
+      { n: '1', title: 'Fondasi + Paket & Pendaftaran', detail: 'Auth/RBAC, CRUD paket & jadwal, pendaftaran jamaah, unggah & verifikasi dokumen.' },
+      { n: '2', title: 'Pembayaran & Invoice', detail: 'Invoice, termin, konfirmasi/gateway, kartu piutang, reminder WA/email.' },
+      { n: '3', title: 'Keuangan & Akuntansi', detail: 'COA, jurnal otomatis dari transaksi, buku besar, rekonsiliasi bank, valas.' },
+      { n: '4', title: 'Operasional & Manifest', detail: 'Manifest, visa & biometrik, tiket, rombongan & penugasan, checklist.' },
+      { n: '5', title: 'Marketing & Komisi', detail: 'Agen, referral, leads, perhitungan & persetujuan komisi.' },
+      { n: '6', title: 'Dashboard, Laporan & Portal', detail: 'Dashboard eksekutif, laporan keuangan/operasional, portal jamaah, audit log.' }
+    ].map((p, i) => Object.assign(p, { color: pc[i] }));
+
+    return { h2, h3, pre, stack, treeBackend, treeFrontend, conventions, envelope, groups, examples, dataModel, roles, roadmap };
+  }
+}
+</script>
+</body>
+</html>

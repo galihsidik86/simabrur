@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<meta name="design_doc_mode" content="canvas">
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:#e9e2d4;font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#26221b;}
+  a{color:oklch(0.5 0.09 165);text-decoration:none;} a:hover{color:oklch(0.42 0.09 165);}
+</style>
+</helmet>
+<div style="position:relative; width:2600px; height:1760px; background:radial-gradient(circle at 30% 10%, #f7f3ea 0%, #f1ebdd 55%, #ece4d3 100%); overflow:hidden;">
+
+  <div style="position:absolute; left:44px; top:34px; z-index:5;">
+    <div style="font-family:'Marcellus',serif; font-size:36px; color:#2c281f; letter-spacing:0.4px;">Entity Relationship Diagram</div>
+    <div style="font-size:14.5px; color:#8c8371; margin-top:3px; max-width:1500px;">Sistem Informasi Manajemen Travel Haji &amp; Umrah — arsitektur modular, 7 modul terintegrasi · notasi <b style="color:#6a6252;">crow's foot</b> (garis =&gt; relasi FK; ujung kaki gagak = <i>many</i>, palang = <i>one</i>)</div>
+  </div>
+
+  <div style="position:absolute; right:44px; top:40px; z-index:5; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:9px 16px; max-width:1080px;">
+    <sc-for list="{{ legend }}" as="m" hint-placeholder-count="7">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="width:16px; height:16px; border-radius:4px; background:{{ m.color }}; display:inline-block; box-shadow:0 1px 2px rgba(0,0,0,0.15);"></span>
+        <span style="font-size:12.5px; color:#57503f; font-weight:600;">{{ m.num }}. {{ m.name }}</span>
+      </div>
+    </sc-for>
+  </div>
+
+  {{ svg }}
+
+  <sc-for list="{{ nodes }}" as="n" hint-placeholder-count="12">
+    <div style="position:absolute; left:{{ n.left }}px; top:{{ n.top }}px; width:216px; background:#fffdf8; border:1px solid #e6ddca; border-radius:10px; box-shadow:0 8px 22px -12px rgba(60,50,20,0.4); overflow:hidden; z-index:3;">
+      <div style="height:32px; display:flex; align-items:center; padding:0 11px; background:{{ n.color }};">
+        <span style="font-family:'JetBrains Mono',monospace; font-size:12.5px; font-weight:600; color:#fff; letter-spacing:0.3px;">{{ n.table }}</span>
+      </div>
+      <div style="padding:5px 11px 3px; font-size:10.5px; color:#a1987f; font-weight:500; border-bottom:1px solid #f0eadc;">{{ n.label }}</div>
+      <div style="padding:2px 0 5px;">
+        <sc-for list="{{ n.fields }}" as="f" hint-placeholder-count="4">
+          <div style="display:flex; align-items:center; gap:7px; height:24px; padding:0 11px;">
+            <span style="width:22px; text-align:center; font-size:8.5px; font-weight:700; color:#fff; border-radius:3px; line-height:14px; background:{{ f.badgeBg }};">{{ f.badge }}</span>
+            <span style="flex:1; font-family:'JetBrains Mono',monospace; font-size:11.5px; font-weight:{{ f.weight }}; color:{{ f.nameColor }};">{{ f.name }}</span>
+            <span style="font-family:'JetBrains Mono',monospace; font-size:9.5px; color:#b0a68f;">{{ f.type }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-for>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  modules() {
+    return [
+      { name: 'Paket & Jadwal',        color: 'oklch(0.52 0.08 165)' },
+      { name: 'Jamaah & Pendaftaran',  color: 'oklch(0.52 0.09 245)' },
+      { name: 'Pembayaran',            color: 'oklch(0.56 0.09 78)'  },
+      { name: 'Operasional & Manifest',color: 'oklch(0.56 0.11 45)'  },
+      { name: 'Marketing & Komisi',    color: 'oklch(0.50 0.10 322)' },
+      { name: 'Keuangan & Akuntansi',  color: 'oklch(0.46 0.07 158)' },
+      { name: 'User & Sistem',         color: 'oklch(0.46 0.02 265)' }
+    ];
+  }
+
+  // [id, module, col, row, businessLabel, fields[[name,type,key]]]
+  tables() {
+    const t = (id, mod, col, row, label, fields) => ({ id, mod, col, row, label, fields });
+    return [
+      // M1 Paket & Jadwal
+      t('packages', 1, 2, 2, 'Paket Umrah / Haji', [
+        ['id','uuid','pk'], ['code','varchar',''], ['name','varchar',''],
+        ['type','enum',''], ['category','enum',''], ['duration_days','int',''], ['base_price','numeric','']]),
+      t('departures', 1, 3, 2, 'Jadwal Keberangkatan', [
+        ['id','uuid','pk'], ['package_id','uuid','fk'], ['departure_date','date',''],
+        ['return_date','date',''], ['quota','int',''], ['seats_taken','int',''], ['status','enum','']]),
+      t('package_costs', 1, 1, 1, 'Komponen HPP', [
+        ['id','uuid','pk'], ['package_id','uuid','fk'], ['component','varchar',''], ['amount','numeric','']]),
+      t('hotels', 1, 1, 3, 'Hotel', [
+        ['id','uuid','pk'], ['name','varchar',''], ['city','varchar',''], ['star','int','']]),
+      t('airlines', 1, 1, 4, 'Maskapai', [
+        ['id','uuid','pk'], ['name','varchar',''], ['iata_code','varchar','']]),
+
+      // M2 Jamaah & Pendaftaran
+      t('jamaah', 2, 4, 1, 'Data Jamaah', [
+        ['id','uuid','pk'], ['nik','varchar',''], ['full_name','varchar',''],
+        ['passport_no','varchar',''], ['passport_expiry','date',''], ['porsi_number','varchar',''], ['mahram_id','uuid','fk']]),
+      t('registrations', 2, 4, 3, 'Pendaftaran', [
+        ['id','uuid','pk'], ['reg_number','varchar',''], ['jamaah_id','uuid','fk'],
+        ['departure_id','uuid','fk'], ['group_id','uuid','fk'], ['room_type','enum',''], ['source','varchar',''], ['status','enum','']]),
+      t('documents', 2, 5, 1, 'Dokumen Jamaah', [
+        ['id','uuid','pk'], ['jamaah_id','uuid','fk'], ['doc_type','enum',''],
+        ['file_url','text',''], ['status','enum',''], ['verified_at','timestamp','']]),
+      t('groups', 2, 3, 4, 'Rombongan / Grup', [
+        ['id','uuid','pk'], ['departure_id','uuid','fk'], ['name','varchar',''], ['capacity','int','']]),
+
+      // M3 Pembayaran
+      t('invoices', 3, 5, 3, 'Invoice', [
+        ['id','uuid','pk'], ['registration_id','uuid','fk'], ['number','varchar',''],
+        ['currency','char',''], ['total_amount','numeric',''], ['due_date','date',''], ['status','enum','']]),
+      t('payment_schedules', 3, 5, 4, 'Termin / Cicilan', [
+        ['id','uuid','pk'], ['registration_id','uuid','fk'], ['term_no','int',''],
+        ['amount','numeric',''], ['due_date','date',''], ['status','enum','']]),
+      t('payments', 3, 6, 3, 'Pembayaran Jamaah', [
+        ['id','uuid','pk'], ['invoice_id','uuid','fk'], ['bank_account_id','uuid','fk'],
+        ['amount','numeric',''], ['currency','char',''], ['exchange_rate','numeric',''], ['status','enum','']]),
+
+      // M4 Operasional & Manifest
+      t('manifests', 4, 4, 5, 'Manifest', [
+        ['id','uuid','pk'], ['departure_id','uuid','fk'], ['issued_at','timestamp',''], ['status','enum','']]),
+      t('visas', 4, 6, 1, 'Visa', [
+        ['id','uuid','pk'], ['jamaah_id','uuid','fk'], ['visa_no','varchar',''], ['status','enum',''], ['biometric_at','timestamp','']]),
+      t('tickets', 4, 7, 1, 'Tiket Maskapai', [
+        ['id','uuid','pk'], ['jamaah_id','uuid','fk'], ['airline_id','uuid','fk'], ['pnr','varchar',''], ['seat','varchar','']]),
+      t('group_staff', 4, 3, 5, 'Penugasan Muthawwif/TL', [
+        ['id','uuid','pk'], ['group_id','uuid','fk'], ['user_id','uuid','fk'], ['role','enum','']]),
+      t('checklists', 4, 5, 5, 'Checklist Perlengkapan', [
+        ['id','uuid','pk'], ['registration_id','uuid','fk'], ['item','varchar',''], ['is_done','bool','']]),
+
+      // M5 Marketing & Komisi
+      t('agents', 5, 1, 5, 'Agen / Mitra', [
+        ['id','uuid','pk'], ['code','varchar',''], ['name','varchar',''], ['referral_code','varchar',''], ['parent_agent_id','uuid','fk']]),
+      t('leads', 5, 2, 5, 'Leads / Prospek', [
+        ['id','uuid','pk'], ['agent_id','uuid','fk'], ['jamaah_id','uuid','fk'], ['source','varchar',''], ['status','enum','']]),
+      t('commissions', 5, 2, 4, 'Komisi Agen', [
+        ['id','uuid','pk'], ['agent_id','uuid','fk'], ['registration_id','uuid','fk'], ['amount','numeric',''], ['status','enum','']]),
+
+      // M6 Keuangan & Akuntansi
+      t('accounts', 6, 9, 3, 'Bagan Akun (COA)', [
+        ['id','uuid','pk'], ['code','varchar',''], ['name','varchar',''], ['type','enum',''], ['parent_id','uuid','fk']]),
+      t('journals', 6, 8, 3, 'Jurnal', [
+        ['id','uuid','pk'], ['date','date',''], ['description','text',''], ['ref_type','varchar',''], ['ref_id','uuid',''], ['cost_center_id','uuid','fk']]),
+      t('journal_lines', 6, 8, 2, 'Baris Jurnal', [
+        ['id','uuid','pk'], ['journal_id','uuid','fk'], ['account_id','uuid','fk'], ['debit','numeric',''], ['credit','numeric','']]),
+      t('cost_centers', 6, 7, 3, 'Cost Center / Grup', [
+        ['id','uuid','pk'], ['departure_id','uuid','fk'], ['name','varchar','']]),
+      t('vendors', 6, 8, 5, 'Vendor', [
+        ['id','uuid','pk'], ['name','varchar',''], ['type','enum','']]),
+      t('vendor_bills', 6, 7, 5, 'Hutang Vendor', [
+        ['id','uuid','pk'], ['vendor_id','uuid','fk'], ['cost_center_id','uuid','fk'], ['amount','numeric',''], ['due_date','date',''], ['status','enum','']]),
+      t('bank_accounts', 6, 7, 4, 'Kas & Bank', [
+        ['id','uuid','pk'], ['name','varchar',''], ['bank','varchar',''], ['currency','char',''], ['balance','numeric','']]),
+
+      // M7 User & Sistem
+      t('users', 7, 9, 1, 'Pengguna (RBAC)', [
+        ['id','uuid','pk'], ['branch_id','uuid','fk'], ['role_id','uuid','fk'], ['name','varchar',''], ['email','varchar','']]),
+      t('branches', 7, 10, 1, 'Cabang', [
+        ['id','uuid','pk'], ['name','varchar',''], ['city','varchar','']]),
+      t('roles', 7, 10, 2, 'Role & Hak Akses', [
+        ['id','uuid','pk'], ['name','varchar',''], ['permissions','jsonb','']]),
+      t('audit_logs', 7, 9, 5, 'Audit Log', [
+        ['id','uuid','pk'], ['user_id','uuid','fk'], ['action','varchar',''], ['entity','varchar',''], ['created_at','timestamp','']])
+    ];
+  }
+
+  // [childTable, parentTable]  (child holds FK -> parent) : many(child) -- one(parent)
+  edges() {
+    return [
+      ['departures','packages'], ['package_costs','packages'],
+      ['registrations','departures'], ['registrations','jamaah'], ['registrations','groups'],
+      ['documents','jamaah'], ['groups','departures'],
+      ['invoices','registrations'], ['payment_schedules','registrations'],
+      ['payments','invoices'], ['payments','bank_accounts'],
+      ['manifests','departures'], ['visas','jamaah'], ['tickets','jamaah'], ['tickets','airlines'],
+      ['group_staff','groups'], ['checklists','registrations'],
+      ['leads','agents'], ['commissions','agents'], ['commissions','registrations'],
+      ['cost_centers','departures'], ['journals','cost_centers'],
+      ['journal_lines','journals'], ['journal_lines','accounts'],
+      ['vendor_bills','vendors'], ['vendor_bills','cost_centers'],
+      ['users','branches'], ['users','roles'], ['audit_logs','users']
+    ];
+  }
+
+  buildSvg(E, geo) {
+    const R = React.createElement;
+    const els = [];
+    const anc = (b, tx, ty) => {
+      const dx = tx - b.cx, dy = ty - b.cy;
+      if (Math.abs(dx) * b.h > Math.abs(dy) * b.w) {
+        return { x: dx > 0 ? b.x + b.w : b.x, y: b.cy };
+      }
+      return { x: b.cx, y: dy > 0 ? b.y + b.h : b.y };
+    };
+    const col = '#c3b89f';
+    E.forEach((ed, i) => {
+      const c = geo[ed[0]], p = geo[ed[1]];
+      if (!c || !p) return;
+      const ca = anc(c, p.cx, p.cy), pa = anc(p, c.cx, c.cy);
+      const dxv = pa.x - ca.x, dyv = pa.y - ca.y;
+      const len = Math.hypot(dxv, dyv) || 1;
+      const ux = dxv / len, uy = dyv / len, px = -uy, py = ux;
+      els.push(R('line', { key: 'l' + i, x1: ca.x, y1: ca.y, x2: pa.x, y2: pa.y, stroke: col, strokeWidth: 1.5 }));
+      const ax = ca.x + ux * 16, ay = ca.y + uy * 16;
+      els.push(R('path', {
+        key: 'f' + i, fill: 'none', stroke: col, strokeWidth: 1.5,
+        d: 'M' + ax + ',' + ay + ' L' + ca.x + ',' + ca.y +
+           ' M' + ax + ',' + ay + ' L' + (ca.x + px * 7) + ',' + (ca.y + py * 7) +
+           ' M' + ax + ',' + ay + ' L' + (ca.x - px * 7) + ',' + (ca.y - py * 7)
+      }));
+      const bx = pa.x - ux * 13, by = pa.y - uy * 13;
+      els.push(R('line', { key: 'b' + i, x1: bx + px * 8, y1: by + py * 8, x2: bx - px * 8, y2: by - py * 8, stroke: col, strokeWidth: 1.5 }));
+    });
+    return R('svg', {
+      width: 2600, height: 1760,
+      style: { position: 'absolute', left: 0, top: 0, overflow: 'visible', pointerEvents: 'none', zIndex: 1 }
+    }, els);
+  }
+
+  renderVals() {
+    const M = this.modules(), T = this.tables(), E = this.edges();
+    const COLW = 216, X0 = 44, Y0 = 200, XG = 252, YG = 302, HEAD = 32, LBL = 26, ROW = 24, PAD = 8;
+    const geo = {};
+    const nodes = T.map(t => {
+      const x = X0 + (t.col - 1) * XG;
+      const y = Y0 + (t.row - 1) * YG;
+      const h = HEAD + LBL + t.fields.length * ROW + PAD;
+      geo[t.id] = { x, y, w: COLW, h, cx: x + COLW / 2, cy: y + h / 2 };
+      const m = M[t.mod - 1];
+      return {
+        id: t.id, table: t.id, label: t.label, color: m.color, left: x, top: y,
+        fields: t.fields.map(f => {
+          const key = f[2];
+          return {
+            name: f[0], type: f[1],
+            badge: key === 'pk' ? 'PK' : (key === 'fk' ? 'FK' : ''),
+            badgeBg: key === 'pk' ? '#a9791f' : (key === 'fk' ? m.color : 'transparent'),
+            weight: key === 'pk' ? '700' : '500',
+            nameColor: key === 'fk' ? m.color : '#2c281f'
+          };
+        })
+      };
+    });
+    const legend = M.map((m, i) => ({ name: m.name, color: m.color, num: String(i + 1) }));
+    return { nodes, legend, svg: this.buildSvg(E, geo) };
+  }
+}
+</script>
+</body>
+</html>

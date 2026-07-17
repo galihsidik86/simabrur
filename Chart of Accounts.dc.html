@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  doc-page:not(:defined){visibility:hidden;}
+  a{color:oklch(0.5 0.09 165);} a:hover{color:oklch(0.42 0.09 165);}
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="letter" margin="0.7in" hint-size="100%,100%">
+
+  <div slot="header" style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #e5ddca; font-size:10px; color:#a1987f; font-family:'Plus Jakarta Sans',sans-serif; letter-spacing:0.4px; text-transform:uppercase;">
+    <span>Travel Haji &amp; Umrah — Chart of Accounts</span>
+    <span>Standar Akuntansi PSAK 72 / ISAK 35</span>
+  </div>
+  <div slot="footer" style="text-align:center; padding:8px 0; border-top:1px solid #e5ddca; font-size:9.5px; color:#b0a68f; font-family:'JetBrains Mono',monospace;">Bagan Akun &amp; Alur Jurnal · Dokumen Rancangan Sistem</div>
+
+  <div style="font-family:'Plus Jakarta Sans',sans-serif; color:#2c281f; line-height:1.55; padding-top:20px;">
+    <div style="font-family:'Marcellus',serif; font-size:33px; color:#26221b; line-height:1.1;">Bagan Akun &amp; Alur Jurnal</div>
+    <div style="font-size:13.5px; color:#8c8371; margin-top:6px;">Chart of Accounts untuk travel penyelenggara Umrah &amp; Haji Khusus — dengan perlakuan dana jamaah sebagai liabilitas dan pengakuan pendapatan berbasis penyelesaian jasa.</div>
+
+    <div style="font-family:'Marcellus',serif; font-size:19px; color:oklch(0.46 0.07 158); margin:26px 0 10px; padding-bottom:5px; border-bottom:2px solid oklch(0.46 0.07 158);">Prinsip Akuntansi Kunci</div>
+    <sc-for list="{{ principles }}" as="p" hint-placeholder-count="4">
+      <div style="break-inside:avoid; display:flex; gap:12px; padding:11px 14px; margin-bottom:9px; background:#faf7f0; border:1px solid #ece3d0; border-left:3px solid oklch(0.56 0.09 78); border-radius:7px;">
+        <span style="font-family:'JetBrains Mono',monospace; font-weight:600; color:oklch(0.46 0.07 158); font-size:13px;">{{ p.num }}</span>
+        <div>
+          <span style="font-weight:600; font-size:13.5px;">{{ p.title }}</span>
+          <div style="font-size:12.5px; color:#6f6858; margin-top:2px;">{{ p.body }}</div>
+        </div>
+      </div>
+    </sc-for>
+
+    <div style="font-family:'Marcellus',serif; font-size:19px; color:oklch(0.46 0.07 158); margin:30px 0 12px; padding-bottom:5px; border-bottom:2px solid oklch(0.46 0.07 158);">Struktur Bagan Akun</div>
+    <div style="font-size:12px; color:#8c8371; margin-bottom:14px;">Penomoran mengikuti pola umum akuntansi travel Indonesia: digit pertama menandai kelas akun, format <b style="font-family:'JetBrains Mono',monospace; color:#6a6252;">K-NNNN</b> untuk induk &amp; sub-akun.</div>
+
+    <sc-for list="{{ classes }}" as="c" hint-placeholder-count="7">
+      <div style="break-inside:avoid; margin-bottom:16px;">
+        <div style="display:flex; align-items:center; gap:10px; padding:7px 12px; background:{{ c.color }}; border-radius:7px 7px 0 0;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:600; color:#fff; font-size:13px;">{{ c.code }}</span>
+          <span style="font-family:'Marcellus',serif; color:#fff; font-size:15px;">{{ c.title }}</span>
+        </div>
+        <table style="width:100%; border-collapse:collapse; font-size:12px;">
+          <sc-for list="{{ c.rows }}" as="r" hint-placeholder-count="6">
+            <tr style="background:{{ r.bg }}; border-bottom:1px solid #eee5d3;">
+              <td style="width:78px; padding:6px 12px; font-family:'JetBrains Mono',monospace; font-weight:500; color:{{ r.codeColor }}; vertical-align:top;">{{ r.code }}</td>
+              <td style="padding:6px 10px; font-weight:{{ r.weight }}; color:#2c281f; vertical-align:top;"><span style="padding-left:{{ r.indent }}px; display:inline-block;">{{ r.name }}</span></td>
+              <td style="padding:6px 12px; color:#8c8371; font-size:11px; vertical-align:top; text-align:right;">{{ r.note }}</td>
+            </tr>
+          </sc-for>
+        </table>
+      </div>
+    </sc-for>
+
+    <div style="break-before:page; font-family:'Marcellus',serif; font-size:19px; color:oklch(0.46 0.07 158); margin:8px 0 8px; padding-bottom:5px; border-bottom:2px solid oklch(0.46 0.07 158);">Alur Ayat Jurnal Kunci</div>
+    <div style="font-size:12px; color:#8c8371; margin-bottom:16px;">Ilustrasi siklus 1 jamaah — paket Umrah reguler <b style="color:#6a6252;">Rp 30.000.000</b>, biaya vendor <b style="color:#6a6252;">Rp 22.000.000</b>, komisi agen 3%. Perhatikan dana mengendap di <b style="color:#6a6252;">Uang Muka Jamaah (2-1100)</b> hingga keberangkatan.</div>
+
+    <sc-for list="{{ journals }}" as="j" hint-placeholder-count="6">
+      <div style="break-inside:avoid; margin-bottom:15px; border:1px solid #ece3d0; border-radius:8px; overflow:hidden;">
+        <div style="padding:9px 14px; background:#faf7f0; border-bottom:1px solid #ece3d0;">
+          <span style="font-family:'JetBrains Mono',monospace; font-weight:600; color:oklch(0.56 0.09 78); font-size:12px;">{{ j.tag }}</span>
+          <span style="font-weight:600; font-size:13.5px; margin-left:8px;">{{ j.title }}</span>
+          <div style="font-size:11.5px; color:#8c8371; margin-top:2px;">{{ j.desc }}</div>
+        </div>
+        <table style="width:100%; border-collapse:collapse; font-size:12px;">
+          <thead>
+            <tr style="background:#f4efe4; color:#8c8371; font-size:10px; text-transform:uppercase; letter-spacing:0.5px;">
+              <th style="text-align:left; padding:5px 14px; font-weight:600;">Akun</th>
+              <th style="text-align:right; padding:5px 14px; font-weight:600; width:130px;">Debit</th>
+              <th style="text-align:right; padding:5px 14px; font-weight:600; width:130px;">Kredit</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ j.lines }}" as="l" hint-placeholder-count="2">
+              <tr style="border-bottom:1px solid #f0eadc;">
+                <td style="padding:6px 14px; color:#3a3428;"><span style="font-family:'JetBrains Mono',monospace; color:{{ l.acctColor }}; font-size:11px; padding-left:{{ l.indent }}px;">{{ l.code }}</span> &nbsp;{{ l.name }}</td>
+                <td style="padding:6px 14px; text-align:right; font-family:'JetBrains Mono',monospace; color:#2c281f;">{{ l.dr }}</td>
+                <td style="padding:6px 14px; text-align:right; font-family:'JetBrains Mono',monospace; color:#2c281f;">{{ l.cr }}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+    </sc-for>
+
+    <div style="break-inside:avoid; margin-top:18px; padding:14px 16px; background:oklch(0.96 0.02 158); border:1px solid oklch(0.86 0.05 158); border-radius:8px;">
+      <div style="font-weight:600; font-size:13.5px; color:oklch(0.4 0.07 158);">Hasil per jamaah (paket ini)</div>
+      <div style="font-size:12.5px; color:#4a4436; margin-top:5px;">Pendapatan Rp 30.000.000 − HPP Rp 22.000.000 = <b>Laba Kotor Rp 8.000.000</b>. Dikurangi komisi agen Rp 900.000 → <b>kontribusi Rp 7.100.000</b> sebelum beban operasional. Seluruh angka teragregasi di <b>cost center per keberangkatan</b> untuk laba-rugi per grup.</div>
+    </div>
+  </div>
+
+</x-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  principles() {
+    return [
+      { num: '01', title: 'Dana jamaah = Liabilitas, bukan pendapatan.',
+        body: 'Penerimaan DP, cicilan/termin, dan pelunasan dicatat sebagai Uang Muka Jamaah (2-1100) — kewajiban travel untuk menyelenggarakan jasa, bukan pendapatan saat kas diterima.' },
+      { num: '02', title: 'Pengakuan pendapatan saat penyelesaian jasa (PSAK 72).',
+        body: 'Pendapatan diakui ketika kewajiban pelaksanaan terpenuhi — yakni saat keberangkatan/penyelenggaraan Umrah/Haji — dengan mereklas Uang Muka Jamaah menjadi Pendapatan Jasa.' },
+      { num: '03', title: 'Akad wakalah / ijarah sebagai dasar.',
+        body: 'Travel bertindak sebagai wakil jamaah; dana dikelola sebagai amanah. Perlakuan liabilitas menjaga transparansi dana kelolaan hingga jasa benar-benar diberikan.' },
+      { num: '04', title: 'Cost center per keberangkatan (per grup).',
+        body: 'Seluruh HPP (tiket, hotel, visa, katering, handling, muthawwif) dan pendapatan diakumulasi per grup keberangkatan, sehingga laba-rugi dapat dihitung per paket & per keberangkatan.' }
+    ];
+  }
+
+  classes() {
+    const C = (code, title, color, rows) => ({ code, title, color, rows });
+    // row: [code, name, note, level]  level 0=induk, 1=sub  ; prefix '*' on name => highlight
+    return [
+      C('1', 'ASET', 'oklch(0.52 0.08 165)', [
+        ['1-1000', 'Aset Lancar', '', 0],
+        ['1-1100', 'Kas', '', 1],
+        ['1-1200', 'Bank — IDR', 'Rekening operasional Rupiah', 1],
+        ['1-1210', 'Bank — USD', 'Multi-currency', 1],
+        ['1-1220', 'Bank — SAR', 'Multi-currency', 1],
+        ['1-1300', 'Piutang Jamaah', 'Sisa tagihan belum lunas', 1],
+        ['1-1400', '*Uang Muka Vendor', 'DP ke hotel/maskapai/handling', 1],
+        ['1-1500', 'Biaya Dibayar Dimuka', '', 1],
+        ['1-1600', 'Persediaan Perlengkapan', 'Koper, seragam, buku manasik', 1],
+        ['1-2000', 'Aset Tetap', '', 0],
+        ['1-2100', 'Peralatan & Inventaris Kantor', '', 1],
+        ['1-2200', 'Akumulasi Penyusutan', 'Akun kontra', 1]
+      ]),
+      C('2', 'LIABILITAS', 'oklch(0.52 0.09 245)', [
+        ['2-1000', 'Liabilitas Jangka Pendek', '', 0],
+        ['2-1100', '*Uang Muka Jamaah', 'DP + pelunasan diterima dimuka', 1],
+        ['2-1200', 'Pendapatan Diterima Dimuka', 'Jasa tambahan belum diberikan', 1],
+        ['2-1300', 'Hutang Vendor', 'Hotel / maskapai / handling', 1],
+        ['2-1400', 'Hutang Komisi Agen', '', 1],
+        ['2-1500', 'Hutang Pajak', 'PPh / PPN terutang', 1],
+        ['2-1600', 'Titipan Dana Tabungan Haji', 'Setoran bertahap jamaah', 1]
+      ]),
+      C('3', 'EKUITAS', 'oklch(0.46 0.02 265)', [
+        ['3-1000', 'Modal Disetor', '', 0],
+        ['3-2000', 'Laba Ditahan', '', 0],
+        ['3-3000', 'Laba (Rugi) Tahun Berjalan', '', 0]
+      ]),
+      C('4', 'PENDAPATAN', 'oklch(0.46 0.07 158)', [
+        ['4-1000', 'Pendapatan Jasa Umrah', 'Diakui saat keberangkatan', 0],
+        ['4-2000', 'Pendapatan Jasa Haji Khusus', 'Furoda / khusus', 0],
+        ['4-3000', 'Pendapatan Jasa Tambahan', 'Visa, tour, handling, upgrade', 0],
+        ['4-9000', 'Pendapatan Lain-lain', 'Selisih kurs, jasa giro', 0]
+      ]),
+      C('5', 'BEBAN POKOK JASA (HPP)', 'oklch(0.56 0.09 78)', [
+        ['5-1000', 'Beban Tiket Maskapai', 'per cost center', 0],
+        ['5-2000', 'Beban Hotel & Akomodasi', 'per cost center', 0],
+        ['5-3000', 'Beban Visa', 'per cost center', 0],
+        ['5-4000', 'Beban Katering / Konsumsi', 'per cost center', 0],
+        ['5-5000', 'Beban Transportasi & Handling', 'per cost center', 0],
+        ['5-6000', 'Beban Muthawwif / Tour Leader', 'per cost center', 0],
+        ['5-7000', 'Beban Perlengkapan Jamaah', 'per cost center', 0]
+      ]),
+      C('6', 'BEBAN OPERASIONAL', 'oklch(0.56 0.11 45)', [
+        ['6-1000', 'Beban Gaji & Tunjangan', '', 0],
+        ['6-2000', 'Beban Komisi Agen', '', 0],
+        ['6-3000', 'Beban Marketing & Promosi', '', 0],
+        ['6-4000', 'Beban Sewa Kantor', '', 0],
+        ['6-5000', 'Beban Administrasi & Umum', '', 0],
+        ['6-6000', 'Beban Penyusutan', '', 0]
+      ]),
+      C('7', 'PENDAPATAN & BEBAN LAIN', 'oklch(0.50 0.10 322)', [
+        ['7-1000', 'Laba (Rugi) Selisih Kurs', 'Multi-currency IDR/USD/SAR', 0],
+        ['7-2000', 'Beban Bunga & Administrasi Bank', '', 0]
+      ])
+    ];
+  }
+
+  journals() {
+    const acctColor = code => {
+      const k = code[0];
+      const map = { '1': 'oklch(0.5 0.08 165)', '2': 'oklch(0.5 0.09 245)', '3': 'oklch(0.44 0.02 265)',
+        '4': 'oklch(0.44 0.07 158)', '5': 'oklch(0.5 0.09 78)', '6': 'oklch(0.5 0.11 45)', '7': 'oklch(0.48 0.10 322)' };
+      return map[k] || '#6a6252';
+    };
+    const L = (code, name, dr, cr) => ({ code, name, dr, cr, acctColor: acctColor(code), indent: cr ? 16 : 0 });
+    const J = (tag, title, desc, lines) => ({ tag, title, desc, lines });
+    return [
+      J('A', 'Penerimaan DP Jamaah', 'Kas masuk dicatat sebagai kewajiban, belum sebagai pendapatan.', [
+        L('1-1200', 'Bank — IDR', 'Rp 5.000.000', ''),
+        L('2-1100', 'Uang Muka Jamaah', '', 'Rp 5.000.000')
+      ]),
+      J('B', 'Pelunasan Jamaah', 'Sisa tagihan dilunasi sebelum keberangkatan.', [
+        L('1-1200', 'Bank — IDR', 'Rp 25.000.000', ''),
+        L('2-1100', 'Uang Muka Jamaah', '', 'Rp 25.000.000')
+      ]),
+      J('C', 'Pembayaran ke Vendor', 'DP/pelunasan hotel, tiket, visa dicatat sebagai uang muka vendor (aset).', [
+        L('1-1400', 'Uang Muka Vendor', 'Rp 22.000.000', ''),
+        L('1-1200', 'Bank — IDR', '', 'Rp 22.000.000')
+      ]),
+      J('D', 'Pengakuan Pendapatan — saat Keberangkatan', 'PSAK 72: kewajiban pelaksanaan terpenuhi, reklas liabilitas menjadi pendapatan.', [
+        L('2-1100', 'Uang Muka Jamaah', 'Rp 30.000.000', ''),
+        L('4-1000', 'Pendapatan Jasa Umrah', '', 'Rp 30.000.000')
+      ]),
+      J('E', 'Pengakuan HPP — saat Keberangkatan', 'Uang muka vendor dibebankan ke HPP per komponen, di cost center grup.', [
+        L('5-2000', 'Beban Hotel & Akomodasi', 'Rp 10.000.000', ''),
+        L('5-1000', 'Beban Tiket Maskapai', 'Rp 9.000.000', ''),
+        L('5-3000', 'Beban Visa', 'Rp 3.000.000', ''),
+        L('1-1400', 'Uang Muka Vendor', '', 'Rp 22.000.000')
+      ]),
+      J('F', 'Komisi Agen', 'Komisi 3% × Rp 30.000.000 diakui sebagai beban & hutang komisi.', [
+        L('6-2000', 'Beban Komisi Agen', 'Rp 900.000', ''),
+        L('2-1400', 'Hutang Komisi Agen', '', 'Rp 900.000')
+      ])
+    ];
+  }
+
+  renderVals() {
+    const classes = this.classes().map(c => ({
+      code: c.code, title: c.title, color: c.color,
+      rows: c.rows.map(r => {
+        const raw = r[1];
+        const hi = raw.charAt(0) === '*';
+        const name = hi ? raw.slice(1) : raw;
+        const level = r[3];
+        return {
+          code: r[0], name, note: r[2],
+          bg: hi ? 'oklch(0.97 0.03 78)' : (level === 0 ? '#faf8f2' : '#fffdf8'),
+          weight: level === 0 ? '700' : (hi ? '600' : '400'),
+          indent: level === 0 ? 0 : 14,
+          codeColor: level === 0 ? '#4a4436' : '#9a917d'
+        };
+      })
+    }));
+    return { principles: this.principles(), classes, journals: this.journals() };
+  }
+}
+</script>
+</body>
+</html>
