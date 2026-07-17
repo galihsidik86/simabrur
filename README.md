@@ -1,6 +1,6 @@
 # Safar — Sistem Informasi Manajemen Travel Haji & Umrah
 
-[![Tests](https://img.shields.io/badge/tests-94%20passing-2ea44f?logo=vitest&logoColor=white)](backend/src)
+[![CI](https://github.com/galihsidik86/simabrur/actions/workflows/ci.yml/badge.svg)](https://github.com/galihsidik86/simabrur/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](backend/tsconfig.json)
 [![Node](https://img.shields.io/badge/Node.js-%E2%89%A520-339933?logo=nodedotjs&logoColor=white)](package.json)
 [![Express](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)](backend/package.json)

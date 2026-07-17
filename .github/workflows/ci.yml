@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Test, typecheck & build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: safar
+          POSTGRES_PASSWORD: safar_ci
+          POSTGRES_DB: safar
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U safar -d safar"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://safar:safar_ci@localhost:5432/safar
+      DATABASE_URL_TEST: postgres://safar:safar_ci@localhost:5432/safar_test
+      JWT_ACCESS_SECRET: ci-only-access-secret-not-for-production-0123456789
+      JWT_REFRESH_SECRET: ci-only-refresh-secret-not-for-production-0123456789
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Buat database test
+        run: PGPASSWORD=safar_ci psql -h localhost -U safar -d safar -c "CREATE DATABASE safar_test"
+
+      - name: Typecheck backend
+        run: npx tsc -p backend/tsconfig.json --noEmit
+
+      - name: Typecheck frontend
+        run: npx tsc -p frontend/tsconfig.json --noEmit
+
+      - name: Test (Vitest + supertest)
+        run: npm test
+
+      - name: Build produksi (tsc + vite + salin ke backend/public)
+        run: npm run build
