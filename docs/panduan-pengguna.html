@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panduan Pengguna Safar — Alur Transaksi & RBAC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#efe8da; --card:#fffdf8; --panel:#faf7f0; --thead:#f6f1e6;
+    --line:#e9e0cd; --line2:#e6ddca; --line3:#eee5d3;
+    --ink:#2c281f; --ink2:#26221b; --mut:#6f6858; --mut2:#8c8371; --mut3:#9a917d; --mut4:#a89e88;
+    --forest:#16211b; --forest2:#1b2a20;
+    --primary:oklch(0.5 0.09 165); --gold:oklch(0.56 0.11 78); --goldb:oklch(0.62 0.11 78);
+    --ok:oklch(0.46 0.07 158); --okbg:oklch(0.95 0.03 158); --danger:oklch(0.55 0.15 28);
+    --r-mkt:oklch(0.5 0.1 322); --r-ops:oklch(0.56 0.11 45); --r-keu:oklch(0.46 0.07 158);
+    --r-pim:oklch(0.46 0.02 265); --r-jam:oklch(0.52 0.09 245); --r-adm:oklch(0.56 0.11 78);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--cream); color:var(--ink); font-family:'Plus Jakarta Sans',system-ui,sans-serif; font-size:13px; line-height:1.55;}
+  .wrap{max-width:940px; margin:0 auto; padding:32px 24px 64px;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  /* Header */
+  .hero{background:linear-gradient(160deg,var(--forest),var(--forest2)); color:#e8e0cf; border-radius:16px; padding:28px 30px; display:flex; gap:16px; align-items:center; box-shadow:0 10px 30px -18px rgba(60,50,20,.5);}
+  .logo{width:46px; height:46px; border-radius:12px; background:var(--gold); display:flex; align-items:center; justify-content:center; font-family:'Marcellus',serif; font-size:24px; color:#20180a; flex:0 0 auto;}
+  .hero h1{font-family:'Marcellus',serif; font-weight:400; font-size:26px; margin:0; line-height:1.2;}
+  .hero p{margin:4px 0 0; font-size:12px; color:#9fb0a4;}
+  .printbtn{margin-left:auto; background:var(--goldb); color:#20180a; border:none; border-radius:9px; padding:10px 16px; font:600 12.5px 'Plus Jakarta Sans'; cursor:pointer;}
+
+  h2{font-family:'Marcellus',serif; font-weight:400; font-size:21px; color:var(--ink2); margin:38px 0 4px; padding-bottom:6px; border-bottom:2px solid var(--ok);}
+  .sub{font-size:12px; color:var(--mut3); margin:0 0 14px;}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:13px; box-shadow:0 4px 16px -10px rgba(60,50,20,.3); overflow:hidden; break-inside:avoid;}
+  table{width:100%; border-collapse:collapse; font-size:12px;}
+  thead th{background:var(--thead); color:var(--mut3); font-size:10px; text-transform:uppercase; letter-spacing:.4px; text-align:left; padding:10px 12px; font-weight:600;}
+  tbody td{padding:9px 12px; border-top:1px solid var(--line3); vertical-align:top;}
+  tbody tr:nth-child(even){background:#fcfaf4;}
+
+  .chip{display:inline-block; padding:2px 9px; border-radius:20px; font-size:10px; font-weight:700; color:#fff; white-space:nowrap;}
+  .c-mkt{background:var(--r-mkt);} .c-ops{background:var(--r-ops);} .c-keu{background:var(--r-keu);}
+  .c-pim{background:var(--r-pim);} .c-jam{background:var(--r-jam);} .c-adm{background:var(--r-adm); color:#20180a;}
+
+  /* Alur */
+  .flow{display:flex; flex-direction:column; gap:0; margin-top:14px;}
+  .fstep{display:flex; gap:14px; break-inside:avoid;}
+  .fnum{display:flex; flex-direction:column; align-items:center; flex:0 0 34px;}
+  .fdot{width:30px; height:30px; border-radius:50%; background:var(--forest); color:var(--goldb); font:700 13px 'JetBrains Mono'; display:flex; align-items:center; justify-content:center; flex:0 0 auto;}
+  .fline{width:2px; flex:1; background:var(--line2); min-height:14px;}
+  .fbody{flex:1; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 16px; margin-bottom:12px; box-shadow:0 4px 16px -10px rgba(60,50,20,.3);}
+  .fbody b.t{font-size:13.5px;}
+  .fmeta{font-size:11px; color:var(--mut2); margin-top:2px;}
+  .fauto{margin-top:7px; background:var(--panel); border-left:3px solid var(--goldb); border-radius:0 8px 8px 0; padding:7px 11px; font-size:11px; color:#5a5445;}
+  .fauto .mono{font-size:10px; color:var(--ok);}
+
+  .mark{font-size:14px;} .see{opacity:.85;}
+  .legend{font-size:11px; color:var(--mut2); margin:8px 2px 0;}
+
+  .jr{font-size:10.5px;}
+  .scen{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;}
+  .scen .card{padding:14px 16px;}
+  .scen b{font-size:12.5px;}
+  .scen p{margin:6px 0 0; font-size:11.5px; color:#5a5445;}
+  .note{background:var(--okbg); border:1px solid oklch(0.9 0.03 158); border-radius:11px; padding:12px 16px; font-size:11.5px; color:#4a4436; margin-top:14px; break-inside:avoid;}
+  footer{margin-top:40px; text-align:center; font-size:10px; color:var(--mut4); font-family:'JetBrains Mono',monospace;}
+
+  @media print{
+    @page{size:A4; margin:1.4cm;}
+    body{background:#fff; font-size:11.5px;}
+    .wrap{max-width:none; padding:0;}
+    .printbtn{display:none;}
+    .hero{border-radius:10px; -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+    *{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+    h2{break-after:avoid;}
+    .card,.fstep,.note{break-inside:avoid;}
+  }
+  @media (max-width:720px){ .scen{grid-template-columns:1fr;} .tscroll{overflow-x:auto;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <div class="logo">S</div>
+    <div>
+      <h1>Panduan Pengguna Safar</h1>
+      <p>Alur Transaksi &amp; Hak Akses (RBAC) — Sistem Informasi Manajemen Travel Haji &amp; Umrah · PT Safar Barokah Wisata</p>
+    </div>
+    <button class="printbtn" onclick="window.print()">Cetak / Simpan PDF</button>
+  </div>
+
+  <p style="margin-top:14px; font-size:12px; color:var(--mut2);">
+    Manual ini menjelaskan <b>siapa melakukan apa, di halaman mana, dan apa yang terjadi otomatis di belakang layar</b>.
+    Akun demo (password <span class="mono">safar123</span>): admin@ · keuangan@ · ops@ · marketing@ · pimpinan@ — semua <span class="mono">safar.co.id</span>.
+  </p>
+
+  <!-- ====== 1. Peran ====== -->
+  <h2>1 · Enam Peran dan Tanggung Jawabnya</h2>
+  <p class="sub">Admin selalu lolos semua pemeriksaan role. Pimpinan bisa membuka halaman namun tombol aksi ditolak server (403).</p>
+  <div class="card"><table>
+    <thead><tr><th style="width:120px">Peran</th><th style="width:150px">Siapa</th><th>Tanggung jawab utama</th></tr></thead>
+    <tbody>
+      <tr><td><span class="chip c-adm">Admin</span></td><td>Pengelola sistem</td><td>Semua akses + kelola pengguna, role, audit log</td></tr>
+      <tr><td><span class="chip c-mkt">Marketing</span></td><td>Tim penjualan</td><td>Paket &amp; jadwal, agen &amp; referral, leads, persetujuan komisi</td></tr>
+      <tr><td><span class="chip c-ops">Operasional</span></td><td>Tim ops/dokumen</td><td>Verifikasi dokumen, manifest, visa, tiket, rombongan, checklist</td></tr>
+      <tr><td><span class="chip c-keu">Keuangan</span></td><td>Kasir &amp; akuntan</td><td>Pembayaran, kwitansi, 4 transaksi akuntansi, jurnal, rekonsiliasi, laporan keuangan</td></tr>
+      <tr><td><span class="chip c-pim">Pimpinan</span></td><td>Direksi</td><td><b>Hanya melihat</b>: dashboard &amp; seluruh laporan</td></tr>
+      <tr><td><span class="chip c-jam">Jamaah</span></td><td>Pelanggan</td><td>Portal mandiri: status, bayar (VA), unggah dokumen, itinerary</td></tr>
+    </tbody>
+  </table></div>
+
+  <!-- ====== 2. Alur ====== -->
+  <h2>2 · Alur Transaksi End-to-End</h2>
+  <p class="sub">Ikuti dari atas ke bawah — kotak kuning adalah proses yang berjalan <b>otomatis</b> tanpa input pengguna.</p>
+
+  <div class="flow">
+    <div class="fstep"><div class="fnum"><div class="fdot">1</div><div class="fline"></div></div><div class="fbody">
+      <b class="t">Pendaftaran jamaah</b> <span class="chip c-jam">Jamaah</span> <span class="chip c-mkt">Marketing</span>
+      <div class="fmeta">Halaman publik <span class="mono">/daftar</span> — wizard 6 langkah: paket → data diri → dokumen → kamar → skema bayar → konfirmasi akad wakalah. Opsional: kode referral agen.</div>
+      <div class="fauto">⚙ Otomatis: nomor registrasi <span class="mono">UMR/HAJ-tahun-seri</span> · kuota kursi berkurang · <b>invoice + jadwal termin terbit</b> (cicilan = DP 5 jt + 5 termin) · bila ada kode agen → lead terkonversi + komisi <i>pending</i>. Validasi: paspor ≥ 7 bulan, perempuan &lt; 45 th wajib mahram, kuota real-time.</div>
+    </div></div>
+
+    <div class="fstep"><div class="fnum"><div class="fdot">2</div><div class="fline"></div></div><div class="fbody">
+      <b class="t">Verifikasi dokumen</b> <span class="chip c-ops">Operasional</span>
+      <div class="fmeta"><span class="mono">/jamaah</span> → klik nama jamaah → tombol ✓ Verifikasi / Tolak per dokumen (KTP, KK, Paspor, Pas Foto, Vaksin; Buku Nikah opsional).</div>
+      <div class="fauto">⚙ Otomatis: saat 5 dokumen wajib terverifikasi → status registrasi menjadi <b>Aktif</b>.</div>
+    </div></div>
+
+    <div class="fstep"><div class="fnum"><div class="fdot">3</div><div class="fline"></div></div><div class="fbody">
+      <b class="t">Terima &amp; verifikasi pembayaran jamaah</b> <span class="chip c-keu">Keuangan</span>
+      <div class="fmeta"><span class="mono">/pembayaran</span> → Kelola, atau <span class="mono">/keuangan/input</span> → Terima Pembayaran. Jamaah membayar via VA BSI dari portal.</div>
+      <div class="fauto">⚙ Otomatis saat verifikasi: termin lunas · <b>kwitansi bernomor + terbilang</b> · jurnal <span class="mono">Dr Bank/Kas · Cr 2-1100 Uang Muka Jamaah</span> — dana jamaah = <b>liabilitas</b>, bukan pendapatan.</div>
+    </div></div>
+
+    <div class="fstep"><div class="fnum"><div class="fdot">4</div><div class="fline"></div></div><div class="fbody">
+      <b class="t">Operasional pra-keberangkatan</b> <span class="chip c-ops">Operasional</span> &nbsp;·&nbsp; <b class="t" style="font-size:12px">Bayar vendor</b> <span class="chip c-keu">Keuangan</span>
+      <div class="fmeta"><span class="mono">/operasional</span>: perbarui visa (Proses/Biometrik/Terbit), PNR tiket, rombongan &amp; muthawwif — manifest siap. <span class="mono">/keuangan/input</span> → Pembayaran Biaya utk hotel/tiket/visa (bisa valas SAR/USD).</div>
+      <div class="fauto">⚙ Otomatis: paspor &lt; 7 bulan ditandai merah di manifest · jurnal biaya IDR × kurs per cost center · selisih kurs pelunasan hutang valas → akun <span class="mono">7-1000</span>.</div>
+    </div></div>
+
+    <div class="fstep"><div class="fnum"><div class="fdot">5</div><div class="fline"></div></div><div class="fbody">
+      <b class="t">Keberangkatan — pengakuan pendapatan (PSAK 72)</b> <span class="chip c-keu">Keuangan</span>
+      <div class="fmeta"><span class="mono">/keuangan/input</span> → Pengakuan Pendapatan, pada tanggal keberangkatan grup.</div>
+      <div class="fauto">⚙ Otomatis: jurnal reclass <span class="mono">Dr 2-1100 · Cr 4-1000/4-2000</span> + HPP <span class="mono">Dr 5-xxxx · Cr 1-1400</span>. Sejak ini laba per paket muncul di dashboard &amp; laporan.</div>
+    </div></div>
+
+    <div class="fstep"><div class="fnum"><div class="fdot">6</div><div class="fline"></div></div><div class="fbody">
+      <b class="t">Persetujuan komisi agen</b> <span class="chip c-mkt">Marketing</span> <span class="chip c-keu">Keuangan</span>
+      <div class="fmeta"><span class="mono">/marketing</span> → panel "Komisi Menunggu Persetujuan" → Setujui &amp; Posting.</div>
+      <div class="fauto">⚙ Otomatis: jurnal <span class="mono">Dr 6-2000 Beban Komisi · Cr 2-1400 Hutang Komisi</span> · KPI "Komisi Terhutang" = saldo riil akun 2-1400.</div>
+    </div></div>
+
+    <div class="fstep"><div class="fnum"><div class="fdot">7</div></div><div class="fbody">
+      <b class="t">Tutup buku: jurnal manual, rekonsiliasi, laporan</b> <span class="chip c-keu">Keuangan</span> <span class="chip c-pim">Pimpinan</span>
+      <div class="fmeta"><span class="mono">/keuangan/jurnal</span> (rekonsiliasi bank, jurnal manual) → <span class="mono">/laporan-keuangan</span> &amp; <span class="mono">/laporan-operasional</span> + ekspor Excel/PDF.</div>
+      <div class="fauto">⚙ Dijaga sistem: setiap jurnal wajib <b>balance</b> (Σdebit = Σkredit) · neraca selalu seimbang · semua mutasi terekam <b>audit log</b>.</div>
+    </div></div>
+  </div>
+
+  <!-- ====== 3. RBAC ====== -->
+  <h2>3 · Matriks Hak Akses (RBAC)</h2>
+  <p class="sub">Disusun dari pemeriksaan role yang terpasang di API. <span class="chip c-adm">Admin</span> = kelola di semua baris.</p>
+  <div class="card tscroll"><table>
+    <thead><tr>
+      <th>Modul / Halaman</th>
+      <th style="text-align:center">Marketing</th><th style="text-align:center">Operasional</th>
+      <th style="text-align:center">Keuangan</th><th style="text-align:center">Pimpinan</th><th style="text-align:center">Jamaah</th>
+    </tr></thead>
+    <tbody>
+      <tr><td>Dashboard eksekutif <span class="mono">/</span></td><td align="center" class="see">👁</td><td align="center" class="see">👁</td><td align="center" class="see">👁</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
+      <tr><td>Paket &amp; jadwal <span class="mono">/paket</span></td><td align="center" class="mark">✅</td><td align="center">—</td><td align="center" class="see">👁 HPP</td><td align="center" class="see">👁</td><td align="center" class="see">👁 wizard</td></tr>
+      <tr><td>Jamaah &amp; dokumen <span class="mono">/jamaah</span></td><td align="center" class="see">👁</td><td align="center" class="mark">✅ verifikasi</td><td align="center" class="see">👁</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
+      <tr><td>Pendaftaran <span class="mono">/daftar</span></td><td align="center" class="mark">✅ dampingi</td><td align="center">—</td><td align="center">—</td><td align="center">—</td><td align="center" class="mark">✅ publik</td></tr>
+      <tr><td>Pembayaran &amp; kwitansi <span class="mono">/pembayaran</span></td><td align="center" class="see">👁 piutang</td><td align="center">—</td><td align="center" class="mark">✅ catat+verifikasi</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
+      <tr><td>Manifest, visa, tiket <span class="mono">/operasional</span></td><td align="center">—</td><td align="center" class="mark">✅</td><td align="center">—</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
+      <tr><td>Laporan operasional (aging/dokumen/kesiapan)</td><td align="center">—</td><td align="center" class="mark">✅ + ekspor</td><td align="center" class="see">👁 + ekspor</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
+      <tr><td>Input Transaksi 4 tipe <span class="mono">/keuangan/input</span></td><td align="center">—</td><td align="center">—</td><td align="center" class="mark">✅</td><td align="center">—</td><td align="center">—</td></tr>
+      <tr><td>Jurnal, buku besar, COA, rekonsiliasi</td><td align="center">—</td><td align="center">—</td><td align="center" class="mark">✅</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
+      <tr><td>Laporan keuangan (LR/Neraca/per Paket)</td><td align="center" class="see">👁 per paket</td><td align="center">—</td><td align="center" class="mark">✅ + ekspor</td><td align="center" class="see">👁 + ekspor</td><td align="center">—</td></tr>
+      <tr><td>Agen &amp; leads <span class="mono">/marketing</span></td><td align="center" class="mark">✅</td><td align="center">—</td><td align="center" class="see">👁</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
+      <tr><td>Persetujuan komisi</td><td align="center" class="mark">✅</td><td align="center">—</td><td align="center" class="mark">✅</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
+      <tr><td>Pengguna, role, audit log <span class="mono">/admin</span></td><td align="center">—</td><td align="center">—</td><td align="center">—</td><td align="center">—</td><td align="center">—</td></tr>
+      <tr><td>Portal jamaah <span class="mono">/portal</span></td><td align="center">—</td><td align="center">—</td><td align="center">—</td><td align="center">—</td><td align="center" class="mark">✅</td></tr>
+    </tbody>
+  </table></div>
+  <div class="legend">✅ = kelola (buat/ubah) · 👁 = hanya lihat · — = tidak ada akses</div>
+
+  <!-- ====== 4. Jurnal ====== -->
+  <h2>4 · Peta Jurnal Otomatis — siapa memicu, jurnal apa terbentuk</h2>
+  <p class="sub">Semua jurnal dibuat mesin melalui satu pintu (journal engine) dan wajib balance. Referensi: dokumen Chart of Accounts (alur A–F).</p>
+  <div class="card"><table>
+    <thead><tr><th style="width:44px">Kode</th><th>Pemicu</th><th style="width:110px">Oleh</th><th>Ayat jurnal</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">A/B</td><td>Verifikasi pembayaran jamaah</td><td><span class="chip c-keu">Keuangan</span></td><td class="mono jr">Dr 1-1100/1-12xx Bank/Kas · Cr 2-1100 Uang Muka Jamaah</td></tr>
+      <tr><td class="mono">C</td><td>Pembayaran biaya / DP vendor (opsional valas)</td><td><span class="chip c-keu">Keuangan</span></td><td class="mono jr">Dr 1-1400 / 5-xxxx (IDR × kurs) · Cr Bank — selisih kurs → 7-1000</td></tr>
+      <tr><td class="mono">D</td><td>Pengakuan pendapatan saat keberangkatan</td><td><span class="chip c-keu">Keuangan</span></td><td class="mono jr">Dr 2-1100 · Cr 4-1000 / 4-2000</td></tr>
+      <tr><td class="mono">E</td><td>Pengakuan HPP saat keberangkatan</td><td><span class="chip c-keu">Keuangan</span></td><td class="mono jr">Dr 5-1000…5-7000 per komponen · Cr 1-1400</td></tr>
+      <tr><td class="mono">F</td><td>Persetujuan komisi agen</td><td><span class="chip c-mkt">Mkt</span> <span class="chip c-keu">Keu</span></td><td class="mono jr">Dr 6-2000 · Cr 2-1400</td></tr>
+      <tr><td class="mono">—</td><td>Jurnal manual (adm bank, penyesuaian)</td><td><span class="chip c-keu">Keuangan</span></td><td class="mono jr">Bebas — wajib balance</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note"><b>Prinsip yang dijaga sistem</b> (tidak bisa dilanggar pengguna): dana jamaah adalah <b>liabilitas</b> sampai keberangkatan (akad wakalah/ijarah, PSAK 72) · setiap keberangkatan = <b>cost center</b> · setiap jurnal balance · setiap mutasi terekam audit log.</div>
+
+  <!-- ====== 5. Skenario ====== -->
+  <h2>5 · Skenario Cepat per Peran</h2>
+  <div class="scen">
+    <div class="card"><b><span class="chip c-mkt">Marketing</span> — hari kerja biasa</b>
+      <p><span class="mono">/paket</span> tambah paket/jadwal → <span class="mono">/marketing</span> registrasi agen, cek leads &amp; konversi, setujui komisi → dampingi calon jamaah di <span class="mono">/daftar</span> dengan kode referral agen.</p></div>
+    <div class="card"><b><span class="chip c-ops">Operasional</span> — menjelang keberangkatan</b>
+      <p><span class="mono">/jamaah</span> tab <i>Dokumen Belum Lengkap</i> → verifikasi/tolak → <span class="mono">/operasional</span> perbarui visa &amp; PNR → <span class="mono">/laporan-operasional</span> tab <i>Kesiapan</i>: kejar metrik merah.</p></div>
+    <div class="card"><b><span class="chip c-keu">Keuangan</span> — siklus harian &amp; bulanan</b>
+      <p><span class="mono">/pembayaran</span> verifikasi setoran (kwitansi &amp; jurnal otomatis) → <span class="mono">/keuangan/input</span> bayar vendor &amp; posting PSAK 72 saat keberangkatan → akhir bulan: rekonsiliasi bank → <span class="mono">/laporan-keuangan</span> + ekspor.</p></div>
+    <div class="card"><b><span class="chip c-pim">Pimpinan</span> &amp; <span class="chip c-jam">Jamaah</span></b>
+      <p>Pimpinan: cukup dashboard <span class="mono">/</span> + kedua laporan — angka live dari jurnal, tanpa risiko mengubah data. Jamaah: daftar di <span class="mono">/daftar</span>, simpan nomor registrasi, pantau semuanya di <span class="mono">/portal</span> (login No. Registrasi + NIK).</p></div>
+  </div>
+
+  <footer>Panduan Pengguna Safar · PT Safar Barokah Wisata · dokumen internal — versi Markdown: docs/PANDUAN-PENGGUNA.md</footer>
+</div>
+</body>
+</html>
