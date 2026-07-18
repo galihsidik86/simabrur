@@ -11,7 +11,7 @@
 [![Akuntansi](https://img.shields.io/badge/Akuntansi-PSAK%2072-b8860b)](PLAN.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Implementasi full-stack dari mockup desain di repo ini (file `*.dc.html`). Rencana lengkap dan pembagian fase: lihat **PLAN.md**.
+Implementasi full-stack dari mockup desain di repo ini (file `*.dc.html`). Rencana lengkap dan pembagian fase: lihat **PLAN.md**. Panduan pemakaian per peran dan alur transaksi: **[docs/PANDUAN-PENGGUNA.md](docs/PANDUAN-PENGGUNA.md)**.
 
 ## Tampilan Aplikasi
 
