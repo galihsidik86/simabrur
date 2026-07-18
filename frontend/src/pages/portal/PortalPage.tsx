@@ -14,6 +14,7 @@ portalApi.interceptors.request.use((config) => {
 });
 
 interface PortalData {
+  mabrur: { phone: string; initialPassword: string; appUrl: string; syncedAt: string } | null;
   profile: { name: string; regNumber: string; nik: string; passportNo: string | null; passportExpiry: string | null; mahram: string | null; branch: string };
   trip: {
     packageName: string; durationDays: number; departureDate: string; returnDate: string; daysLeft: number;
@@ -217,6 +218,27 @@ function TabBeranda({ d, go }: { d: PortalData; go: (t: Tab) => void }) {
                   <span className="text-muted-3">›</span>
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Aplikasi lapangan Mabrur */}
+        {d.mabrur && (
+          <div className="rounded-[14px] p-3.5 text-white shadow-card" style={{ background: 'linear-gradient(135deg,#8B2E2E,#6E2424)' }}>
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-white/15 font-display text-[15px]">M</span>
+              <div>
+                <div className="text-[12.5px] font-bold">Aplikasi Pendamping Mabrur</div>
+                <div className="text-[10px] text-white/75">Panduan ibadah, peta miqat & SOS selama di tanah suci</div>
+              </div>
+            </div>
+            <div className="mt-2.5 rounded-[10px] bg-white/10 px-3 py-2.5 text-[11.5px]">
+              <div className="flex justify-between py-0.5"><span className="text-white/75">Login (No. HP)</span><span className="font-mono font-bold">{d.mabrur.phone}</span></div>
+              <div className="flex justify-between py-0.5"><span className="text-white/75">Password awal</span><span className="font-mono font-bold tracking-[2px]">{d.mabrur.initialPassword}</span></div>
+            </div>
+            <div className="mt-2 text-[10px] leading-relaxed text-white/75">
+              Unduh aplikasi dari petugas rombongan atau <span className="font-semibold text-white">{d.mabrur.appUrl.replace('https://', '')}</span>.
+              Segera ganti password setelah login pertama (menu Profil).
             </div>
           </div>
         )}

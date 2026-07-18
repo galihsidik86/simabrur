@@ -25,6 +25,12 @@ export const env = {
     refreshSecret: required('JWT_REFRESH_SECRET'),
     accessTtl: process.env.JWT_ACCESS_TTL ?? '15m',
     refreshTtlDays: Number(process.env.JWT_REFRESH_TTL_DAYS ?? 7)
+  },
+  /** Integrasi Mabrur (aplikasi lapangan) — opsional; kosong = sinkron dinonaktifkan. */
+  mabrur: {
+    apiUrl: (process.env.MABRUR_API_URL ?? '').replace(/\/$/, ''),
+    serviceToken: process.env.MABRUR_SERVICE_TOKEN ?? '',
+    encryptionKey: process.env.SAFAR_ENCRYPTION_KEY ?? ''
   }
 };
 

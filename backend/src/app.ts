@@ -20,6 +20,7 @@ import { financeReportsRoutes } from './modules/reports/finance.routes.js';
 import { portalRoutes } from './modules/portal/portal.routes.js';
 import { auditLogsRoutes, rolesRoutes, usersRoutes } from './modules/admin/admin.routes.js';
 import { agentsRoutes, commissionsRoutes, leadsRoutes } from './modules/marketing/marketing.routes.js';
+import { mabrurRoutes } from './modules/mabrur/mabrur.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -113,6 +114,7 @@ export function createApp() {
   app.use('/v1/agents', agentsRoutes);
   app.use('/v1/leads', leadsRoutes);
   app.use('/v1/commissions', commissionsRoutes);
+  app.use('/v1/mabrur', mabrurRoutes);
   app.use('/v1/accounts', accountsRoutes);
   app.use('/v1/cost-centers', costCentersRoutes);
   app.use('/v1/journals', journalsRoutes);

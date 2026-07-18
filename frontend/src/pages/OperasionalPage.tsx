@@ -239,6 +239,26 @@ function RombonganModal({ departureId, groups, onClose }: { departureId: string;
     onError: onErr
   });
 
+  interface SyncSummary {
+    created: number; updated: number; schedules: number;
+    conflicts: { phone: string; message?: string }[];
+    skipped: { name: string; reason: string }[];
+  }
+  const [syncResult, setSyncResult] = useState<Record<string, SyncSummary>>({});
+  const [showCreds, setShowCreds] = useState<string | null>(null);
+  const [creds, setCreds] = useState<{ name: string; phone: string; initialPassword: string }[]>([]);
+
+  const syncMabrur = useMutation({
+    mutationFn: async (groupId: string) => (await api.post(`/mabrur/groups/${groupId}/sync`)).data.data as SyncSummary & { groupId: string },
+    onSuccess: (d, groupId) => { setError(''); setSyncResult({ ...syncResult, [groupId]: d }); refresh(); },
+    onError: onErr
+  });
+  const loadCreds = useMutation({
+    mutationFn: async (groupId: string) => (await api.get(`/mabrur/groups/${groupId}/credentials`)).data.data,
+    onSuccess: (d, groupId) => { setCreds(d); setShowCreds(groupId); },
+    onError: onErr
+  });
+
   const ROLE_LABEL = { muthawwif: 'Muthawwif', tour_leader: 'Tour Leader' } as const;
 
   return (
@@ -252,10 +272,52 @@ function RombonganModal({ departureId, groups, onClose }: { departureId: string;
         <div className="mt-4 flex flex-col gap-3">
           {groups.map((g) => (
             <div key={g.id} className="rounded-[11px] border border-line-3 bg-panel p-3.5">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
                 <span className="text-[13px] font-semibold">{g.name}</span>
-                <span className="font-mono text-[11px] text-muted-2">{g.memberCount}/{g.capacity} jamaah</span>
+                {g.mabrurSyncedAt && (
+                  <span className="rounded-pill bg-[oklch(0.95_0.03_158)] px-2 py-[2px] text-[9.5px] font-semibold text-[oklch(0.42_0.07_158)]">
+                    ✓ Mabrur {new Date(g.mabrurSyncedAt).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+                <span className="ml-auto font-mono text-[11px] text-muted-2">{g.memberCount}/{g.capacity} jamaah</span>
+                <button onClick={() => syncMabrur.mutate(g.id)} disabled={syncMabrur.isPending}
+                  className="cursor-pointer rounded-[8px] bg-gold-bright px-2.5 py-1 text-[10.5px] font-bold text-[#20180a] disabled:opacity-60">
+                  {syncMabrur.isPending ? 'Sinkron…' : g.mabrurSyncedAt ? 'Sinkron Ulang' : 'Sinkron ke Mabrur'}
+                </button>
               </div>
+              {syncResult[g.id] && (
+                <div className="mt-2 rounded-[8px] border border-[oklch(0.9_0.03_158)] bg-[oklch(0.97_0.02_158)] px-3 py-2 text-[11px] text-[#3a5a45]">
+                  Tersinkron: <b>{syncResult[g.id].created} akun baru</b> · {syncResult[g.id].updated} diperbarui · {syncResult[g.id].schedules} agenda
+                  {syncResult[g.id].conflicts.length > 0 && (
+                    <div className="mt-1 text-danger-deep">Konflik: {syncResult[g.id].conflicts.map((c) => `${c.phone} (${c.message})`).join('; ')}</div>
+                  )}
+                  {syncResult[g.id].skipped.length > 0 && (
+                    <div className="mt-1 text-[oklch(0.45_0.1_78)]">Dilewati: {syncResult[g.id].skipped.map((s) => `${s.name} — ${s.reason}`).join('; ')}</div>
+                  )}
+                  <button onClick={() => loadCreds.mutate(g.id)} className="mt-1 cursor-pointer font-semibold text-primary hover:underline">
+                    Lihat kredensial awal →
+                  </button>
+                </div>
+              )}
+              {showCreds === g.id && (
+                <div className="mt-2 overflow-hidden rounded-[8px] border border-line-2 bg-white">
+                  <table className="w-full text-[11px]">
+                    <thead><tr className="bg-thead text-left text-[9.5px] uppercase text-muted-3">
+                      <th className="px-3 py-1.5 font-semibold">Nama</th><th className="px-3 py-1.5 font-semibold">No. HP (login)</th><th className="px-3 py-1.5 font-semibold">Password awal</th>
+                    </tr></thead>
+                    <tbody>
+                      {creds.map((c) => (
+                        <tr key={c.phone} className="border-t border-line-3">
+                          <td className="px-3 py-1.5 font-medium">{c.name}</td>
+                          <td className="px-3 py-1.5 font-mono">{c.phone}</td>
+                          <td className="px-3 py-1.5 font-mono font-bold">{c.initialPassword}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="px-3 py-1.5 text-[9.5px] text-muted-3">Jamaah juga melihat kredensialnya sendiri di portal. Sarankan ganti password setelah login pertama.</div>
+                </div>
+              )}
               <div className="mt-2 flex flex-col gap-1.5">
                 {g.staff.map((s) => (
                   <div key={s.id} className="flex items-center gap-2 text-[12px]">

@@ -116,7 +116,12 @@ export const portalService = {
       }
     }
 
+    // Kredensial aplikasi lapangan Mabrur (bila rombongan sudah disinkron)
+    const { mabrurService } = await import('../mabrur/mabrur.service.js');
+    const mabrur = await mabrurService.credentialForJamaah(claims.jamaahId).catch(() => null);
+
     return {
+      mabrur,
       profile: {
         name: reg.full_name,
         regNumber: reg.reg_number,
