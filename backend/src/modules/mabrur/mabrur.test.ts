@@ -163,6 +163,17 @@ describe('POST /v1/mabrur/groups/:id/sync', () => {
     expect(res.body.data.group.kloterCode).toBe('MOCK-1');
   });
 
+  it('status lapangan rombongan belum sinkron → 400 dgn pesan jelas', async () => {
+    const ops = await token('ops@safar.co.id');
+    const dep = await db('departures as d').join('packages as p', 'p.id', 'd.package_id')
+      .where('p.code', 'UMR-REG-AT').select('d.id').first();
+    const g = await request(app).post('/v1/groups').set('Authorization', `Bearer ${ops}`)
+      .send({ departureId: dep.id, name: 'Grup Belum Sinkron', capacity: 10 });
+    const res = await request(app).get(`/v1/mabrur/groups/${g.body.data.id}/status`).set('Authorization', `Bearer ${ops}`);
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('belum disinkron');
+  });
+
   it('server Mabrur mati → error jelas, sinkron aman diulang', async () => {
     const ops = await token('ops@safar.co.id');
     const grupA = await db('groups').where({ name: 'Grup A' }).first();

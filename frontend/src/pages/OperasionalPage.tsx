@@ -37,6 +37,7 @@ export function OperasionalPage() {
   const [depId, setDepId] = useState<string>('');
   const [edit, setEdit] = useState<ManifestRow | null>(null);
   const [showGroups, setShowGroups] = useState(false);
+  const [view, setView] = useState<'manifest' | 'lapangan'>('manifest');
 
   const { data: departures } = useQuery({
     queryKey: ['departures-list'],
@@ -90,6 +91,35 @@ export function OperasionalPage() {
         )}
       </div>
 
+      {/* Toggle Manifest | Lapangan */}
+      <div className="mb-4 flex gap-2">
+        {([['manifest', 'Manifest'], ['lapangan', 'Lapangan (live Mabrur)']] as const).map(([k, label]) => (
+          <button key={k} onClick={() => setView(k)}
+            className="cursor-pointer rounded-[8px] border px-3.5 py-[7px] text-[12.5px] font-semibold"
+            style={view === k
+              ? { color: '#fff', background: k === 'lapangan' ? '#8B2E2E' : 'var(--color-primary)', borderColor: k === 'lapangan' ? '#8B2E2E' : 'var(--color-primary)' }
+              : { color: '#6f6858', background: '#fff', borderColor: '#e6ddca' }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'lapangan' && m && (
+        <div className="flex flex-col gap-4">
+          {m.groups.length === 0 && <div className="text-[12.5px] text-muted-2">Belum ada rombongan pada keberangkatan ini.</div>}
+          {m.groups.map((g) =>
+            g.mabrurSyncedAt ? (
+              <LapanganPanel key={g.id} group={g} />
+            ) : (
+              <div key={g.id} className="rounded-card border border-line bg-card p-5 text-[12.5px] text-muted-2 shadow-card">
+                <b className="text-ink">{g.name}</b> belum disinkron ke Mabrur — buka <b>Kelola Rombongan</b> → Sinkron ke Mabrur untuk mengaktifkan monitoring lapangan.
+              </div>
+            )
+          )}
+        </div>
+      )}
+
+      {view === 'manifest' && (
       <div className="overflow-hidden rounded-card border border-line bg-card shadow-card">
         <div className="border-b border-line-3 px-5 py-4 text-[14px] font-semibold">
           Manifest Keberangkatan <span className="text-[11px] font-normal text-muted-4">— data untuk pengajuan visa & maskapai</span>
@@ -140,9 +170,144 @@ export function OperasionalPage() {
           </tbody>
         </table>
       </div>
+      )}
 
       {edit && <EditOpsModal row={edit} departureId={selected} groups={m?.groups ?? []} onClose={() => setEdit(null)} />}
       {showGroups && m && <RombonganModal departureId={selected} groups={m.groups} onClose={() => setShowGroups(false)} />}
+    </div>
+  );
+}
+
+/* ===== Panel monitoring lapangan (live dari Mabrur via proxy, refresh 30 dtk) ===== */
+interface FieldStatus {
+  group: { id: string; name: string; kloterCode: string };
+  stats: { total: number; safe: number; attention: number };
+  members: {
+    id: string; name: string; phone: string; role_in_group: 'jamaah' | 'muthawwif';
+    location: { lat: number; lng: number; updated_at: string } | null;
+    ihram: { is_ihram: boolean; niat_type: string | null };
+    nearest_miqat: { name: string; distance: number } | null;
+    status: 'safe' | 'attention';
+  }[];
+  sos: { id: string; category: string; lat: number | null; lng: number | null; created_at: string; user_name: string; user_phone: string }[];
+}
+
+const SOS_CATEGORY: Record<string, string> = { medis: 'Darurat Medis', tersesat: 'Tersesat', kehilangan: 'Kehilangan' };
+
+function waLink(phone: string, msg: string) {
+  return `https://wa.me/${phone.replace(/^0/, '62')}?text=${encodeURIComponent(msg)}`;
+}
+function fmtDistance(m: number) {
+  return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m} m`;
+}
+function ageMinutes(iso: string) {
+  return Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+}
+
+function LapanganPanel({ group }: { group: GroupRow }) {
+  const { data: d, error, isLoading, dataUpdatedAt } = useQuery({
+    queryKey: ['field-status', group.id],
+    queryFn: async () => (await api.get(`/mabrur/groups/${group.id}/status`)).data.data as FieldStatus,
+    refetchInterval: 30_000,
+    retry: 1
+  });
+
+  if (isLoading) return <div className="rounded-card border border-line bg-card p-5 text-[12.5px] text-muted-2 shadow-card">Memuat status lapangan {group.name}…</div>;
+  if (error || !d) {
+    return (
+      <div className="rounded-card border border-[oklch(0.85_0.08_30)] bg-danger-bg p-5 text-[12.5px] text-danger-deep shadow-card">
+        <b>{group.name}</b> — gagal memuat status dari Mabrur: {(error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'server tidak terjangkau'}
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-card border border-line bg-card shadow-card">
+      <div className="flex items-center gap-3 border-b border-line-3 px-5 py-3.5">
+        <span className="h-[9px] w-[9px] rounded-[3px]" style={{ background: '#8B2E2E' }} />
+        <span className="text-[14px] font-semibold">{d.group.name}</span>
+        <span className="font-mono text-[10.5px] text-muted-4">{d.group.kloterCode}</span>
+        <span className="ml-auto flex gap-3 text-[11.5px]">
+          <span className="font-mono"><b>{d.stats.total}</b> anggota</span>
+          <span className="font-semibold text-[oklch(0.42_0.07_158)]">● {d.stats.safe} aman</span>
+          <span className="font-semibold" style={{ color: d.stats.attention > 0 ? 'oklch(0.5 0.13 28)' : '#a89e88' }}>● {d.stats.attention} perhatian</span>
+        </span>
+        <span className="text-[10px] text-muted-4">diperbarui {new Date(dataUpdatedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+      </div>
+
+      {/* SOS aktif */}
+      {d.sos.map((s) => (
+        <div key={s.id} className="flex items-center gap-3 border-b border-line-3 px-5 py-3" style={{ background: 'oklch(0.96 0.04 30)' }}>
+          <span className="flex h-9 w-9 flex-none animate-pulse items-center justify-center rounded-[10px] text-[15px] font-black text-white" style={{ background: 'oklch(0.55 0.15 28)' }}>!</span>
+          <div className="flex-1">
+            <div className="text-[13px] font-bold text-danger-deep">SOS — {SOS_CATEGORY[s.category] ?? s.category}</div>
+            <div className="text-[11.5px] text-[#5a4238]">{s.user_name} · {s.user_phone} · {ageMinutes(s.created_at)} menit lalu</div>
+          </div>
+          {s.lat != null && (
+            <a href={`https://maps.google.com/?q=${s.lat},${s.lng}`} target="_blank" rel="noreferrer"
+              className="rounded-[8px] border border-[oklch(0.85_0.08_30)] bg-white px-2.5 py-1.5 text-[11px] font-semibold text-danger-deep">
+              Lihat Lokasi
+            </a>
+          )}
+          <a href={waLink(s.user_phone, `Assalamu'alaikum ${s.user_name}, kami dari tim Safar menerima SOS Anda. Mohon balas pesan ini.`)}
+            target="_blank" rel="noreferrer"
+            className="rounded-[8px] bg-[oklch(0.5_0.11_150)] px-2.5 py-1.5 text-[11px] font-semibold text-white">
+            WhatsApp
+          </a>
+          <a href={`tel:${s.user_phone}`} className="rounded-[8px] bg-danger px-2.5 py-1.5 text-[11px] font-semibold text-white">Telepon</a>
+        </div>
+      ))}
+
+      {/* Anggota */}
+      <table className="w-full border-collapse text-[12px]">
+        <thead>
+          <tr className="bg-thead text-left text-[10px] uppercase tracking-[0.4px] text-muted-3">
+            <th className="px-5 py-2.5 font-semibold">Anggota</th>
+            <th className="px-3 py-2.5 font-semibold">Status</th>
+            <th className="px-3 py-2.5 font-semibold">Ihram</th>
+            <th className="px-3 py-2.5 font-semibold">Miqat Terdekat</th>
+            <th className="px-3 py-2.5 font-semibold">Lokasi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[...d.members].sort((a, b) => (a.status === b.status ? 0 : a.status === 'attention' ? -1 : 1)).map((mm) => (
+            <tr key={mm.id} className="border-t border-line-3">
+              <td className="px-5 py-2.5">
+                <span className="font-semibold">{mm.name}</span>
+                {mm.role_in_group === 'muthawwif' && (
+                  <span className="ml-2 rounded-pill px-2 py-[2px] text-[9px] font-bold text-white" style={{ background: '#8B2E2E' }}>MUTHAWWIF</span>
+                )}
+                <div className="font-mono text-[10px] text-muted-4">{mm.phone}</div>
+              </td>
+              <td className="px-3 py-2.5">
+                <span className="rounded-pill px-2.5 py-[3px] text-[10.5px] font-semibold"
+                  style={mm.status === 'safe'
+                    ? { color: 'oklch(0.42 0.07 158)', background: 'oklch(0.95 0.03 158)' }
+                    : { color: '#fff', background: 'oklch(0.55 0.15 28)' }}>
+                  {mm.status === 'safe' ? 'Aman' : 'Perlu Perhatian'}
+                </span>
+              </td>
+              <td className="px-3 py-2.5 text-[11.5px]">
+                {mm.ihram.is_ihram
+                  ? <span className="font-semibold text-[oklch(0.42_0.07_158)]">✓ Ihram{mm.ihram.niat_type ? ` (${mm.ihram.niat_type})` : ''}</span>
+                  : <span className="text-muted-3">Belum</span>}
+              </td>
+              <td className="px-3 py-2.5 text-[11.5px] text-muted">
+                {mm.nearest_miqat ? <>{mm.nearest_miqat.name} · <span className="font-mono">{fmtDistance(mm.nearest_miqat.distance)}</span></> : '—'}
+              </td>
+              <td className="px-3 py-2.5 text-[11.5px]">
+                {mm.location ? (
+                  <a href={`https://maps.google.com/?q=${mm.location.lat},${mm.location.lng}`} target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline">
+                    {ageMinutes(mm.location.updated_at)} mnt lalu ↗
+                  </a>
+                ) : (
+                  <span className="text-muted-4">belum ada sinyal</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
