@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { BackButton } from '../components/BackButton';
 import { fmtShort, fmtFull, fmtDate, age } from '../utils/format';
 
 /* ============ Tipe & konstanta (struktur data persis mockup Pendaftaran Jamaah) ============ */
@@ -154,6 +155,9 @@ export function DaftarWizard() {
           <div>
             <div className="font-display text-[19px] leading-none text-ink-strong">Safar</div>
             <div className="mt-[3px] text-[10.5px] uppercase tracking-[1px] text-muted-3">Pendaftaran Jamaah Online</div>
+          </div>
+          <div className="ml-auto">
+            <BackButton fallback="/login" label="← Keluar dari pendaftaran" />
           </div>
         </div>
 

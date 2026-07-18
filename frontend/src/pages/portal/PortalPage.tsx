@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { fmtShort, fmtFull, fmtDate } from '../../utils/format';
+import { BackButton } from '../../components/BackButton';
 
 /* ===== API portal (token terpisah dari staf) ===== */
 const portalApi = axios.create({ baseURL: '/v1/portal' });
@@ -72,6 +73,9 @@ function PortalLogin({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="flex min-h-screen items-center justify-center p-6" style={{ background: 'radial-gradient(circle at 30% 20%, #e7ddc9, #d5cab4)' }}>
       <form onSubmit={submit} className="w-[380px] max-w-full rounded-[24px] bg-card p-7 shadow-float">
+        <div className="mb-4">
+          <BackButton fallback="/login" />
+        </div>
         <div className="flex items-center gap-3">
           <div className="flex h-[42px] w-[42px] items-center justify-center rounded-[11px] bg-gold font-display text-[22px] text-[#20180a]">S</div>
           <div>

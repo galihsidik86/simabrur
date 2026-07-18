@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../store/auth';
+import { BackButton } from '../components/BackButton';
 
 export function Login() {
   const { login } = useAuth();
@@ -62,7 +63,10 @@ export function Login() {
 
         {/* Form */}
         <form onSubmit={onSubmit} className="flex-1 bg-card p-9">
-          <div className="font-display text-[24px] text-ink-strong">Masuk</div>
+          <div className="flex items-start justify-between">
+            <div className="font-display text-[24px] text-ink-strong">Masuk</div>
+            <BackButton fallback="/daftar" />
+          </div>
           <div className="mt-1 text-[12.5px] text-muted-2">Gunakan akun yang terdaftar pada sistem.</div>
 
           <div className="mt-7">
