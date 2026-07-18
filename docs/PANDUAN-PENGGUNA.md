@@ -107,3 +107,57 @@ Semua jurnal dibuat mesin melalui satu pintu (*journal engine*) dan **wajib bala
 **Pimpinan**: cukup `/` (dashboard), `/laporan-keuangan`, `/laporan-operasional` — semua angka live dari jurnal, tanpa risiko mengubah data.
 
 **Jamaah**: daftar di `/daftar` → simpan nomor registrasi → pantau semuanya di `/portal` (bayar VA BSI, unggah kekurangan dokumen dari ponsel).
+
+---
+
+## 6. Skenario Lengkap: Satu Jamaah dari Pendaftaran sampai Laporan Keuangan
+
+Contoh utuh dengan angka konsisten — **Bpk. Hasan Basri**, paket **Umrah Plus Turki Rp 39.900.000** (kamar Quad), skema **Cicilan**, mendaftar lewat **agen Barokah Tour (BRKH-07, komisi 3%)**. Porsi biaya vendor untuk jamaah ini Rp 29.500.000 (hotel 13,5 jt · tiket 11 jt · visa 3 jt · katering 2 jt).
+
+### Langkah & jurnal yang terbentuk
+
+| # | Kejadian | Siapa & di mana | Jurnal otomatis | Efek di laporan |
+|---|---|---|---|---|
+| 1 | Hasan mengisi wizard `/daftar` + kode `BRKH-07` → nomor `UMR-2026-05xx` | Jamaah | *(belum ada jurnal)* — invoice 39,9 jt + 6 termin terbit (DP 5 jt + 4×6,9 jt + 7,3 jt); komisi 1.197.000 tercatat *pending* | Belum ada — belum ada uang berpindah |
+| 2 | Operasional memverifikasi 5 dokumen | Ops · `/jamaah/:id` | — (registrasi jadi **Aktif**) | Laporan kepatuhan dokumen: Hasan hijau |
+| 3 | Hasan membayar DP 5 jt via VA → Keuangan verifikasi | Keuangan · `/pembayaran` | **Dr** 1-1200 Bank 5.000.000 · **Cr** 2-1100 Uang Muka Jamaah 5.000.000 | **Neraca**: Bank +5 jt, Liabilitas +5 jt. **Laba Rugi: TIDAK berubah** — uang jamaah bukan pendapatan |
+| 4 | Seluruh termin lunas (total 39,9 jt) | Keuangan | Akumulasi: **Dr** Bank 39,9 jt · **Cr** 2-1100 39,9 jt (+ kwitansi tiap pembayaran) | Neraca: Bank 39,9 · Uang Muka Jamaah 39,9. Kartu piutang: **Lunas** |
+| 5 | Keuangan bayar DP vendor porsi Hasan 29,5 jt | Keuangan · `/keuangan/input` → Biaya | **Dr** 1-1400 Uang Muka Vendor 29,5 jt · **Cr** 1-1200 Bank 29,5 jt | Neraca: komposisi aset berubah (bank ↓, uang muka vendor ↑) — total tetap. LR masih nol |
+| 6 | **Tanggal keberangkatan** — pengakuan pendapatan + HPP (PSAK 72) | Keuangan · `/keuangan/input` → Pengakuan Pendapatan | **Dr** 2-1100 39,9 jt · **Cr** 4-1000 39,9 jt — lalu **Dr** 5-2000 13,5 + 5-1000 11 + 5-3000 3 + 5-4000 2 · **Cr** 1-1400 29,5 jt | **Baru sekarang LR terisi**: pendapatan 39,9 · HPP 29,5 · **laba kotor 10,4 jt**. Liabilitas 2-1100 kembali 0 |
+| 7 | Marketing/Keuangan menyetujui komisi | `/marketing` → Setujui & Posting | **Dr** 6-2000 Beban Komisi 1.197.000 · **Cr** 2-1400 Hutang Komisi 1.197.000 | LR: beban ops +1,197 jt → **laba bersih 9.203.000** |
+| 8 | Bayar komisi ke rekening agen | Keuangan · jurnal manual | **Dr** 2-1400 1.197.000 · **Cr** 1-1200 Bank 1.197.000 | Hutang komisi lunas; kas akhir = laba bersih |
+
+### Saldo berjalan — bukti neraca selalu seimbang (dalam ribuan Rp)
+
+| Setelah langkah… | 1-1200 Bank | 1-1400 UM Vendor | 2-1100 UM Jamaah | 2-1400 Ht. Komisi | Laba (ekuitas) | Aset = Liab+Ekuitas? |
+|---|--:|--:|--:|--:|--:|:-:|
+| 4 · semua termin lunas | 39.900 | 0 | 39.900 | 0 | 0 | ✅ 39.900 = 39.900 |
+| 5 · DP vendor | 10.400 | 29.500 | 39.900 | 0 | 0 | ✅ 39.900 = 39.900 |
+| 6 · keberangkatan (PSAK 72) | 10.400 | 0 | 0 | 0 | 10.400 | ✅ 10.400 = 10.400 |
+| 7 · komisi diakui | 10.400 | 0 | 0 | 1.197 | 9.203 | ✅ 10.400 = 10.400 |
+| 8 · komisi dibayar | 9.203 | 0 | 0 | 0 | 9.203 | ✅ 9.203 = 9.203 |
+
+### Tampilannya di `/laporan-keuangan` (kontribusi Hasan saja)
+
+**Tab Laba Rugi** — terisi hanya setelah langkah 6:
+
+```
+Pendapatan Usaha
+  4-1000  Pendapatan Jasa Umrah          39.900.000
+Beban Pokok Jasa (HPP)
+  5-1000  Beban Tiket Maskapai           11.000.000
+  5-2000  Beban Hotel & Akomodasi        13.500.000
+  5-3000  Beban Visa                      3.000.000
+  5-4000  Beban Katering / Konsumsi       2.000.000
+  Total HPP                              29.500.000
+LABA KOTOR                               10.400.000   (margin 26%)
+Beban Operasional
+  6-2000  Beban Komisi Agen               1.197.000
+LABA BERSIH                               9.203.000
+```
+
+**Tab Neraca** (setelah langkah 8): Aset = Bank 9.203.000; Liabilitas = 0; Ekuitas = Laba Tahun Berjalan 9.203.000 → **✓ Neraca seimbang**. Kas yang tersisa persis sama dengan laba bersih — semua titipan jamaah sudah "ditunaikan" menjadi jasa.
+
+**Tab Laba Rugi per Paket**: baris *Plus Turki* bertambah — jamaah +1, pendapatan +39,9 jt, laba kotor +10,4 jt. Jejak yang sama terlihat di **dashboard** (Profitabilitas per Paket), **buku besar** tiap akun (`/keuangan/coa`), dan **audit log** (`/admin`).
+
+> **Pelajaran kunci skenario ini**: selama uang jamaah masuk (langkah 3–4) laporan laba rugi *sengaja tidak bergerak* — itulah inti PSAK 72/akad wakalah yang dijaga sistem. Pendapatan dan laba baru muncul saat jasa ditunaikan (keberangkatan).

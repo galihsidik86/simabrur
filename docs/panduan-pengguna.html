@@ -216,6 +216,76 @@
       <p>Pimpinan: cukup dashboard <span class="mono">/</span> + kedua laporan — angka live dari jurnal, tanpa risiko mengubah data. Jamaah: daftar di <span class="mono">/daftar</span>, simpan nomor registrasi, pantau semuanya di <span class="mono">/portal</span> (login No. Registrasi + NIK).</p></div>
   </div>
 
+  <!-- ====== 6. Skenario lengkap ====== -->
+  <h2>6 · Skenario Lengkap: Satu Jamaah dari Pendaftaran sampai Laporan Keuangan</h2>
+  <p class="sub">
+    <b>Bpk. Hasan Basri</b> · paket <b>Umrah Plus Turki Rp 39.900.000</b> (Quad) · skema <b>Cicilan</b> · lewat agen <b>Barokah Tour (BRKH-07, komisi 3%)</b>.
+    Porsi biaya vendor jamaah ini Rp 29.500.000 (hotel 13,5 jt · tiket 11 jt · visa 3 jt · katering 2 jt).
+  </p>
+
+  <div class="card tscroll"><table>
+    <thead><tr><th style="width:26px">#</th><th>Kejadian</th><th style="width:96px">Siapa</th><th>Jurnal otomatis</th><th>Efek di laporan</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Hasan mengisi wizard <span class="mono">/daftar</span> + kode <span class="mono">BRKH-07</span></td><td><span class="chip c-jam">Jamaah</span></td><td class="jr"><i>(belum ada jurnal)</i> — invoice 39,9 jt + 6 termin terbit; komisi 1.197.000 <i>pending</i></td><td>Belum ada — belum ada uang berpindah</td></tr>
+      <tr><td>2</td><td>Verifikasi 5 dokumen → registrasi <b>Aktif</b></td><td><span class="chip c-ops">Ops</span></td><td class="jr">—</td><td>Laporan kepatuhan dokumen: hijau</td></tr>
+      <tr><td>3</td><td>Bayar DP 5 jt via VA → diverifikasi</td><td><span class="chip c-keu">Keuangan</span></td><td class="mono jr">Dr 1-1200 Bank 5.000.000<br>Cr 2-1100 UM Jamaah 5.000.000</td><td><b>Neraca</b> bergerak; <b>Laba Rugi TIDAK</b> — uang jamaah bukan pendapatan</td></tr>
+      <tr><td>4</td><td>Seluruh termin lunas (39,9 jt) + kwitansi per pembayaran</td><td><span class="chip c-keu">Keuangan</span></td><td class="mono jr">Σ Dr Bank 39,9 jt · Cr 2-1100 39,9 jt</td><td>Kartu piutang: <b>Lunas</b></td></tr>
+      <tr><td>5</td><td>Bayar DP vendor porsi Hasan 29,5 jt</td><td><span class="chip c-keu">Keuangan</span></td><td class="mono jr">Dr 1-1400 UM Vendor 29,5 jt<br>Cr 1-1200 Bank 29,5 jt</td><td>Komposisi aset berubah — total tetap; LR masih nol</td></tr>
+      <tr><td>6</td><td><b>Tanggal keberangkatan</b> — PSAK 72</td><td><span class="chip c-keu">Keuangan</span></td><td class="mono jr">Dr 2-1100 39,9 · Cr 4-1000 39,9<br>Dr 5-2000 13,5 + 5-1000 11 + 5-3000 3 + 5-4000 2 · Cr 1-1400 29,5</td><td><b>Baru sekarang LR terisi</b>: laba kotor <b>10,4 jt</b>; liabilitas 2-1100 kembali 0</td></tr>
+      <tr><td>7</td><td>Komisi disetujui</td><td><span class="chip c-mkt">Mkt</span></td><td class="mono jr">Dr 6-2000 1.197.000<br>Cr 2-1400 1.197.000</td><td>Laba bersih → <b>9.203.000</b></td></tr>
+      <tr><td>8</td><td>Komisi dibayar ke agen (jurnal manual)</td><td><span class="chip c-keu">Keuangan</span></td><td class="mono jr">Dr 2-1400 1.197.000<br>Cr 1-1200 Bank 1.197.000</td><td>Hutang lunas; kas akhir = laba bersih</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 style="font-family:'Marcellus',serif; font-weight:400; font-size:15px; margin:20px 0 6px;">Saldo berjalan — bukti neraca selalu seimbang <span style="font-size:11px; color:var(--mut3)">(ribuan Rp)</span></h3>
+  <div class="card tscroll"><table>
+    <thead><tr><th>Setelah langkah…</th><th style="text-align:right">1-1200 Bank</th><th style="text-align:right">1-1400 UM Vendor</th><th style="text-align:right">2-1100 UM Jamaah</th><th style="text-align:right">2-1400 Ht. Komisi</th><th style="text-align:right">Laba (ekuitas)</th><th style="text-align:center">Seimbang?</th></tr></thead>
+    <tbody class="mono" style="font-size:11px">
+      <tr><td style="font-family:'Plus Jakarta Sans'">4 · semua termin lunas</td><td align="right">39.900</td><td align="right">0</td><td align="right">39.900</td><td align="right">0</td><td align="right">0</td><td align="center">✅ 39.900 = 39.900</td></tr>
+      <tr><td style="font-family:'Plus Jakarta Sans'">5 · DP vendor</td><td align="right">10.400</td><td align="right">29.500</td><td align="right">39.900</td><td align="right">0</td><td align="right">0</td><td align="center">✅ 39.900 = 39.900</td></tr>
+      <tr><td style="font-family:'Plus Jakarta Sans'">6 · keberangkatan (PSAK 72)</td><td align="right">10.400</td><td align="right">0</td><td align="right">0</td><td align="right">0</td><td align="right">10.400</td><td align="center">✅ 10.400 = 10.400</td></tr>
+      <tr><td style="font-family:'Plus Jakarta Sans'">7 · komisi diakui</td><td align="right">10.400</td><td align="right">0</td><td align="right">0</td><td align="right">1.197</td><td align="right">9.203</td><td align="center">✅ 10.400 = 10.400</td></tr>
+      <tr><td style="font-family:'Plus Jakarta Sans'">8 · komisi dibayar</td><td align="right">9.203</td><td align="right">0</td><td align="right">0</td><td align="right">0</td><td align="right">9.203</td><td align="center">✅ 9.203 = 9.203</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 style="font-family:'Marcellus',serif; font-weight:400; font-size:15px; margin:20px 0 6px;">Tampilannya di <span class="mono" style="font-size:12px">/laporan-keuangan</span> — kontribusi Hasan saja</h3>
+  <div style="display:grid; grid-template-columns:1.2fr 1fr; gap:12px;" class="scen">
+    <div class="card" style="padding:16px 18px;">
+      <div style="text-align:center; font-family:'Marcellus',serif; font-size:15px;">Laporan Laba Rugi</div>
+      <div style="text-align:center; font-size:10px; color:var(--mut3); margin-bottom:8px;">terisi hanya setelah langkah 6</div>
+      <table style="font-size:11px;">
+        <tbody>
+          <tr><td style="border:0; padding:4px 0; color:var(--ok); font-weight:700; font-size:10px; text-transform:uppercase; border-bottom:2px solid var(--ok);" colspan="2">Pendapatan Usaha</td></tr>
+          <tr><td style="border:0; padding:3px 0 3px 12px;"><span class="mono" style="font-size:10px; color:var(--mut4)">4-1000</span> Pendapatan Jasa Umrah</td><td class="mono" style="border:0; text-align:right;">39.900.000</td></tr>
+          <tr><td style="border:0; padding:4px 0; color:var(--ok); font-weight:700; font-size:10px; text-transform:uppercase; border-bottom:2px solid var(--ok);" colspan="2">Beban Pokok Jasa (HPP)</td></tr>
+          <tr><td style="border:0; padding:3px 0 3px 12px;"><span class="mono" style="font-size:10px; color:var(--mut4)">5-1000</span> Beban Tiket Maskapai</td><td class="mono" style="border:0; text-align:right;">11.000.000</td></tr>
+          <tr><td style="border:0; padding:3px 0 3px 12px;"><span class="mono" style="font-size:10px; color:var(--mut4)">5-2000</span> Beban Hotel &amp; Akomodasi</td><td class="mono" style="border:0; text-align:right;">13.500.000</td></tr>
+          <tr><td style="border:0; padding:3px 0 3px 12px;"><span class="mono" style="font-size:10px; color:var(--mut4)">5-3000</span> Beban Visa</td><td class="mono" style="border:0; text-align:right;">3.000.000</td></tr>
+          <tr><td style="border:0; padding:3px 0 3px 12px;"><span class="mono" style="font-size:10px; color:var(--mut4)">5-4000</span> Beban Katering</td><td class="mono" style="border:0; text-align:right;">2.000.000</td></tr>
+          <tr><td style="border:0; padding:4px 0; font-weight:700; border-top:1px solid var(--line2);">LABA KOTOR <span style="font-weight:400; font-size:10px; color:var(--mut3)">(margin 26%)</span></td><td class="mono" style="border:0; text-align:right; font-weight:700; border-top:1px solid var(--line2);">10.400.000</td></tr>
+          <tr><td style="border:0; padding:3px 0 3px 12px;"><span class="mono" style="font-size:10px; color:var(--mut4)">6-2000</span> Beban Komisi Agen</td><td class="mono" style="border:0; text-align:right;">1.197.000</td></tr>
+          <tr><td style="border:0; padding:6px 8px; font-weight:800; background:var(--okbg); border-radius:7px;">LABA BERSIH</td><td class="mono" style="border:0; text-align:right; font-weight:800; background:var(--okbg); border-radius:7px;">9.203.000</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card" style="padding:16px 18px;">
+      <div style="text-align:center; font-family:'Marcellus',serif; font-size:15px;">Neraca <span style="font-size:10px; color:var(--mut3)">(setelah langkah 8)</span></div>
+      <table style="font-size:11px; margin-top:8px;">
+        <tbody>
+          <tr><td style="border:0; padding:3px 0;">Bank — IDR (1-1200)</td><td class="mono" style="border:0; text-align:right;">9.203.000</td></tr>
+          <tr><td style="border:0; padding:3px 0; font-weight:700; border-top:1px solid var(--line2);">Total Aset</td><td class="mono" style="border:0; text-align:right; font-weight:700; border-top:1px solid var(--line2);">9.203.000</td></tr>
+          <tr><td style="border:0; padding:3px 0;">Total Liabilitas</td><td class="mono" style="border:0; text-align:right;">0</td></tr>
+          <tr><td style="border:0; padding:3px 0;">Laba Tahun Berjalan (3-3000)</td><td class="mono" style="border:0; text-align:right;">9.203.000</td></tr>
+          <tr><td style="border:0; padding:3px 0; font-weight:700; border-top:1px solid var(--line2);">Total Liabilitas + Ekuitas</td><td class="mono" style="border:0; text-align:right; font-weight:700; border-top:1px solid var(--line2);">9.203.000</td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top:10px; background:var(--okbg); border-radius:8px; padding:8px 10px; font-size:11px; text-align:center; color:#3a5a45; font-weight:600;">✓ Neraca seimbang — kas tersisa = laba bersih</div>
+      <p style="font-size:10.5px; color:var(--mut2); margin:10px 0 0;">Jejak yang sama terlihat di <b>Laba Rugi per Paket</b> (baris Plus Turki: jamaah +1, laba kotor +10,4 jt), <b>dashboard</b>, <b>buku besar</b> tiap akun, dan <b>audit log</b>.</p>
+    </div>
+  </div>
+  <div class="note"><b>Pelajaran kunci</b>: selama uang jamaah masuk (langkah 3–4) laporan laba rugi <i>sengaja tidak bergerak</i> — itulah inti PSAK 72/akad wakalah yang dijaga sistem. Pendapatan &amp; laba baru muncul saat jasa ditunaikan (keberangkatan, langkah 6).</div>
+
   <footer>Panduan Pengguna Safar · PT Safar Barokah Wisata · dokumen internal — versi Markdown: docs/PANDUAN-PENGGUNA.md</footer>
 </div>
 </body>
