@@ -161,3 +161,19 @@ LABA BERSIH                               9.203.000
 **Tab Laba Rugi per Paket**: baris *Plus Turki* bertambah — jamaah +1, pendapatan +39,9 jt, laba kotor +10,4 jt. Jejak yang sama terlihat di **dashboard** (Profitabilitas per Paket), **buku besar** tiap akun (`/keuangan/coa`), dan **audit log** (`/admin`).
 
 > **Pelajaran kunci skenario ini**: selama uang jamaah masuk (langkah 3–4) laporan laba rugi *sengaja tidak bergerak* — itulah inti PSAK 72/akad wakalah yang dijaga sistem. Pendapatan dan laba baru muncul saat jasa ditunaikan (keberangkatan).
+
+---
+
+## 7. Alur Lapangan — Integrasi Aplikasi Mabrur
+
+Menjelang dan selama keberangkatan, Safar terhubung dengan **aplikasi mobile Mabrur** (panduan ibadah, geofence miqat, penghitung tawaf/sa'i, SOS).
+
+| # | Langkah | Siapa | Di mana |
+|---|---|---|---|
+| 1 | Lengkapi rombongan: **nomor HP muthawwif/TL wajib** (penerima notifikasi SOS), tetapkan jamaah ke rombongan + kamar | Operasional | `/operasional` → Kelola Rombongan & tombol Ubah |
+| 2 | **Sinkron ke Mabrur** — akun (login = nomor HP), rombongan, dan jadwal tercipta otomatis; aman diulang (idempoten); akun lama tidak di-reset | Operasional | Kelola Rombongan → Sinkron ke Mabrur |
+| 3 | Bagikan **kredensial awal** (password 6 digit, hanya akun baru) — tampil di tabel kredensial ops **dan** otomatis di portal masing-masing jamaah (kartu maroon "Aplikasi Pendamping Mabrur") | Operasional / Jamaah | Kelola Rombongan · `/portal` |
+| 4 | Jamaah & muthawwif login aplikasi Mabrur (unduh dari petugas / mabrur.sosmartpro.com), **segera ganti password** | Jamaah, Muthawwif | Aplikasi Mabrur |
+| 5 | Selama di tanah suci: pantau **tab Lapangan** — status tiap anggota (aman/perlu perhatian, ihram, jarak miqat, umur sinyal lokasi) + **banner SOS live** dengan tombol Lihat Lokasi / WhatsApp / Telepon (refresh otomatis 30 dtk) | Operasional, Pimpinan | `/operasional` → Lapangan (live Mabrur) |
+
+**Pembagian tanggung jawab data**: Safar = sumber data induk (jamaah, rombongan, jadwal); Mabrur = sumber data lapangan (lokasi, ihram, SOS, counter ibadah). SOS ditangani pertama oleh **muthawwif di aplikasi Mabrur**; tab Lapangan Safar adalah lapis pemantauan kantor.

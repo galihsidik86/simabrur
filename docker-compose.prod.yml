@@ -29,6 +29,10 @@ services:
       DATABASE_URL: postgres://safar:${DB_PASSWORD}@db:5432/safar
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET}
+      # Integrasi Mabrur (opsional — kosongkan utk menonaktifkan)
+      MABRUR_API_URL: ${MABRUR_API_URL:-}
+      MABRUR_SERVICE_TOKEN: ${MABRUR_SERVICE_TOKEN:-}
+      SAFAR_ENCRYPTION_KEY: ${SAFAR_ENCRYPTION_KEY:-}
       # CORS_ORIGIN: https://app.contoh.co.id   # hanya bila frontend disajikan dari origin lain
     ports:
       - "${APP_PORT:-3001}:3001"

@@ -30,6 +30,10 @@ jobs:
       DATABASE_URL_TEST: postgres://safar:safar_ci@localhost:5432/safar_test
       JWT_ACCESS_SECRET: ci-only-access-secret-not-for-production-0123456789
       JWT_REFRESH_SECRET: ci-only-refresh-secret-not-for-production-0123456789
+      # Integrasi Mabrur — test memakai mock server; nilai dummy cukup
+      MABRUR_API_URL: http://localhost:9999
+      MABRUR_SERVICE_TOKEN: ci-only-mabrur-service-token-0123456789abcdef
+      SAFAR_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 
     steps:
       - uses: actions/checkout@v4

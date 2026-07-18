@@ -27,6 +27,10 @@ Implementasi full-stack dari mockup desain di repo ini (file `*.dc.html`). Renca
 |---|---|---|
 | ![Laporan Keuangan](docs/screenshots/laporan-keuangan.png) | <img src="docs/screenshots/portal-jamaah.png" width="280" alt="Portal Jamaah"> | <img src="docs/screenshots/invoice-a4.png" width="360" alt="Invoice A4"> |
 
+| Monitoring Lapangan (live Mabrur) | Kredensial Mabrur di Portal |
+|---|---|
+| ![Monitoring Lapangan](docs/screenshots/monitoring-lapangan.png) | <img src="docs/screenshots/portal-kredensial-mabrur.png" width="280" alt="Portal Mabrur"> |
+
 <sub>Regenerasi screenshot: jalankan dev server lalu `node scripts/screenshots.mjs` (butuh Microsoft Edge).</sub>
 
 ## Stack
@@ -123,7 +127,23 @@ Aturan bisnis aktif: paspor wajib berlaku ≥ 7 bulan setelah keberangkatan, per
 - [x] **Fase 6** — Dashboard, Laporan & Portal Jamaah: dashboard eksekutif dari data jurnal, laporan laba rugi/neraca (selalu seimbang)/laba per paket + ekspor, portal jamaah (login regNumber+NIK, 5 tab, unggah dokumen, VA), audit log viewer + manajemen pengguna
 - [x] **Fase 7** — Agen & Komisi: migrasi M5 (agents/leads/commissions), kode referral di wizard (`agent:BRKH-07` → lead terkonversi + komisi pending otomatis), kinerja agen (leads/konversi/komisi), persetujuan komisi → jurnal F (Dr 6-2000 · Cr 2-1400), KPI komisi terhutang dari saldo akun 2-1400
 
-**Seluruh 7 fase PLAN.md selesai.** 94+ test integrasi & unit (`npm test`).
+**Seluruh 7 fase PLAN.md selesai.** 105 test integrasi & unit (`npm test`).
+
+## Integrasi Mabrur (aplikasi lapangan jamaah & muthawwif)
+
+Safar terintegrasi dengan **[Mabrur](https://github.com/galihsidik86/mabrur)** — aplikasi mobile lapangan (panduan ibadah, geofence miqat, penghitung tawaf/sa'i, SOS, monitoring rombongan). Rencana & desain: [docs/RENCANA-INTEGRASI-MABRUR.md](docs/RENCANA-INTEGRASI-MABRUR.md).
+
+**Alur**: Operasional → Kelola Rombongan (isi HP muthawwif) → **Sinkron ke Mabrur** → akun + rombongan + jadwal tercipta di Mabrur (idempoten, password awal 6 digit hanya utk akun baru, terenkripsi AES-256-GCM) → jamaah melihat kredensialnya di **portal** (kartu maroon) → selama di tanah suci: tab **Lapangan** di Operasional memantau status anggota & **SOS live** (refresh 30 dtk, tombol Maps/WA/telepon).
+
+**Env** (backend/.env — kosongkan utk menonaktifkan):
+
+```
+MABRUR_API_URL=https://mabrur.sosmartpro.com     # atau http://localhost:3000 (dev)
+MABRUR_SERVICE_TOKEN=<sama dgn SAFAR_SYNC_TOKEN di .env Mabrur, min 32 char>
+SAFAR_ENCRYPTION_KEY=<64 hex — enkripsi password awal>
+```
+
+Endpoint Safar: `POST /v1/mabrur/groups/:id/sync` · `GET .../credentials` · `GET .../status` (proxy). Endpoint Mabrur (service token): `POST /integrations/safar/sync` · `GET /integrations/safar/groups/:ref/status`.
 
 ## Deployment (produksi)
 

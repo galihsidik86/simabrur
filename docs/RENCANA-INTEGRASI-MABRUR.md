@@ -1,5 +1,7 @@
 # Rencana Integrasi Safar ⇄ Mabrur
 
+> **STATUS: SELESAI (I1–I5)** — terverifikasi end-to-end nyata: sinkron Grup B menciptakan 5 akun di Mabrur live; login mobile dgn kredensial terbitan Safar berhasil; SOS medis dari akun jamaah tampil live di tab Lapangan Safar. Test: Safar 105/105 · Mabrur 35/35 · verifikasi manuskrip 138 sel COCOK (artefak riset tak tersentuh). Alur pemakaian: PANDUAN-PENGGUNA §7.
+
 **Safar** (repo ini) = back-office travel: pendaftaran → pembayaran → operasional → akuntansi → laporan.
 **Mabrur** (repo [galihsidik86/mabrur](https://github.com/galihsidik86/mabrur)) = aplikasi lapangan: mobile Expo untuk jamaah & muthawwif (panduan ibadah, geofence miqat/Arafah, penghitung tawaf/sa'i, SOS, monitoring rombongan) + server Express/PG sendiri (`mabrur.sosmartpro.com`).
 
