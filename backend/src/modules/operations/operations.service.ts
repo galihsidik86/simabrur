@@ -28,7 +28,7 @@ export const operationsService = {
       .leftJoin('visas as v', 'v.registration_id', 'r.id')
       .leftJoin('tickets as t', 't.registration_id', 'r.id')
       .select(
-        'r.id as registration_id', 'r.reg_number', 'r.room_type', 'r.room_number',
+        'r.id as registration_id', 'r.reg_number', 'r.room_type', 'r.room_number', 'r.group_id',
         'j.full_name', 'j.passport_no', 'j.passport_expiry',
         'g.name as group_name',
         'v.id as visa_id', 'v.status as visa_status', 'v.visa_no',
@@ -39,6 +39,13 @@ export const operationsService = {
 
     const manifest = await db('manifests').where({ departure_id: departureId }).first();
     const roomLabel: Record<string, string> = { quad: 'Quad', triple: 'Triple', double: 'Double' };
+    const memberCounts: any[] = await db('registrations')
+      .select('group_id')
+      .count({ n: '*' })
+      .where('departure_id', departureId)
+      .whereNotNull('group_id')
+      .groupBy('group_id');
+    const countOf = (gid: string) => Number(memberCounts.find((m) => m.group_id === gid)?.n ?? 0);
 
     return {
       departure: {
@@ -47,13 +54,20 @@ export const operationsService = {
       },
       manifestStatus: manifest?.status ?? 'draft',
       groups: groups.map((g) => ({
-        id: g.id, name: g.name,
+        id: g.id, name: g.name, capacity: g.capacity,
+        memberCount: countOf(g.id),
+        mabrurGroupId: g.mabrur_group_id ?? null,
+        mabrurSyncedAt: g.mabrur_synced_at ?? null,
+        staff: staff
+          .filter((s) => s.group_id === g.id)
+          .map((s) => ({ id: s.id, staffName: s.staff_name, role: s.role, phone: s.phone ?? null })),
         muthawwif: staff.filter((s) => s.group_id === g.id && s.role === 'muthawwif').map((s) => s.staff_name),
         tourLeader: staff.filter((s) => s.group_id === g.id && s.role === 'tour_leader').map((s) => s.staff_name)
       })),
       rows: rows.map((r) => ({
         registrationId: r.registration_id,
         regNumber: r.reg_number,
+        groupId: r.group_id ?? null,
         name: r.full_name,
         passportNo: r.passport_no,
         passportExpiry: r.passport_expiry,
@@ -104,16 +118,73 @@ export const operationsService = {
     return ticket;
   },
 
-  async assignGroupStaff(req: Request, input: { groupId: string; staffName: string; role: 'muthawwif' | 'tour_leader' }) {
+  async assignGroupStaff(req: Request, input: { groupId: string; staffName: string; role: 'muthawwif' | 'tour_leader'; phone?: string | null }) {
     const group = await db('groups').where({ id: input.groupId }).first();
     if (!group) throw errors.notFound('Rombongan tidak ditemukan');
     const [row] = await db('group_staff')
-      .insert({ group_id: input.groupId, staff_name: input.staffName, role: input.role })
+      .insert({ group_id: input.groupId, staff_name: input.staffName, role: input.role, phone: input.phone ?? null })
       .onConflict(['group_id', 'role', 'staff_name'])
-      .ignore()
+      .merge({ phone: input.phone ?? null, updated_at: db.fn.now() })
       .returning('*');
     await audit(req, { action: 'group_staff.assign', entity: 'group_staff', entityId: row?.id, newValues: input });
-    return row ?? { alreadyAssigned: true };
+    return row;
+  },
+
+  async updateGroupStaff(req: Request, id: string, input: { staffName?: string; phone?: string | null }) {
+    const before = await db('group_staff').where({ id }).first();
+    if (!before) throw errors.notFound('Petugas tidak ditemukan');
+    const [row] = await db('group_staff')
+      .where({ id })
+      .update({
+        ...(input.staffName !== undefined && { staff_name: input.staffName }),
+        ...(input.phone !== undefined && { phone: input.phone }),
+        updated_at: db.fn.now()
+      })
+      .returning('*');
+    await audit(req, { action: 'group_staff.update', entity: 'group_staff', entityId: id, oldValues: { staffName: before.staff_name, phone: before.phone }, newValues: input });
+    return row;
+  },
+
+  /** Buat rombongan baru pada sebuah keberangkatan. */
+  async createGroup(req: Request, input: { departureId: string; name: string; capacity: number }) {
+    const dep = await db('departures').where({ id: input.departureId }).first();
+    if (!dep) throw errors.notFound('Keberangkatan tidak ditemukan');
+    const dup = await db('groups').where({ departure_id: input.departureId, name: input.name }).first();
+    if (dup) throw errors.conflict(`Rombongan "${input.name}" sudah ada pada keberangkatan ini`);
+    const [group] = await db('groups')
+      .insert({ departure_id: input.departureId, name: input.name, capacity: input.capacity })
+      .returning('*');
+    await audit(req, { action: 'groups.create', entity: 'groups', entityId: group.id, newValues: input });
+    return group;
+  },
+
+  /** Tetapkan/lepaskan registrasi ke rombongan + nomor kamar. */
+  async assignRegistration(req: Request, registrationId: string, input: { groupId?: string | null; roomNumber?: string | null }) {
+    const reg = await db('registrations').where({ id: registrationId }).first();
+    if (!reg) throw errors.notFound('Registrasi tidak ditemukan');
+    if (input.groupId) {
+      const group = await db('groups').where({ id: input.groupId }).first();
+      if (!group) throw errors.notFound('Rombongan tidak ditemukan');
+      if (group.departure_id !== reg.departure_id) {
+        throw errors.badRequest('Rombongan bukan milik keberangkatan registrasi ini');
+      }
+    }
+    const [updated] = await db('registrations')
+      .where({ id: registrationId })
+      .update({
+        ...(input.groupId !== undefined && { group_id: input.groupId }),
+        ...(input.roomNumber !== undefined && { room_number: input.roomNumber }),
+        updated_at: db.fn.now()
+      })
+      .returning('*');
+    await audit(req, {
+      action: 'registrations.assign_group',
+      entity: 'registrations',
+      entityId: registrationId,
+      oldValues: { groupId: reg.group_id, roomNumber: reg.room_number },
+      newValues: input
+    });
+    return updated;
   },
 
   async checklists(registrationId: string) {

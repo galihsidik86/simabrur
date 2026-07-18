@@ -11,6 +11,13 @@ ticketsRoutes.post('/', requireAuth, requireRoles('operasional'), operationsCont
 
 export const groupStaffRoutes = Router();
 groupStaffRoutes.post('/', requireAuth, requireRoles('operasional'), operationsController.assignStaff);
+groupStaffRoutes.patch('/:id', requireAuth, requireRoles('operasional'), operationsController.updateStaff);
+
+export const opsGroupsRoutes = Router();
+opsGroupsRoutes.post('/', requireAuth, requireRoles('operasional'), operationsController.createGroup);
+
+/** PATCH /registrations/:id/assignment — dipasang di app.ts (router registrations publik utk wizard). */
+export const assignmentHandler = [requireAuth, requireRoles('operasional'), operationsController.assignRegistration] as const;
 
 export const checklistsRoutes = Router();
 checklistsRoutes.get('/', requireAuth, requireRoles('operasional', 'pimpinan'), operationsController.checklists);

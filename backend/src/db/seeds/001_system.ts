@@ -13,6 +13,7 @@ const ROLE_DEFS = [
 
 /** Tabel dihapus global di sini (anak → induk) agar file seed lain bebas urutan FK. */
 const WIPE_ORDER = [
+  'mabrur_credentials',
   'commissions', 'leads', 'agents',
   'bank_statement_lines', 'journal_lines', 'journals',
   'vendor_bills', 'vendors', 'cost_centers', 'exchange_rates', 'accounts',

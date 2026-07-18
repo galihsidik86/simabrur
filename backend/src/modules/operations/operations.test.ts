@@ -153,6 +153,75 @@ describe('laporan kepatuhan & kesiapan', () => {
   });
 });
 
+describe('kelola rombongan (Fase I2 — integrasi Mabrur)', () => {
+  it('buat rombongan, assign registrasi, staf ber-HP muncul di manifest', async () => {
+    const ops = await token('ops@safar.co.id');
+    const dep = await db('departures as d')
+      .join('packages as p', 'p.id', 'd.package_id')
+      .where('p.code', 'UMR-REG-9')
+      .select('d.id')
+      .first();
+
+    // Buat rombongan baru
+    const group = await request(app).post('/v1/groups').set('Authorization', `Bearer ${ops}`)
+      .send({ departureId: dep.id, name: 'Grup Uji I2', capacity: 20 });
+    expect(group.status).toBe(201);
+
+    // Duplikat nama di keberangkatan sama → 409
+    const dup = await request(app).post('/v1/groups').set('Authorization', `Bearer ${ops}`)
+      .send({ departureId: dep.id, name: 'Grup Uji I2', capacity: 20 });
+    expect(dup.status).toBe(409);
+
+    // Assign registrasi (Ahmad Fauzi — keberangkatan Reguler)
+    const reg = await db('registrations').where({ reg_number: 'UMR-2026-0412' }).first();
+    const assign = await request(app)
+      .patch(`/v1/registrations/${reg.id}/assignment`)
+      .set('Authorization', `Bearer ${ops}`)
+      .send({ groupId: group.body.data.id, roomNumber: '101' });
+    expect(assign.status).toBe(200);
+    expect(assign.body.data.group_id).toBe(group.body.data.id);
+
+    // Staf dgn nomor HP
+    const staff = await request(app).post('/v1/group-staff').set('Authorization', `Bearer ${ops}`)
+      .send({ groupId: group.body.data.id, staffName: 'Ust. Uji', role: 'muthawwif', phone: '081211110000' });
+    expect(staff.status).toBe(201);
+    expect(staff.body.data.phone).toBe('081211110000');
+
+    // Format HP salah ditolak
+    const badPhone = await request(app).post('/v1/group-staff').set('Authorization', `Bearer ${ops}`)
+      .send({ groupId: group.body.data.id, staffName: 'X', role: 'muthawwif', phone: '0812-8811' });
+    expect(badPhone.status).toBe(400);
+
+    // Manifest memuat rombongan baru + staf ber-HP + groupId pada baris
+    const manifest = await request(app).get(`/v1/departures/${dep.id}/manifest`).set('Authorization', `Bearer ${ops}`);
+    const g = manifest.body.data.groups.find((x: { name: string }) => x.name === 'Grup Uji I2');
+    expect(g.memberCount).toBe(1);
+    expect(g.staff[0]).toMatchObject({ staffName: 'Ust. Uji', phone: '081211110000' });
+    const row = manifest.body.data.rows.find((r: { regNumber: string }) => r.regNumber === 'UMR-2026-0412');
+    expect(row.groupId).toBe(group.body.data.id);
+
+    // Update HP staf
+    const upd = await request(app).patch(`/v1/group-staff/${staff.body.data.id}`).set('Authorization', `Bearer ${ops}`)
+      .send({ phone: '081211119999' });
+    expect(upd.body.data.phone).toBe('081211119999');
+  });
+
+  it('assign ke rombongan keberangkatan lain ditolak; RBAC marketing 403', async () => {
+    const ops = await token('ops@safar.co.id');
+    const grupB = await db('groups').where({ name: 'Grup B' }).first(); // milik Plus Turki
+    const reg = await db('registrations').where({ reg_number: 'UMR-2026-0412' }).first(); // Reguler
+    const res = await request(app)
+      .patch(`/v1/registrations/${reg.id}/assignment`)
+      .set('Authorization', `Bearer ${ops}`)
+      .send({ groupId: grupB.id });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('bukan milik keberangkatan');
+
+    const mkt = await token('marketing@safar.co.id');
+    expect((await request(app).post('/v1/groups').set('Authorization', `Bearer ${mkt}`).send({})).status).toBe(403);
+  });
+});
+
 describe('GET /v1/reports/export (Excel)', () => {
   it('menghasilkan file xlsx untuk aging/compliance/readiness', async () => {
     const keu = await token('keuangan@safar.co.id');

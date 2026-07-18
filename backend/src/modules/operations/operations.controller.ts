@@ -15,10 +15,25 @@ const ticketSchema = z.object({
   pnr: z.string().min(2).max(20),
   seat: z.string().max(10).nullish()
 });
+const phoneSchema = z.string().regex(/^08\d{8,13}$/, 'Format nomor HP: 08xxxxxxxxxx (tanpa spasi/strip)');
 const staffSchema = z.object({
   groupId: z.string().uuid(),
   staffName: z.string().min(2),
-  role: z.enum(['muthawwif', 'tour_leader'])
+  role: z.enum(['muthawwif', 'tour_leader']),
+  phone: phoneSchema.nullish()
+});
+const updateStaffSchema = z.object({
+  staffName: z.string().min(2).optional(),
+  phone: phoneSchema.nullable().optional()
+});
+const createGroupSchema = z.object({
+  departureId: z.string().uuid(),
+  name: z.string().min(2).max(60),
+  capacity: z.number().int().min(1).max(500).default(45)
+});
+const assignmentSchema = z.object({
+  groupId: z.string().uuid().nullable().optional(),
+  roomNumber: z.string().max(20).nullable().optional()
 });
 const checklistSchema = z.object({ isDone: z.boolean() });
 
@@ -34,6 +49,15 @@ export const operationsController = {
   },
   async assignStaff(req: Request, res: Response) {
     ok(res, await operationsService.assignGroupStaff(req, staffSchema.parse(req.body)), undefined, 201);
+  },
+  async updateStaff(req: Request, res: Response) {
+    ok(res, await operationsService.updateGroupStaff(req, String(req.params.id), updateStaffSchema.parse(req.body)));
+  },
+  async createGroup(req: Request, res: Response) {
+    ok(res, await operationsService.createGroup(req, createGroupSchema.parse(req.body)), undefined, 201);
+  },
+  async assignRegistration(req: Request, res: Response) {
+    ok(res, await operationsService.assignRegistration(req, String(req.params.id), assignmentSchema.parse(req.body)));
   },
   async checklists(req: Request, res: Response) {
     const registrationId = req.query.registrationId;

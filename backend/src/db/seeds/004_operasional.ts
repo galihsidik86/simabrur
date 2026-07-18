@@ -32,8 +32,8 @@ export async function seed(knex: Knex): Promise<void> {
   const groups = await knex('groups').whereIn('name', ['Grup A', 'Grup B']);
   for (const g of groups) {
     await knex('group_staff').insert([
-      { group_id: g.id, staff_name: 'Ust. Fadhil', role: 'muthawwif' },
-      { group_id: g.id, staff_name: 'Bpk. Surya', role: 'tour_leader' }
+      { group_id: g.id, staff_name: 'Ust. Fadhil', role: 'muthawwif', phone: '081288112233' },
+      { group_id: g.id, staff_name: 'Bpk. Surya', role: 'tour_leader', phone: '081277665544' }
     ]);
   }
 

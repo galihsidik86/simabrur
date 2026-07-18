@@ -11,7 +11,7 @@ import { authRoutes } from './modules/auth/auth.routes.js';
 import { airlinesRoutes, departuresRoutes, hotelsRoutes, packagesRoutes } from './modules/packages/packages.routes.js';
 import { documentsRoutes, jamaahRoutes, registrationsRoutes, UPLOAD_ROOT } from './modules/jamaah/jamaah.routes.js';
 import { bankAccountsRoutes, invoicesRoutes, paymentsRoutes, receiptsRoutes, receivablesRoutes } from './modules/payments/payments.routes.js';
-import { checklistsRoutes, groupStaffRoutes, manifestHandler, reportsRoutes, ticketsRoutes, visasRoutes } from './modules/operations/operations.routes.js';
+import { assignmentHandler, checklistsRoutes, groupStaffRoutes, manifestHandler, opsGroupsRoutes, reportsRoutes, ticketsRoutes, visasRoutes } from './modules/operations/operations.routes.js';
 import {
   accountingSummaryRoutes, accountsRoutes, bankReconciliationsRoutes, costCentersRoutes,
   journalsRoutes, ledgerRoutes, transactionsRoutes
@@ -98,6 +98,8 @@ export function createApp() {
   app.use('/v1/receipts', receiptsRoutes);
   app.use('/v1/bank-accounts', bankAccountsRoutes);
   app.get('/v1/departures/:id/manifest', ...manifestHandler);
+  app.patch('/v1/registrations/:id/assignment', ...assignmentHandler);
+  app.use('/v1/groups', opsGroupsRoutes);
   app.use('/v1/visas', visasRoutes);
   app.use('/v1/tickets', ticketsRoutes);
   app.use('/v1/group-staff', groupStaffRoutes);

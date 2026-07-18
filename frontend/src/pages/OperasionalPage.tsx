@@ -8,15 +8,21 @@ interface Departure { id: string; departure_date: string; package_name: string }
 interface ManifestRow {
   registrationId: string; regNumber: string; name: string;
   passportNo: string | null; passportExpiry: string | null; passportExpiringSoon: boolean;
-  groupName: string | null;
+  groupName: string | null; groupId: string | null;
   visa: { status: 'process' | 'biometric' | 'issued'; visaNo: string | null };
   ticket: { pnr: string | null; seat: string | null; status: string };
   room: string;
 }
+interface StaffRow { id: string; staffName: string; role: 'muthawwif' | 'tour_leader'; phone: string | null }
+interface GroupRow {
+  id: string; name: string; capacity: number; memberCount: number;
+  mabrurGroupId: string | null; mabrurSyncedAt: string | null;
+  staff: StaffRow[]; muthawwif: string[]; tourLeader: string[];
+}
 interface Manifest {
   departure: { id: string; packageName: string; departureDate: string; quota: number; seatsTaken: number };
   manifestStatus: string;
-  groups: { id: string; name: string; muthawwif: string[]; tourLeader: string[] }[];
+  groups: GroupRow[];
   rows: ManifestRow[];
 }
 
@@ -30,6 +36,7 @@ export function OperasionalPage() {
   const { user } = useAuth();
   const [depId, setDepId] = useState<string>('');
   const [edit, setEdit] = useState<ManifestRow | null>(null);
+  const [showGroups, setShowGroups] = useState(false);
 
   const { data: departures } = useQuery({
     queryKey: ['departures-list'],
@@ -75,6 +82,12 @@ export function OperasionalPage() {
             return <span key={i}>{i > 0 && ' · '}{v ? <>{k}: <b>{v}</b></> : part}</span>;
           })}
         </span>
+        {canEdit && (
+          <button onClick={() => setShowGroups(true)}
+            className="cursor-pointer rounded-[9px] bg-primary px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-primary-deep">
+            Kelola Rombongan
+          </button>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-card border border-line bg-card shadow-card">
@@ -128,24 +141,28 @@ export function OperasionalPage() {
         </table>
       </div>
 
-      {edit && <EditOpsModal row={edit} departureId={selected} onClose={() => setEdit(null)} />}
+      {edit && <EditOpsModal row={edit} departureId={selected} groups={m?.groups ?? []} onClose={() => setEdit(null)} />}
+      {showGroups && m && <RombonganModal departureId={selected} groups={m.groups} onClose={() => setShowGroups(false)} />}
     </div>
   );
 }
 
-/* ===== Modal ubah visa/tiket (screen baru — gap, mengikuti design system) ===== */
-function EditOpsModal({ row, departureId, onClose }: { row: ManifestRow; departureId: string; onClose: () => void }) {
+/* ===== Modal ubah visa/tiket/rombongan (screen baru — gap, mengikuti design system) ===== */
+function EditOpsModal({ row, departureId, groups, onClose }: { row: ManifestRow; departureId: string; groups: GroupRow[]; onClose: () => void }) {
   const qc = useQueryClient();
   const [visaStatus, setVisaStatus] = useState(row.visa.status);
   const [visaNo, setVisaNo] = useState(row.visa.visaNo ?? '');
   const [pnr, setPnr] = useState(row.ticket.pnr ?? '');
   const [seat, setSeat] = useState(row.ticket.seat ?? '');
+  const [groupId, setGroupId] = useState(row.groupId ?? '');
+  const [roomNumber, setRoomNumber] = useState(() => /\d+$/.exec(row.room)?.[0] ?? '');
   const [error, setError] = useState('');
 
   const save = useMutation({
     mutationFn: async () => {
       await api.post('/visas', { registrationId: row.registrationId, status: visaStatus, visaNo: visaNo || null });
       if (pnr) await api.post('/tickets', { registrationId: row.registrationId, pnr, seat: seat || null });
+      await api.patch(`/registrations/${row.registrationId}/assignment`, { groupId: groupId || null, roomNumber: roomNumber || null });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['manifest', departureId] });
@@ -171,6 +188,14 @@ function EditOpsModal({ row, departureId, onClose }: { row: ManifestRow; departu
           <div><label className="lbl">No. Visa</label><input className="fld" value={visaNo} onChange={(e) => setVisaNo(e.target.value)} placeholder="V-xxxxxxxx" /></div>
           <div><label className="lbl">PNR / No. Tiket</label><input className="fld" value={pnr} onChange={(e) => setPnr(e.target.value)} placeholder="TK-0452" /></div>
           <div><label className="lbl">Kursi (opsional)</label><input className="fld" value={seat} onChange={(e) => setSeat(e.target.value)} placeholder="12A" /></div>
+          <div>
+            <label className="lbl">Rombongan</label>
+            <select className="fld" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+              <option value="">— tanpa rombongan —</option>
+              {groups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.memberCount}/{g.capacity})</option>)}
+            </select>
+          </div>
+          <div><label className="lbl">No. Kamar</label><input className="fld" value={roomNumber} onChange={(e) => setRoomNumber(e.target.value)} placeholder="511" /></div>
         </div>
         {error && <div className="mt-3 rounded-[9px] bg-danger-bg px-3 py-2 text-[12px] font-medium text-danger-deep">{error}</div>}
         <div className="mt-5 flex justify-end gap-2">
@@ -179,6 +204,129 @@ function EditOpsModal({ row, departureId, onClose }: { row: ManifestRow; departu
             className="cursor-pointer rounded-[9px] bg-primary px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-primary-deep disabled:opacity-60">
             {save.isPending ? 'Menyimpan…' : 'Simpan'}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ===== Modal kelola rombongan & petugas (prasyarat sinkron Mabrur) ===== */
+function RombonganModal({ departureId, groups, onClose }: { departureId: string; groups: GroupRow[]; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [error, setError] = useState('');
+  const [newGroup, setNewGroup] = useState({ name: '', capacity: 20 });
+  const [staffForm, setStaffForm] = useState<{ groupId: string; staffName: string; role: 'muthawwif' | 'tour_leader'; phone: string } | null>(null);
+  const [phoneEdit, setPhoneEdit] = useState<Record<string, string>>({});
+
+  const refresh = () => qc.invalidateQueries({ queryKey: ['manifest', departureId] });
+  const onErr = (e: unknown) =>
+    setError((e as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Gagal menyimpan');
+
+  const createGroup = useMutation({
+    mutationFn: async () => api.post('/groups', { departureId, name: newGroup.name, capacity: Number(newGroup.capacity) }),
+    onSuccess: () => { setNewGroup({ name: '', capacity: 20 }); setError(''); refresh(); },
+    onError: onErr
+  });
+  const addStaff = useMutation({
+    mutationFn: async () =>
+      api.post('/group-staff', { groupId: staffForm!.groupId, staffName: staffForm!.staffName, role: staffForm!.role, phone: staffForm!.phone || null }),
+    onSuccess: () => { setStaffForm(null); setError(''); refresh(); },
+    onError: onErr
+  });
+  const savePhone = useMutation({
+    mutationFn: async (staff: StaffRow) => api.patch(`/group-staff/${staff.id}`, { phone: phoneEdit[staff.id] || null }),
+    onSuccess: () => { setError(''); refresh(); },
+    onError: onErr
+  });
+
+  const ROLE_LABEL = { muthawwif: 'Muthawwif', tour_leader: 'Tour Leader' } as const;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="max-h-[88vh] w-[640px] max-w-full overflow-y-auto rounded-[15px] bg-card p-6 shadow-float">
+        <div className="font-display text-[19px] text-ink-strong">Kelola Rombongan</div>
+        <div className="mt-0.5 text-[11.5px] text-muted-3">
+          Nomor HP muthawwif/TL <b>wajib</b> untuk sinkron ke aplikasi lapangan Mabrur (penerima notifikasi SOS).
+        </div>
+
+        <div className="mt-4 flex flex-col gap-3">
+          {groups.map((g) => (
+            <div key={g.id} className="rounded-[11px] border border-line-3 bg-panel p-3.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] font-semibold">{g.name}</span>
+                <span className="font-mono text-[11px] text-muted-2">{g.memberCount}/{g.capacity} jamaah</span>
+              </div>
+              <div className="mt-2 flex flex-col gap-1.5">
+                {g.staff.map((s) => (
+                  <div key={s.id} className="flex items-center gap-2 text-[12px]">
+                    <span className="w-[86px] flex-none rounded-pill bg-thead px-2 py-[2px] text-center text-[10px] font-semibold text-muted-2">
+                      {ROLE_LABEL[s.role]}
+                    </span>
+                    <span className="flex-1 font-medium">{s.staffName}</span>
+                    <input
+                      className="fld !w-[150px] !py-1.5 font-mono !text-[11.5px]"
+                      placeholder="08xxxxxxxxxx"
+                      value={phoneEdit[s.id] ?? s.phone ?? ''}
+                      onChange={(e) => setPhoneEdit({ ...phoneEdit, [s.id]: e.target.value.replace(/\D/g, '') })}
+                    />
+                    <button
+                      onClick={() => savePhone.mutate(s)}
+                      disabled={savePhone.isPending || (phoneEdit[s.id] ?? s.phone ?? '') === (s.phone ?? '')}
+                      className="cursor-pointer rounded-[7px] border border-line-2 bg-white px-2 py-1 text-[10.5px] font-semibold text-muted disabled:opacity-40">
+                      Simpan
+                    </button>
+                    {!s.phone && !(phoneEdit[s.id]?.length) && (
+                      <span className="text-[10px] font-semibold text-danger-deep">HP kosong</span>
+                    )}
+                  </div>
+                ))}
+                {g.staff.length === 0 && <div className="text-[11px] text-muted-3">Belum ada petugas.</div>}
+              </div>
+              {staffForm?.groupId === g.id ? (
+                <div className="mt-2 flex items-end gap-2">
+                  <select className="fld !w-[120px] !py-1.5 !text-[11.5px]" value={staffForm.role}
+                    onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value as 'muthawwif' | 'tour_leader' })}>
+                    <option value="muthawwif">Muthawwif</option>
+                    <option value="tour_leader">Tour Leader</option>
+                  </select>
+                  <input className="fld flex-1 !py-1.5 !text-[11.5px]" placeholder="Nama petugas" value={staffForm.staffName}
+                    onChange={(e) => setStaffForm({ ...staffForm, staffName: e.target.value })} />
+                  <input className="fld !w-[140px] !py-1.5 font-mono !text-[11.5px]" placeholder="08xxxxxxxxxx" value={staffForm.phone}
+                    onChange={(e) => setStaffForm({ ...staffForm, phone: e.target.value.replace(/\D/g, '') })} />
+                  <button onClick={() => staffForm.staffName.length >= 2 && addStaff.mutate()} disabled={addStaff.isPending}
+                    className="cursor-pointer rounded-[8px] bg-primary px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60">
+                    Tambah
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => setStaffForm({ groupId: g.id, staffName: '', role: 'muthawwif', phone: '' })}
+                  className="mt-2 cursor-pointer text-[11px] font-semibold text-primary hover:underline">
+                  + Tambah petugas
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Rombongan baru */}
+        <div className="mt-4 flex items-end gap-2 rounded-[11px] border border-line-3 p-3.5">
+          <div className="flex-1"><label className="lbl">Rombongan Baru</label>
+            <input className="fld" placeholder="mis. Grup C" value={newGroup.name} onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })} /></div>
+          <div><label className="lbl">Kapasitas</label>
+            <input type="number" min={1} className="fld !w-[90px]" value={newGroup.capacity} onChange={(e) => setNewGroup({ ...newGroup, capacity: Number(e.target.value) })} /></div>
+          <button onClick={() => newGroup.name.length >= 2 && createGroup.mutate()} disabled={createGroup.isPending}
+            className="cursor-pointer rounded-[9px] bg-primary px-3.5 py-[11px] text-[12px] font-semibold text-white disabled:opacity-60">
+            + Buat
+          </button>
+        </div>
+
+        <div className="mt-2 text-[10.5px] text-muted-3">
+          Tetapkan jamaah ke rombongan lewat tombol <b>Ubah</b> pada baris manifest (pilihan Rombongan &amp; No. Kamar).
+        </div>
+
+        {error && <div className="mt-3 rounded-[9px] bg-danger-bg px-3 py-2 text-[12px] font-medium text-danger-deep">{error}</div>}
+        <div className="mt-4 flex justify-end">
+          <button onClick={onClose} className="cursor-pointer rounded-[9px] border border-line-2 bg-white px-4 py-2 text-[12.5px] font-semibold text-muted">Tutup</button>
         </div>
       </div>
     </div>
