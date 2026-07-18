@@ -50,6 +50,13 @@ export function createApp() {
   app.use(cors(env.corsOrigin ? { origin: env.corsOrigin.split(','), credentials: false } : {}));
   app.use(express.json({ limit: '2mb' }));
 
+  // Respons API tidak boleh di-cache proxy/hosting (dynamic cache shared hosting
+  // pernah menyajikan respons GET ber-otentikasi yang basi lintas token)
+  app.use('/v1', (_req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    next();
+  });
+
   // Rate limit endpoint publik yang sensitif (dimatikan saat test)
   if (!env.isTest) {
     const authLimiter = rateLimit({
