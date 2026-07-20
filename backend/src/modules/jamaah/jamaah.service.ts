@@ -6,10 +6,11 @@ import { audit } from '../../middleware/audit.js';
 import { nextNumber } from '../../utils/numbering.js';
 import { jamaahRepository } from './jamaah.repository.js';
 import { isPassportValid, needsMahram, passportValidUntilLimit, regNumberKey, ageAt } from './jamaah.rules.js';
-import { REQUIRED_DOC_TYPES, type createRegistrationSchema } from './jamaah.validation.js';
+import { REQUIRED_DOC_TYPES, type createRegistrationSchema, type updateJamaahSchema } from './jamaah.validation.js';
 import { issueInvoice } from '../payments/payments.service.js';
 
 type CreateRegistrationInput = z.infer<typeof createRegistrationSchema>;
+type UpdateJamaahInput = z.infer<typeof updateJamaahSchema>;
 
 export const jamaahService = {
   async list(opts: { tab: string; q?: string; page: number; limit: number }) {
@@ -46,6 +47,43 @@ export const jamaahService = {
       };
     });
     return { data, total };
+  },
+
+  async updateProfile(req: Request, jamaahId: string, input: UpdateJamaahInput) {
+    const before = await db('jamaah').where({ id: jamaahId }).first();
+    if (!before) throw errors.notFound('Jamaah tidak ditemukan');
+
+    const colByField: Record<keyof UpdateJamaahInput, string> = {
+      fullName: 'full_name',
+      gender: 'gender',
+      phone: 'phone',
+      email: 'email',
+      address: 'address',
+      emergencyContactName: 'emergency_contact_name',
+      emergencyContactPhone: 'emergency_contact_phone'
+    };
+    const changes: Record<string, unknown> = {};
+    const oldValues: Record<string, unknown> = {};
+    for (const [field, col] of Object.entries(colByField) as [keyof UpdateJamaahInput, string][]) {
+      const value = input[field];
+      if (value === undefined || value === before[col]) continue;
+      changes[col] = value;
+      oldValues[col] = before[col];
+    }
+    if (!Object.keys(changes).length) return before;
+
+    const [updated] = await db('jamaah')
+      .where({ id: jamaahId })
+      .update({ ...changes, updated_at: db.fn.now() })
+      .returning('*');
+    await audit(req, {
+      action: 'jamaah.update',
+      entity: 'jamaah',
+      entityId: jamaahId,
+      oldValues,
+      newValues: changes
+    });
+    return updated;
   },
 
   async detail(jamaahId: string) {

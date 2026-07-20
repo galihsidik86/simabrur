@@ -24,6 +24,18 @@ export const createRegistrationSchema = z.object({
   })
 });
 
+export const updateJamaahSchema = z
+  .object({
+    fullName: z.string().min(3, 'Nama minimal 3 karakter').optional(),
+    gender: z.enum(['L', 'P']).optional(),
+    phone: z.string().min(8).optional(),
+    email: z.string().email().nullish(),
+    address: z.string().min(5).optional(),
+    emergencyContactName: z.string().min(2).optional(),
+    emergencyContactPhone: z.string().min(8).optional()
+  })
+  .refine((o) => Object.values(o).some((v) => v !== undefined), 'Minimal satu field harus diisi');
+
 export const passportCheckQuery = z.object({
   departureId: z.string().uuid(),
   expiry: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)

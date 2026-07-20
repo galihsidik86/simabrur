@@ -36,6 +36,7 @@ const upload = multer({
 export const jamaahRoutes = Router();
 jamaahRoutes.get('/', requireAuth, requireRoles('operasional', 'marketing', 'keuangan', 'pimpinan'), jamaahController.list);
 jamaahRoutes.get('/:id', requireAuth, requireRoles('operasional', 'marketing', 'keuangan', 'pimpinan'), jamaahController.detail);
+jamaahRoutes.patch('/:id', requireAuth, requireRoles('operasional'), jamaahController.updateProfile);
 // Unggah dokumen dapat diakses publik: dipakai wizard pendaftaran sebelum jamaah punya akun
 jamaahRoutes.post('/:id/documents', upload.single('file'), jamaahController.uploadDocument);
 

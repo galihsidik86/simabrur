@@ -229,3 +229,49 @@ describe('GET /v1/jamaah (tabel admin)', () => {
     expect((await request(app).get('/v1/jamaah')).status).toBe(401);
   });
 });
+
+describe('PATCH /v1/jamaah/:id (edit profil oleh operasional)', () => {
+  it('mengubah nama & HP, mencatat audit log; marketing ditolak 403', async () => {
+    const jamaahRow = await db('jamaah').where({ nik: '9900000000000001' }).first();
+
+    const mkt = await token('marketing@safar.co.id');
+    const forbidden = await request(app)
+      .patch(`/v1/jamaah/${jamaahRow.id}`)
+      .set('Authorization', `Bearer ${mkt}`)
+      .send({ fullName: 'Nama Baru' });
+    expect(forbidden.status).toBe(403);
+
+    const ops = await token('ops@safar.co.id');
+    const res = await request(app)
+      .patch(`/v1/jamaah/${jamaahRow.id}`)
+      .set('Authorization', `Bearer ${ops}`)
+      .send({ fullName: 'Euis Ratnaningsih', phone: '08139530633' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.full_name).toBe('Euis Ratnaningsih');
+    expect(res.body.data.phone).toBe('08139530633');
+
+    const log = await db('audit_logs')
+      .where({ entity: 'jamaah', entity_id: jamaahRow.id, action: 'jamaah.update' })
+      .orderBy('id', 'desc')
+      .first();
+    expect(log).toBeTruthy();
+    expect(log.old_values.full_name).toBe(jamaahRow.full_name);
+    expect(log.new_values.phone).toBe('08139530633');
+  });
+
+  it('menolak body kosong (400) dan id tak dikenal (404)', async () => {
+    const ops = await token('ops@safar.co.id');
+    const jamaahRow = await db('jamaah').where({ nik: '9900000000000001' }).first();
+    expect(
+      (await request(app).patch(`/v1/jamaah/${jamaahRow.id}`).set('Authorization', `Bearer ${ops}`).send({})).status
+    ).toBe(400);
+    expect(
+      (
+        await request(app)
+          .patch('/v1/jamaah/00000000-0000-0000-0000-000000000000')
+          .set('Authorization', `Bearer ${ops}`)
+          .send({ fullName: 'Siapa Saja' })
+      ).status
+    ).toBe(404);
+  });
+});

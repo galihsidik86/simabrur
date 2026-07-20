@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { ok, errors } from '../../utils/http.js';
 import { jamaahService } from './jamaah.service.js';
-import { createRegistrationSchema, listJamaahQuery, passportCheckQuery, verifyDocumentSchema, DOC_TYPES } from './jamaah.validation.js';
+import { createRegistrationSchema, listJamaahQuery, passportCheckQuery, updateJamaahSchema, verifyDocumentSchema, DOC_TYPES } from './jamaah.validation.js';
 
 export const jamaahController = {
   async list(req: Request, res: Response) {
@@ -12,6 +12,11 @@ export const jamaahController = {
 
   async detail(req: Request, res: Response) {
     ok(res, await jamaahService.detail(String(req.params.id)));
+  },
+
+  async updateProfile(req: Request, res: Response) {
+    const input = updateJamaahSchema.parse(req.body);
+    ok(res, await jamaahService.updateProfile(req, String(req.params.id), input));
   },
 
   async register(req: Request, res: Response) {
