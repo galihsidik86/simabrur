@@ -180,6 +180,13 @@ export const mabrurService = {
               .onConflict(['subject_type', 'subject_id'])
               .merge({ phone: m.phone, initial_password_enc: encrypt(pwd), synced_at: trx.fn.now(), updated_at: trx.fn.now() });
           }
+        } else {
+          // Akun lama: password tidak berubah, tapi HP (= username login) bisa
+          // sudah diganti — segarkan agar tampilan kredensial tidak menyesatkan
+          await trx('mabrur_credentials')
+            .where({ subject_type: isStaff ? 'staff' : 'jamaah', subject_id: m.externalRef })
+            .whereNot('phone', m.phone)
+            .update({ phone: m.phone, updated_at: trx.fn.now() });
         }
       }
     });

@@ -120,6 +120,29 @@ describe('POST /v1/mabrur/groups/:id/sync', () => {
     expect(after.initial_password_enc).toBe(before.initial_password_enc); // tidak berubah
   });
 
+  it('sinkron ulang setelah ganti HP jamaah → phone kredensial ikut segar, password tetap', async () => {
+    const ops = await token('ops@safar.co.id');
+    const grupB = await db('groups').where({ name: 'Grup B' }).first();
+    const sitiRow = await db('jamaah').where({ full_name: 'Hj. Siti Rohmah' }).first();
+    const before = await db('mabrur_credentials').where({ subject_type: 'jamaah', subject_id: sitiRow.id }).first();
+
+    const upd = await request(app)
+      .patch(`/v1/jamaah/${sitiRow.id}`)
+      .set('Authorization', `Bearer ${ops}`)
+      .send({ phone: '08139530699' });
+    expect(upd.status).toBe(200);
+
+    const res = await request(app).post(`/v1/mabrur/groups/${grupB.id}/sync`).set('Authorization', `Bearer ${ops}`);
+    expect(res.status).toBe(200);
+
+    const after = await db('mabrur_credentials').where({ subject_type: 'jamaah', subject_id: sitiRow.id }).first();
+    expect(after.phone).toBe('08139530699');
+    expect(after.initial_password_enc).toBe(before.initial_password_enc);
+
+    // kembalikan HP agar test lain tidak terpengaruh
+    await db('jamaah').where({ id: sitiRow.id }).update({ phone: before.phone });
+  });
+
   it('rombongan tanpa muthawwif ber-HP → ditolak dgn pesan jelas', async () => {
     const ops = await token('ops@safar.co.id');
     // Buat rombongan baru tanpa staf
