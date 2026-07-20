@@ -245,10 +245,11 @@ describe('PATCH /v1/jamaah/:id (edit profil oleh operasional)', () => {
     const res = await request(app)
       .patch(`/v1/jamaah/${jamaahRow.id}`)
       .set('Authorization', `Bearer ${ops}`)
-      .send({ fullName: 'Euis Ratnaningsih', phone: '08139530633' });
+      .send({ fullName: 'Euis Ratnaningsih', phone: '08139530633', mahramName: 'R Dede Atmawijaya' });
     expect(res.status).toBe(200);
     expect(res.body.data.full_name).toBe('Euis Ratnaningsih');
     expect(res.body.data.phone).toBe('08139530633');
+    expect(res.body.data.mahram_name).toBe('R Dede Atmawijaya');
 
     const log = await db('audit_logs')
       .where({ entity: 'jamaah', entity_id: jamaahRow.id, action: 'jamaah.update' })

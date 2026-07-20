@@ -32,7 +32,9 @@ export const updateJamaahSchema = z
     email: z.string().email().nullish(),
     address: z.string().min(5).optional(),
     emergencyContactName: z.string().min(2).optional(),
-    emergencyContactPhone: z.string().min(8).optional()
+    emergencyContactPhone: z.string().min(8).optional(),
+    mahramName: z.string().min(2).nullish(),
+    mahramRelation: z.string().min(2).nullish()
   })
   .refine((o) => Object.values(o).some((v) => v !== undefined), 'Minimal satu field harus diisi');
 

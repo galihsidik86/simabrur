@@ -60,7 +60,9 @@ export const jamaahService = {
       email: 'email',
       address: 'address',
       emergencyContactName: 'emergency_contact_name',
-      emergencyContactPhone: 'emergency_contact_phone'
+      emergencyContactPhone: 'emergency_contact_phone',
+      mahramName: 'mahram_name',
+      mahramRelation: 'mahram_relation'
     };
     const changes: Record<string, unknown> = {};
     const oldValues: Record<string, unknown> = {};
