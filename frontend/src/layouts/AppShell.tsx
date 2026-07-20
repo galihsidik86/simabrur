@@ -1,4 +1,7 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../api/client';
 import { useAuth } from '../store/auth';
 
 /** Navigasi identik mockup Aplikasi Travel.dc.html (navDefs + titles). */
@@ -27,6 +30,172 @@ const TITLES: Record<string, [string, string]> = {
   '/laporan-keuangan': ['Laporan Keuangan', 'Laba rugi, neraca & laba per paket — PT Safar Barokah Wisata'],
   '/admin': ['Administrasi Sistem', 'Pengguna, role & audit log']
 };
+
+interface SearchResult {
+  jamaah: { id: string; name: string; regNumber: string | null }[];
+  packages: { id: string; name: string; type: string }[];
+  invoices: { id: string; number: string; status: string; jamaahName: string }[];
+}
+
+/** Pencarian global header (jamaah / paket / invoice) — gaya identik mockup. */
+function GlobalSearch({ role }: { role: string }) {
+  const [q, setQ] = useState('');
+  const [debounced, setDebounced] = useState('');
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(q.trim()), 250);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, []);
+
+  const { data, isFetching } = useQuery<SearchResult>({
+    queryKey: ['global-search', debounced],
+    queryFn: async () => (await api.get('/search', { params: { q: debounced } })).data.data,
+    enabled: debounced.length >= 2
+  });
+
+  const canJamaah = ['admin', 'pimpinan', 'operasional', 'marketing'].includes(role);
+  const canPaket = ['admin', 'pimpinan', 'marketing'].includes(role);
+  const canInvoice = ['admin', 'pimpinan', 'keuangan'].includes(role);
+  const go = (to: string) => {
+    setOpen(false);
+    setQ('');
+    navigate(to);
+  };
+  const empty =
+    data && !data.jamaah.length && !data.packages.length && !data.invoices.length;
+
+  const section = (label: string) => (
+    <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[1px] text-muted-3">{label}</div>
+  );
+  const row = 'block w-full cursor-pointer px-3 py-1.5 text-left text-[12.5px] text-ink-strong hover:bg-panel';
+
+  return (
+    <div ref={boxRef} className="relative">
+      <div className="flex w-[250px] items-center gap-2 rounded-[9px] border border-line-2 bg-white px-[13px] py-2 text-muted-3">
+        <span className="inline-block h-[7px] w-[7px] flex-none rounded-full border-[1.5px] border-[#b6ac94]" />
+        <input
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          placeholder="Cari jamaah, paket, invoice…"
+          className="w-full bg-transparent text-[12.5px] text-ink-strong outline-none placeholder:text-muted-3"
+        />
+      </div>
+      {open && debounced.length >= 2 && (
+        <div className="absolute right-0 top-[calc(100%+6px)] z-40 max-h-[340px] w-[300px] overflow-y-auto rounded-[12px] border border-line-2 bg-white py-1 shadow-[0_4px_16px_-10px_rgba(60,50,20,0.3)]">
+          {isFetching && !data && <div className="px-3 py-2 text-[12px] text-muted-3">Mencari…</div>}
+          {empty && <div className="px-3 py-2 text-[12px] text-muted-3">Tidak ada hasil untuk "{debounced}"</div>}
+          {canJamaah && !!data?.jamaah.length && (
+            <>
+              {section('Jamaah')}
+              {data.jamaah.map((j) => (
+                <button key={j.id} className={row} onClick={() => go(`/jamaah/${j.id}`)}>
+                  {j.name}
+                  {j.regNumber && <span className="ml-2 font-mono text-[11px] text-muted-3">{j.regNumber}</span>}
+                </button>
+              ))}
+            </>
+          )}
+          {canPaket && !!data?.packages.length && (
+            <>
+              {section('Paket')}
+              {data.packages.map((p) => (
+                <button key={p.id} className={row} onClick={() => go('/paket')}>
+                  {p.name}
+                  <span className="ml-2 text-[11px] uppercase text-muted-3">{p.type}</span>
+                </button>
+              ))}
+            </>
+          )}
+          {canInvoice && !!data?.invoices.length && (
+            <>
+              {section('Invoice')}
+              {data.invoices.map((i) => (
+                <button key={i.id} className={row} onClick={() => go(`/dokumen/invoice/${i.id}`)}>
+                  <span className="font-mono text-[11.5px]">{i.number}</span>
+                  <span className="ml-2 text-[11px] text-muted-3">{i.jamaahName}</span>
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Lonceng notifikasi: ringkasan dokumen/pembayaran yang menunggu verifikasi. */
+function NotifBell() {
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, []);
+
+  const { data } = useQuery<{ total: number; items: { key: string; count: number; label: string; to: string }[] }>({
+    queryKey: ['notifications'],
+    queryFn: async () => (await api.get('/search/notifications')).data.data,
+    refetchInterval: 60_000
+  });
+
+  return (
+    <div ref={boxRef} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        title="Perlu tindakan"
+        className="relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-[9px] border border-line-2 bg-white hover:bg-panel"
+      >
+        <span className="inline-block h-4 w-4 rounded-t-[5px] border-[1.5px] border-[#8c8371]" />
+        {!!data?.total && (
+          <span className="absolute right-[9px] top-2 h-2 w-2 rounded-full border-[1.5px] border-white bg-danger" />
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-[calc(100%+6px)] z-40 w-[270px] rounded-[12px] border border-line-2 bg-white py-1 shadow-[0_4px_16px_-10px_rgba(60,50,20,0.3)]">
+          <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[1px] text-muted-3">
+            Perlu Tindakan
+          </div>
+          {!data?.items.length && <div className="px-3 py-2 text-[12px] text-muted-3">Tidak ada yang menunggu 🎉</div>}
+          {data?.items.map((i) => (
+            <button
+              key={i.key}
+              className="block w-full cursor-pointer px-3 py-2 text-left text-[12.5px] text-ink-strong hover:bg-panel"
+              onClick={() => {
+                setOpen(false);
+                navigate(i.to);
+              }}
+            >
+              <span className="mr-1.5 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1 font-mono text-[10.5px] font-bold text-white">
+                {i.count}
+              </span>
+              {i.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function AppShell() {
   const { user, logout } = useAuth();
@@ -105,14 +274,8 @@ export function AppShell() {
             <div className="font-display text-[22px] leading-none text-ink-strong">{title}</div>
             <div className="mt-[3px] text-[11.5px] text-muted-3">{sub}</div>
           </div>
-          <div className="flex w-[250px] items-center gap-2 rounded-[9px] border border-line-2 bg-white px-[13px] py-2 text-muted-3">
-            <span className="inline-block h-[7px] w-[7px] rounded-full border-[1.5px] border-[#b6ac94]" />
-            <span className="text-[12.5px]">Cari jamaah, paket, invoice…</span>
-          </div>
-          <div className="relative flex h-10 w-10 items-center justify-center rounded-[9px] border border-line-2 bg-white">
-            <span className="inline-block h-4 w-4 rounded-t-[5px] border-[1.5px] border-[#8c8371]" />
-            <span className="absolute right-[9px] top-2 h-2 w-2 rounded-full border-[1.5px] border-white bg-danger" />
-          </div>
+          <GlobalSearch role={user?.role ?? ''} />
+          <NotifBell />
         </header>
         <div className="flex-1 overflow-y-auto px-7 pb-10 pt-[26px]">
           <Outlet />

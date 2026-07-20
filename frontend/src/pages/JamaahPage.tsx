@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { fmtDate, fmtShort } from '../utils/format';
@@ -44,7 +44,9 @@ const TABS = [
 ] as const;
 
 export function JamaahPage() {
-  const [tab, setTab] = useState('semua');
+  const [params] = useSearchParams();
+  const initialTab = TABS.some((t) => t.key === params.get('tab')) ? (params.get('tab') as string) : 'semua';
+  const [tab, setTab] = useState(initialTab);
   const [q, setQ] = useState('');
   const { data, isLoading } = useQuery({
     queryKey: ['jamaah', tab, q],

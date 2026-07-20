@@ -117,3 +117,8 @@ Migrasi M5; API agents/leads/commissions + approve→posting jurnal komisi; UI: 
 - JANGAN mengubah visual/branding mockup; screen baru mengikuti design system §2
 - JANGAN menambah fitur di luar scope tanpa mencatat di PLAN.md dulu
 - Per fase selesai utuh + teruji → berhenti → minta konfirmasi user sebelum fase berikutnya
+
+## 10. Catatan fitur pasca-fase (atas permintaan user)
+
+- **2026-07-20 — Pencarian global & lonceng header difungsikan.** Di mockup keduanya elemen dekoratif; atas laporan user ("field pencarian tidak bisa diisi, tombol di sebelahnya tidak berfungsi") dibangun: `GET /v1/search` (jamaah/paket/invoice, ILIKE, 5 hasil per kategori, role staf) + `GET /v1/search/notifications` (dokumen & pembayaran menunggu verifikasi) dan dropdown hasil/lonceng di `AppShell` mengikuti design token yang ada. Visual field & tombol tidak berubah.
+- Fitur pasca-fase lain: `PATCH /v1/jamaah/:id` (edit profil oleh operasional, tercatat audit), penyegaran HP kredensial Mabrur saat sinkron ulang, `Cache-Control: no-store` di semua respons API.
