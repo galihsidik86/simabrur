@@ -134,9 +134,18 @@ export function createApp() {
   app.use('/v1/accounting', accountingSummaryRoutes);
   // Frontend build (produksi): file statis + SPA fallback utk route non-API
   if (fs.existsSync(path.join(PUBLIC_DIR, 'index.html'))) {
-    app.use(express.static(PUBLIC_DIR, { maxAge: '1h', index: 'index.html' }));
+    // Aset ber-hash (assets/index-XXXX.js) aman di-cache lama; index.html TIDAK BOLEH
+    // di-cache — browser/proxy yang memegang index lama akan menjalankan bundle lama
+    // hingga 1 jam setelah deploy ("fitur baru tidak muncul")
+    const noStoreIndex = (res: express.Response, filePath: string) => {
+      if (filePath.endsWith('index.html')) res.setHeader('Cache-Control', 'no-store');
+    };
+    app.use(
+      express.static(PUBLIC_DIR, { maxAge: '30d', immutable: true, index: 'index.html', setHeaders: noStoreIndex })
+    );
     app.use((req, res, next) => {
       if (req.method !== 'GET' || req.path.startsWith('/v1') || req.path.startsWith('/uploads')) return next();
+      res.setHeader('Cache-Control', 'no-store');
       res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
     });
   }
