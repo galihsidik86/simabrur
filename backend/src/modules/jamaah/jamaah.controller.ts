@@ -1,9 +1,25 @@
+import path from 'node:path';
 import type { Request, Response } from 'express';
 import { ok, errors } from '../../utils/http.js';
+import { db } from '../../config/db.js';
 import { jamaahService } from './jamaah.service.js';
+import { resolveUploadPath } from './storage.js';
 import { createRegistrationSchema, listJamaahQuery, passportCheckQuery, updateJamaahSchema, verifyDocumentSchema, DOC_TYPES } from './jamaah.validation.js';
 
+const CONTENT_TYPE: Record<string, string> = {
+  '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg'
+};
+
 export const jamaahController = {
+  async documentFile(req: Request, res: Response) {
+    const doc = await db('documents').where({ id: String(req.params.id) }).first();
+    if (!doc) throw errors.notFound('Dokumen tidak ditemukan');
+    const abs = resolveUploadPath(String(doc.file_url));
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Type', CONTENT_TYPE[path.extname(abs).toLowerCase()] ?? 'application/octet-stream');
+    res.sendFile(abs);
+  },
   async list(req: Request, res: Response) {
     const q = listJamaahQuery.parse(req.query);
     const { data, total } = await jamaahService.list(q);

@@ -9,7 +9,7 @@ import { env } from './config/env.js';
 import { db } from './config/db.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
 import { airlinesRoutes, departuresRoutes, hotelsRoutes, packageCategoriesRoutes, packagesRoutes } from './modules/packages/packages.routes.js';
-import { documentsRoutes, jamaahRoutes, registrationsRoutes, UPLOAD_ROOT } from './modules/jamaah/jamaah.routes.js';
+import { documentsRoutes, jamaahRoutes, registrationsRoutes } from './modules/jamaah/jamaah.routes.js';
 import { bankAccountsRoutes, invoicesRoutes, paymentsRoutes, receiptsRoutes, receivablesRoutes } from './modules/payments/payments.routes.js';
 import { assignmentHandler, checklistsRoutes, groupStaffRoutes, manifestHandler, opsGroupsRoutes, reportsRoutes, ticketsRoutes, visasRoutes } from './modules/operations/operations.routes.js';
 import {
@@ -93,8 +93,8 @@ export function createApp() {
       })
     );
   }
-
-  app.use('/uploads', express.static(UPLOAD_ROOT));
+  // Dokumen jamaah (PII) TIDAK disajikan statis — hanya lewat
+  // GET /v1/documents/:id/file yang ber-otentikasi + RBAC.
 
   // Health + readiness (cek koneksi DB) — untuk container healthcheck / load balancer
   app.get('/v1/health', async (_req, res) => {

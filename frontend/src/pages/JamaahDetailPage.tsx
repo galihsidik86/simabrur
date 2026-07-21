@@ -4,6 +4,18 @@ import { api } from '../api/client';
 import { useAuth } from '../store/auth';
 import { fmtFull, fmtDate, age } from '../utils/format';
 
+/** Ambil berkas dokumen lewat endpoint ber-otentikasi (PII tidak lagi disajikan statis). */
+async function openDocument(docId: string) {
+  try {
+    const res = await api.get(`/documents/${docId}/file`, { responseType: 'blob' });
+    const url = URL.createObjectURL(res.data as Blob);
+    window.open(url, '_blank', 'noopener');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch {
+    alert('Gagal membuka dokumen.');
+  }
+}
+
 interface Detail {
   id: string;
   nik: string;
@@ -164,9 +176,9 @@ export function JamaahDetailPage() {
                 {doc?.note && <div className="mt-1.5 text-[10.5px] text-danger-deep">Catatan: {doc.note}</div>}
                 <div className="mt-2.5 flex items-center gap-2">
                   {doc && (
-                    <a href={doc.file_url} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-primary hover:underline">
+                    <button onClick={() => openDocument(doc.id)} className="cursor-pointer text-[11px] font-semibold text-primary hover:underline">
                       Lihat file
-                    </a>
+                    </button>
                   )}
                   {doc && canVerify && doc.status !== 'verified' && (
                     <>

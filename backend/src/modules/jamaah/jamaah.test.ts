@@ -304,3 +304,27 @@ describe('keamanan upload dokumen (audit fixes)', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('berkas dokumen hanya lewat endpoint ber-otentikasi (audit fix)', () => {
+  it('unggah lalu ambil berkas: tanpa login 401, dgn ops 200; portal ditolak', async () => {
+    const jamaahRow = await db('jamaah').where({ nik: '9900000000000001' }).first();
+    const up = await request(app)
+      .post(`/v1/jamaah/${jamaahRow.id}/documents`)
+      .field('docType', 'KK')
+      .attach('file', Buffer.from('%PDF-1.4 berkas'), 'kk.pdf');
+    expect(up.status).toBe(201);
+    const docId = up.body.data.id;
+
+    expect((await request(app).get(`/v1/documents/${docId}/file`)).status).toBe(401);
+
+    const ops = await token('ops@safar.co.id');
+    const okRes = await request(app).get(`/v1/documents/${docId}/file`).set('Authorization', `Bearer ${ops}`);
+    expect(okRes.status).toBe(200);
+    expect(okRes.headers['content-type']).toContain('application/pdf');
+    expect(okRes.headers['cache-control']).toContain('no-store');
+
+    const login = await request(app).post('/v1/portal/login').send({ regNumber: 'UMR-2026-0418', nik: '3175012345670003' });
+    const portalToken = login.body.data.token;
+    expect((await request(app).get(`/v1/documents/${docId}/file`).set('Authorization', `Bearer ${portalToken}`)).status).toBe(403);
+  });
+});

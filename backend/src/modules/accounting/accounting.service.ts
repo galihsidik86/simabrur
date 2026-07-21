@@ -154,9 +154,12 @@ export const accountingService = {
       reference: null,
       note: null
     }, idempotencyKey);
-    if (idempotent) return { payment, idempotent: true };
+    // Bila retry ber-key sama menemukan payment yang SUDAH terverifikasi → tuntas,
+    // kembalikan apa adanya. Bila masih 'pending' (verify sebelumnya gagal setelah
+    // createPayment commit), LANJUTKAN verifikasi — jangan no-op permanen.
+    if (idempotent && payment.status === 'verified') return { payment, idempotent: true };
     const result = await paymentsService.verifyPayment(req, payment.id);
-    return { payment, ...result, idempotent: false };
+    return { payment, ...result, idempotent };
   },
 
   /** Pembayaran Biaya — multi-akun, valas + realisasi selisih kurs 7-1000. */

@@ -117,6 +117,9 @@ export const paymentsService = {
         );
       }
 
+      // ON CONFLICT (idempotency_key) DO NOTHING: dua retry ber-key sama yang tiba
+      // hampir bersamaan tidak lagi menghasilkan unique-violation 500 — yang kalah
+      // mengambil baris pemenang & mengembalikannya sebagai replay idempoten.
       const [payment] = await trx('payments')
         .insert({
           invoice_id: input.invoiceId,
@@ -131,7 +134,13 @@ export const paymentsService = {
           idempotency_key: idempotencyKey ?? null,
           created_by: req.user?.id ?? null
         })
+        .onConflict('idempotency_key')
+        .ignore()
         .returning('*');
+      if (!payment) {
+        const existing = await trx('payments').where({ idempotency_key: idempotencyKey! }).first();
+        return { payment: existing, idempotent: true };
+      }
       await audit(req, { action: 'payments.create', entity: 'payments', entityId: payment.id, newValues: input }, trx);
       return { payment, idempotent: false };
     });
@@ -147,6 +156,9 @@ export const paymentsService = {
       const payment = await trx('payments').where({ id: paymentId }).forUpdate().first();
       if (!payment) throw errors.notFound('Pembayaran tidak ditemukan');
       if (payment.status === 'verified') throw errors.conflict('Pembayaran sudah diverifikasi');
+      // Kunci baris invoice → serialisasi verifikasi paralel pada invoice yang sama,
+      // agar recalcInvoiceStatus melihat state ter-commit (cegah status macet 'partial').
+      await trx('invoices').where({ id: payment.invoice_id }).forUpdate().first();
 
       await trx('payments').where({ id: paymentId }).update({
         status: 'verified',

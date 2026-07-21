@@ -2,16 +2,16 @@ import { Router } from 'express';
 import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireRoles } from '../../middleware/rbac.js';
 import { errors } from '../../utils/http.js';
 import { db } from '../../config/db.js';
 import { jamaahController } from './jamaah.controller.js';
 import { DOC_TYPES } from './jamaah.validation.js';
+import { UPLOAD_ROOT } from './storage.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const UPLOAD_ROOT = path.resolve(__dirname, '../../../uploads');
+export { UPLOAD_ROOT } from './storage.js';
 
 const ALLOWED_EXT = new Set(['.jpg', '.jpeg', '.png', '.pdf']);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -42,7 +42,8 @@ const storage = multer.diskStorage({
       return cb(errors.badRequest(`docType harus salah satu dari: ${DOC_TYPES.join(', ')}`), '');
     }
     const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${docType}-${Date.now()}${ext}`);
+    // Sisipkan komponen acak → nama file tidak dapat ditebak/di-enumerasi
+    cb(null, `${docType}-${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext}`);
   }
 });
 const upload = multer({
@@ -68,3 +69,6 @@ registrationsRoutes.get('/passport-check', jamaahController.passportCheck); // p
 
 export const documentsRoutes = Router();
 documentsRoutes.patch('/:id/verify', requireAuth, requireRoles('operasional'), jamaahController.verifyDocument);
+// Berkas dokumen (paspor/KTP = PII) hanya lewat endpoint ber-otentikasi + RBAC —
+// bukan statis publik. Nama file acak tidak lagi bisa ditebak dari luar.
+documentsRoutes.get('/:id/file', requireAuth, requireRoles('operasional', 'marketing', 'keuangan', 'pimpinan'), jamaahController.documentFile);
