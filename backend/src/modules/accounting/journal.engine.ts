@@ -32,21 +32,31 @@ const round = (n: number) => Math.round(n); // rupiah bulat — hindari selisih 
 export async function postJournal(trx: Knex, input: JournalInput) {
   if (input.lines.length < 2) throw errors.badRequest('Jurnal minimal 2 baris');
 
-  const totalDebit = round(input.lines.reduce((s, l) => s + (l.debit ?? 0), 0));
-  const totalCredit = round(input.lines.reduce((s, l) => s + (l.credit ?? 0), 0));
+  // Bulatkan ke rupiah SEKALI — validasi balance, penyimpanan, dan sinkron saldo
+  // memakai nilai yang sama persis. (Bila validasi memakai round(total) tapi
+  // simpan round(per-baris), jurnal tak-balance bisa lolos & tersimpan.)
+  const norm = input.lines.map((l) => ({
+    accountCode: l.accountCode,
+    debit: round(l.debit ?? 0),
+    credit: round(l.credit ?? 0),
+    amountForeign: l.amountForeign ?? null
+  }));
+
+  const totalDebit = norm.reduce((s, l) => s + l.debit, 0);
+  const totalCredit = norm.reduce((s, l) => s + l.credit, 0);
   if (totalDebit !== totalCredit) {
     throw errors.badRequest(
       `Jurnal tidak balance: total debit Rp ${totalDebit.toLocaleString('id-ID')} ≠ total kredit Rp ${totalCredit.toLocaleString('id-ID')}`
     );
   }
   if (totalDebit <= 0) throw errors.badRequest('Nilai jurnal harus lebih dari 0');
-  for (const l of input.lines) {
-    if ((l.debit ?? 0) < 0 || (l.credit ?? 0) < 0) throw errors.badRequest('Debit/kredit tidak boleh negatif');
-    if ((l.debit ?? 0) > 0 && (l.credit ?? 0) > 0) throw errors.badRequest('Satu baris tidak boleh debit sekaligus kredit');
+  for (const l of norm) {
+    if (l.debit < 0 || l.credit < 0) throw errors.badRequest('Debit/kredit tidak boleh negatif');
+    if (l.debit > 0 && l.credit > 0) throw errors.badRequest('Satu baris tidak boleh debit sekaligus kredit');
   }
 
   // Resolusi akun + validasi postable
-  const codes = [...new Set(input.lines.map((l) => l.accountCode))];
+  const codes = [...new Set(norm.map((l) => l.accountCode))];
   const accounts = await trx('accounts').whereIn('code', codes);
   const byCode = new Map(accounts.map((a) => [a.code, a]));
   for (const code of codes) {
@@ -73,25 +83,25 @@ export async function postJournal(trx: Knex, input: JournalInput) {
     })
     .returning('*');
 
-  const lines = input.lines.map((l, i) => ({
+  const lines = norm.map((l, i) => ({
     journal_id: journal.id,
     account_id: byCode.get(l.accountCode)!.id,
-    debit: round(l.debit ?? 0),
-    credit: round(l.credit ?? 0),
-    amount_foreign: l.amountForeign ?? null,
+    debit: l.debit,
+    credit: l.credit,
+    amount_foreign: l.amountForeign,
     position: i
   }));
   await trx('journal_lines').insert(lines);
 
   // Sinkron saldo kas/bank (akun 1-11xx/1-12xx yang terdaftar di bank_accounts)
-  for (const l of input.lines) {
-    const delta = round(l.debit ?? 0) - round(l.credit ?? 0);
+  for (const l of norm) {
+    const delta = l.debit - l.credit;
     if (delta !== 0) {
       await trx('bank_accounts').where({ account_code: l.accountCode }).increment('balance', delta);
     }
   }
 
-  return { ...journal, totalDebit, totalCredit, lines: input.lines };
+  return { ...journal, totalDebit, totalCredit, lines: norm };
 }
 
 /* ===== Template ayat jurnal kunci (Chart of Accounts.dc.html, alur A–F) ===== */
@@ -143,25 +153,29 @@ export function expenseLines(opts: {
 }): JournalLineInput[] {
   const rate = opts.exchangeRate || 1;
   const totalForeign = opts.lines.reduce((s, l) => s + l.amount, 0);
-  const totalIdr = Math.round(totalForeign * rate);
+  const paidIdr = Math.round(totalForeign * rate);
 
-  if (opts.settleDebt && opts.exchangeRateAtRecognition && opts.exchangeRateAtRecognition !== rate) {
-    // Realisasi selisih kurs: hutang diakui pada kurs lama, dibayar pada kurs sekarang
-    const debtIdr = Math.round(totalForeign * opts.exchangeRateAtRecognition);
-    const diff = totalIdr - debtIdr; // >0 = rugi kurs (bayar lebih mahal), <0 = laba
+  if (opts.settleDebt) {
+    // Pelunasan hutang vendor valas: hutang selalu di-Dr ke 2-1300 (bukan beban lagi —
+    // beban sudah diakui saat hutang dibuat). Selisih kurs realisasi → 7-1000.
+    // Berlaku juga saat kurs sama (selisih 0): hutang tetap wajib dilunasi.
+    const recogRate = opts.exchangeRateAtRecognition || rate;
+    const debtIdr = Math.round(totalForeign * recogRate);
+    const diff = paidIdr - debtIdr; // >0 = rugi kurs (bayar lebih mahal), <0 = laba
     const result: JournalLineInput[] = [{ accountCode: '2-1300', debit: debtIdr, amountForeign: totalForeign }];
     if (diff > 0) result.push({ accountCode: '7-1000', debit: diff });
     if (diff < 0) result.push({ accountCode: '7-1000', credit: -diff });
-    result.push({ accountCode: opts.sourceBankCode, credit: totalIdr, amountForeign: totalForeign });
+    result.push({ accountCode: opts.sourceBankCode, credit: paidIdr, amountForeign: totalForeign });
     return result;
   }
 
-  return [
-    ...opts.lines.map((l) => ({
-      accountCode: l.accountCode,
-      debit: Math.round(l.amount * rate),
-      amountForeign: rate !== 1 ? l.amount : null
-    })),
-    { accountCode: opts.sourceBankCode, credit: totalIdr, amountForeign: rate !== 1 ? totalForeign : null }
-  ];
+  // Biaya biasa: debit per baris (bulat per baris); kredit bank = JUMLAH debit terbulat
+  // agar selalu balance (bukan round(total×kurs) yang bisa selisih 1 rupiah dari Σ round).
+  const debits = opts.lines.map((l) => ({
+    accountCode: l.accountCode,
+    debit: Math.round(l.amount * rate),
+    amountForeign: rate !== 1 ? l.amount : null
+  }));
+  const bankIdr = debits.reduce((s, d) => s + d.debit, 0);
+  return [...debits, { accountCode: opts.sourceBankCode, credit: bankIdr, amountForeign: rate !== 1 ? totalForeign : null }];
 }

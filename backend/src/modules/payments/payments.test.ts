@@ -197,3 +197,40 @@ describe('GET /v1/receivables/aging', () => {
     expect(zaki.agingBucket).toBe('d90');
   });
 });
+
+describe('pengaman pembayaran (audit fixes)', () => {
+  it('pembayaran via rekening valas ditolak (invoice IDR)', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const inv = await db('invoices').where({ status: 'unpaid' }).first();
+    const res = await request(app)
+      .post('/v1/payments')
+      .set('Authorization', `Bearer ${keu}`)
+      .send({ invoiceId: inv.id, bankAccountCode: '1-1210', amount: 1_000_000, method: 'transfer' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('IDR');
+  });
+
+  it('nominal melebihi sisa tagihan ditolak', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const inv = await db('invoices').where({ number: 'INV/2026/06/0418' }).first(); // sudah lunas
+    const res = await request(app)
+      .post('/v1/payments')
+      .set('Authorization', `Bearer ${keu}`)
+      .send({ invoiceId: inv.id, bankAccountCode: '1-1200', amount: 5_000_000, method: 'transfer' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/melebihi sisa tagihan/i);
+  });
+
+  it('token portal ditolak di endpoint staf (cegah IDOR invoice lintas jamaah)', async () => {
+    const login = await request(app)
+      .post('/v1/portal/login')
+      .send({ regNumber: 'UMR-2026-0418', nik: '3175012345670003' });
+    expect(login.status).toBe(200);
+    const portalToken = login.body.data.token;
+    const inv = await db('invoices').first();
+    const res = await request(app)
+      .get(`/v1/invoices/${inv.id}/document`)
+      .set('Authorization', `Bearer ${portalToken}`);
+    expect(res.status).toBe(403);
+  });
+});

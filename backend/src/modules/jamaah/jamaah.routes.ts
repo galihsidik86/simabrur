@@ -6,21 +6,43 @@ import { fileURLToPath } from 'node:url';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireRoles } from '../../middleware/rbac.js';
 import { errors } from '../../utils/http.js';
+import { db } from '../../config/db.js';
 import { jamaahController } from './jamaah.controller.js';
+import { DOC_TYPES } from './jamaah.validation.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const UPLOAD_ROOT = path.resolve(__dirname, '../../../uploads');
 
 const ALLOWED_EXT = new Set(['.jpg', '.jpeg', '.png', '.pdf']);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const storage = multer.diskStorage({
+  // destination & filename dijalankan multer SEBELUM controller — semua validasi
+  // path HARUS di sini agar tidak ada file tertulis di luar uploads/ (path traversal).
   destination: (req, _file, cb) => {
-    const dir = path.join(UPLOAD_ROOT, String(req.params.id));
-    fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
+    const id = String(req.params.id);
+    if (!UUID_RE.test(id)) return cb(errors.badRequest('ID jamaah tidak valid'), '');
+    // Pastikan jamaah ada SEBELUM menulis — hindari file yatim & tulisan untuk id acak
+    db('jamaah')
+      .where({ id })
+      .first()
+      .then((j) => {
+        if (!j) return cb(errors.notFound('Jamaah tidak ditemukan'), '');
+        const dir = path.join(UPLOAD_ROOT, id);
+        fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+      })
+      .catch((e) => cb(e as Error, ''));
   },
   filename: (req, file, cb) => {
+    const docType = String(req.body.docType ?? '');
+    // Allow-list divalidasi DI SINI (bukan hanya di controller) — docType masuk ke
+    // nama file; '../..' pada docType bisa keluar dari direktori uploads.
+    if (!DOC_TYPES.includes(docType as (typeof DOC_TYPES)[number])) {
+      return cb(errors.badRequest(`docType harus salah satu dari: ${DOC_TYPES.join(', ')}`), '');
+    }
     const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${String(req.body.docType ?? 'DOC')}-${Date.now()}${ext}`);
+    cb(null, `${docType}-${Date.now()}${ext}`);
   }
 });
 const upload = multer({

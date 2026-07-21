@@ -325,3 +325,44 @@ describe('RBAC & summary', () => {
     expect(res.body.data.ccProfit.length).toBeGreaterThan(0);
   });
 });
+
+describe('pengaman akuntansi (audit fixes)', () => {
+  it('pengakuan pendapatan tidak boleh dobel utk cost center yang sama (409)', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const cc = await db('cost_centers').where({ code: 'CC-UMR-VIP-12' }).first();
+    const body = { costCenterId: cc.id, revenueAccountCode: '4-1000' as const, amount: 10_000_000 };
+    const first = await request(app).post('/v1/transactions/revenue-recognition').set('Authorization', `Bearer ${keu}`).send(body);
+    expect(first.status).toBe(201);
+    const dup = await request(app).post('/v1/transactions/revenue-recognition').set('Authorization', `Bearer ${keu}`).send(body);
+    expect(dup.status).toBe(409);
+    expect(dup.body.error.message).toMatch(/sudah pernah diakui/i);
+  });
+
+  it('pelunasan hutang valas dgn kurs sama tetap men-Dr 2-1300 (bukan beban dobel)', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const cc = await db('cost_centers').where({ code: 'CC-UMR-REG-9' }).first();
+    const res = await request(app).post('/v1/transactions/expense').set('Authorization', `Bearer ${keu}`).send({
+      costCenterId: cc.id, sourceBankCode: '1-1220', exchangeRate: 4265, settleDebt: true,
+      exchangeRateAtRecognition: 4265, lines: [{ accountCode: '2-1300', amount: 100 }]
+    });
+    expect(res.status).toBe(201);
+    const codes = res.body.data.lines.map((l: { accountCode: string }) => l.accountCode);
+    expect(codes).toContain('2-1300'); // hutang dilunasi
+    expect(codes).not.toContain('5-2000'); // TIDAK menambah beban lagi
+  });
+
+  it('jurnal manual dengan nominal pecahan tetap balance (round konsisten)', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const res = await request(app).post('/v1/journals').set('Authorization', `Bearer ${keu}`).send({
+      date: '2026-07-01', description: 'Uji pembulatan',
+      lines: [
+        { accountCode: '6-5000', debit: 100.4 },
+        { accountCode: '6-4000', debit: 100.4 },
+        { accountCode: '1-1200', credit: 200.8 }
+      ]
+    });
+    // 100+100 debit vs 201 credit → tidak balance → ditolak (bukan tersimpan pincang)
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/tidak balance/i);
+  });
+});

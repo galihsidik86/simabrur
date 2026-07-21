@@ -97,7 +97,7 @@ export const accountingService = {
   async createManualJournal(req: Request, input: Omit<JournalInput, 'source' | 'createdBy'>) {
     return db.transaction(async (trx) => {
       const journal = await postJournal(trx, { ...input, source: 'manual', createdBy: req.user?.id ?? null });
-      await audit(req, { action: 'journals.manual', entity: 'journals', entityId: journal.id, newValues: input });
+      await audit(req, { action: 'journals.manual', entity: 'journals', entityId: journal.id, newValues: input }, trx);
       return journal;
     });
   },
@@ -192,7 +192,7 @@ export const accountingService = {
         createdBy: req.user?.id ?? null,
         lines
       });
-      await audit(req, { action: 'transactions.expense', entity: 'journals', entityId: journal.id, newValues: input });
+      await audit(req, { action: 'transactions.expense', entity: 'journals', entityId: journal.id, newValues: input }, trx);
       return journal;
     });
   },
@@ -203,9 +203,29 @@ export const accountingService = {
     hpp?: { accountCode: string; amount: number }[] | null;
   }) {
     return db.transaction(async (trx) => {
-      const cc = await trx('cost_centers').where({ id: input.costCenterId }).first();
+      const cc = await trx('cost_centers').where({ id: input.costCenterId }).forUpdate().first();
       if (!cc) throw errors.notFound('Cost center tidak ditemukan');
       const date = input.date ?? today();
+
+      // PSAK 72 — pengaman pengakuan pendapatan:
+      // (1) tidak boleh dobel utk cost center yang sama (retry jaringan / klik ganda)
+      const existing = await trx('journals').where({ source: 'revenue', cost_center_id: cc.id }).first();
+      if (existing) {
+        throw errors.conflict(`Pendapatan cost center "${cc.name}" sudah pernah diakui (${existing.journal_no})`);
+      }
+      // (2) tidak boleh membuat liabilitas Uang Muka Jamaah (2-1100) jadi negatif —
+      // reclass men-Dr 2-1100 sebesar amount; hanya boleh sebesar saldo liabilitas
+      // yang benar-benar ada (dana jamaah yang sudah diterima).
+      const [{ liab }] = await trx('journal_lines as jl')
+        .join('accounts as a', 'a.id', 'jl.account_id')
+        .where('a.code', '2-1100')
+        .select(trx.raw('COALESCE(SUM(jl.credit - jl.debit), 0) AS liab'));
+      const liability2100 = Number(liab ?? 0);
+      if (input.amount > liability2100) {
+        throw errors.badRequest(
+          `Pendapatan yang diakui (Rp ${input.amount.toLocaleString('id-ID')}) melebihi saldo Uang Muka Jamaah 2-1100 (Rp ${liability2100.toLocaleString('id-ID')}) — dana jamaah belum cukup diterima`
+        );
+      }
 
       const revenue = await postJournal(trx, {
         date,
@@ -231,7 +251,7 @@ export const accountingService = {
           lines: hppRecognitionLines(input.hpp)
         });
       }
-      await audit(req, { action: 'transactions.revenue', entity: 'journals', entityId: revenue.id, newValues: input });
+      await audit(req, { action: 'transactions.revenue', entity: 'journals', entityId: revenue.id, newValues: input }, trx);
       return { revenue, hpp };
     });
   },
@@ -250,7 +270,7 @@ export const accountingService = {
         createdBy: req.user?.id ?? null,
         lines: commissionLines(amount)
       });
-      await audit(req, { action: 'transactions.commission', entity: 'journals', entityId: journal.id, newValues: input });
+      await audit(req, { action: 'transactions.commission', entity: 'journals', entityId: journal.id, newValues: input }, trx);
       return journal;
     });
   },

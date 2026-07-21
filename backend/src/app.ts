@@ -80,6 +80,18 @@ export function createApp() {
         message: { success: false, error: { code: 'RATE_LIMITED', message: 'Terlalu banyak pendaftaran dari alamat ini — coba lagi nanti' } }
       })
     );
+    // Upload dokumen (publik utk wizard) — batasi agar tidak dipakai membanjiri disk
+    app.use(
+      '/v1/jamaah/:id/documents',
+      rateLimit({
+        windowMs: 15 * 60 * 1000,
+        limit: 40,
+        standardHeaders: true,
+        legacyHeaders: false,
+        skip: (req) => req.method === 'GET',
+        message: { success: false, error: { code: 'RATE_LIMITED', message: 'Terlalu banyak unggahan dari alamat ini — coba lagi nanti' } }
+      })
+    );
   }
 
   app.use('/uploads', express.static(UPLOAD_ROOT));

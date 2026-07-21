@@ -34,17 +34,33 @@ export const env = {
   }
 };
 
-// Gagal keras di produksi bila secret masih default dev / terlalu pendek
+// Gagal keras di produksi bila secret masih default dev / placeholder / terlalu pendek
 if (env.isProduction) {
+  // Placeholder .env.example ("ganti-dengan-secret-acak-...") kebetulan 32 char & tak
+  // memuat 'dev-' → dulu lolos guard. Blokir eksplisit kata penanda placeholder.
+  const PLACEHOLDER = ['dev-', 'jangan-dipakai', 'ganti', 'secret-acak', 'changeme', 'example'];
   for (const [name, value] of [
     ['JWT_ACCESS_SECRET', env.jwt.accessSecret],
     ['JWT_REFRESH_SECRET', env.jwt.refreshSecret]
   ] as const) {
-    if (value.includes('dev-') || value.includes('jangan-dipakai') || value.length < 32) {
+    const lower = value.toLowerCase();
+    if (value.length < 32 || PLACEHOLDER.some((p) => lower.includes(p))) {
       throw new Error(
-        `${name} tidak aman untuk produksi (masih default dev / < 32 karakter). ` +
+        `${name} tidak aman untuk produksi (masih placeholder/default atau < 32 karakter). ` +
           `Buat secret acak: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`
       );
+    }
+  }
+  if (env.jwt.accessSecret === env.jwt.refreshSecret) {
+    throw new Error('JWT_ACCESS_SECRET dan JWT_REFRESH_SECRET tidak boleh sama.');
+  }
+  // Integrasi Mabrur aktif → kunci enkripsi wajib valid & transport wajib HTTPS
+  if (env.mabrur.apiUrl) {
+    if (!env.mabrur.apiUrl.startsWith('https://')) {
+      throw new Error('MABRUR_API_URL harus HTTPS di produksi — password awal & token M2M tidak boleh transit plaintext.');
+    }
+    if (env.mabrur.serviceToken && !/^[0-9a-f]{64}$/i.test(env.mabrur.encryptionKey)) {
+      throw new Error('SAFAR_ENCRYPTION_KEY wajib 64 karakter hex bila integrasi Mabrur aktif di produksi.');
     }
   }
   if (env.databaseUrl.includes('safar_dev')) {

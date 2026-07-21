@@ -6,7 +6,7 @@ import { errors } from '../../utils/http.js';
 import { audit } from '../../middleware/audit.js';
 import { nextNumber } from '../../utils/numbering.js';
 import { terbilang } from '../../utils/terbilang.js';
-import { agingBucket, buildSchedules, invoiceNumber, receivableStatus, vaNumber } from './payments.rules.js';
+import { agingBucket, buildSchedules, receivableStatus, vaNumber } from './payments.rules.js';
 import type { createPaymentSchema, upsertBankAccountSchema } from './payments.validation.js';
 import { postJournal, receiptLines } from '../accounting/journal.engine.js';
 
@@ -35,10 +35,16 @@ export async function issueInvoice(trx: Knex.Transaction, registrationId: string
   const issueDate = today();
   const schedules = buildSchedules(reg.payment_scheme, total, issueDate, reg.departure_date);
 
+  // Nomor invoice bulanan yang dijamin unik (INV/YYYY/MM/NNNN). Memakai serial
+  // registrasi (slice-4) bisa tabrakan UMR vs HAJ / lintas tahun di bulan sama →
+  // unique violation → registrasi gagal 500. Sekuens atomik menutup itu.
+  const [iy, im] = issueDate.split('-');
+  const number = await nextNumber(trx, `INV/${iy}/${im}`, 4, '/');
+
   const [invoice] = await trx('invoices')
     .insert({
       registration_id: registrationId,
-      number: invoiceNumber(reg.reg_number, issueDate),
+      number,
       issued_date: issueDate,
       due_date: schedules[schedules.length - 1].dueDate,
       total_amount: total,
@@ -58,6 +64,11 @@ export async function issueInvoice(trx: Knex.Transaction, registrationId: string
   return invoice;
 }
 
+async function paidSoFar(trx: Knex.Transaction, invoiceId: string): Promise<number> {
+  const [{ paid }] = await trx('payments').where({ invoice_id: invoiceId, status: 'verified' }).sum({ paid: 'amount' });
+  return Number(paid ?? 0);
+}
+
 async function recalcInvoiceStatus(trx: Knex.Transaction, invoiceId: string) {
   const inv = await trx('invoices').where({ id: invoiceId }).first();
   const [{ paid }] = await trx('payments')
@@ -73,7 +84,7 @@ export const paymentsService = {
   async createInvoice(req: Request, registrationId: string) {
     return db.transaction(async (trx) => {
       const invoice = await issueInvoice(trx, registrationId);
-      await audit(req, { action: 'invoices.create', entity: 'invoices', entityId: invoice.id, newValues: { registrationId } });
+      await audit(req, { action: 'invoices.create', entity: 'invoices', entityId: invoice.id, newValues: { registrationId } }, trx);
       return invoice;
     });
   },
@@ -94,6 +105,17 @@ export const paymentsService = {
       }
       const bank = await trx('bank_accounts').where({ account_code: input.bankAccountCode }).first();
       if (!bank) throw errors.badRequest(`Rekening ${input.bankAccountCode} tidak ditemukan`);
+      // Invoice & liabilitas 2-1100 dalam IDR; pembayaran jamaah wajib via rekening IDR
+      // (nominal valas tidak boleh dibukukan mentah sebagai IDR tanpa kurs).
+      if (bank.currency !== 'IDR') {
+        throw errors.badRequest('Pembayaran jamaah harus melalui rekening IDR');
+      }
+      const remaining = Number(invoice.total_amount) - Number(await paidSoFar(trx, invoice.id));
+      if (input.amount > remaining + 0.001) {
+        throw errors.badRequest(
+          `Nominal (Rp ${input.amount.toLocaleString('id-ID')}) melebihi sisa tagihan (Rp ${Math.max(0, remaining).toLocaleString('id-ID')})`
+        );
+      }
 
       const [payment] = await trx('payments')
         .insert({
@@ -110,7 +132,7 @@ export const paymentsService = {
           created_by: req.user?.id ?? null
         })
         .returning('*');
-      await audit(req, { action: 'payments.create', entity: 'payments', entityId: payment.id, newValues: input });
+      await audit(req, { action: 'payments.create', entity: 'payments', entityId: payment.id, newValues: input }, trx);
       return { payment, idempotent: false };
     });
   },
@@ -183,7 +205,7 @@ export const paymentsService = {
         entityId: paymentId,
         oldValues: { status: 'pending' },
         newValues: { status: 'verified', invoiceStatus: status, receipt: receipt.number, journalNo: journal.journal_no }
-      });
+      }, trx);
       return { paymentId, invoiceStatus: status, receipt, journal: { journalNo: journal.journal_no, id: journal.id } };
     });
   },

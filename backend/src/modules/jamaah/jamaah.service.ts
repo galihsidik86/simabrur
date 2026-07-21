@@ -220,7 +220,7 @@ export const jamaahService = {
         entity: 'registrations',
         entityId: registration.id,
         newValues: { regNumber, jamaahId: jamaahRow.id, departureId: dep.id, roomType: input.roomType, paymentScheme: input.paymentScheme }
-      });
+      }, trx);
 
       return {
         registrationId: registration.id,

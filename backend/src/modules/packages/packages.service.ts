@@ -127,7 +127,7 @@ export const packagesService = {
           .returning('*');
         await createCostCenterFor(trx, dep.id, pkg.code, pkg.name, input.departure.departureDate);
       }
-      await audit(req, { action: 'packages.create', entity: 'packages', entityId: pkg.id, newValues: input });
+      await audit(req, { action: 'packages.create', entity: 'packages', entityId: pkg.id, newValues: input }, trx);
       return pkg;
     });
   },
@@ -163,7 +163,7 @@ export const packagesService = {
           );
         }
       }
-      await audit(req, { action: 'packages.update', entity: 'packages', entityId: id, oldValues: before, newValues: input });
+      await audit(req, { action: 'packages.update', entity: 'packages', entityId: id, oldValues: before, newValues: input }, trx);
       return pkg;
     });
   },

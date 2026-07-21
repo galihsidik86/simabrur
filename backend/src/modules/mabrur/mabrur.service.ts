@@ -31,6 +31,17 @@ function ensureConfigured() {
   }
 }
 
+/**
+ * Validasi kunci enkripsi SEBELUM sinkron memanggil Mabrur. Bila key tidak valid
+ * dan baru ketahuan saat encrypt() setelah akun remote dibuat, transaksi rollback
+ * → sinkron ulang jadi 'updated' → password awal HILANG PERMANEN. Gagal lebih awal.
+ */
+function ensureCryptoReady() {
+  if (!/^[0-9a-f]{64}$/i.test(env.mabrur.encryptionKey)) {
+    throw errors.badRequest('SAFAR_ENCRYPTION_KEY belum dikonfigurasi (64 karakter hex) — sinkron dibatalkan sebelum menghubungi Mabrur');
+  }
+}
+
 async function callMabrur(path: string, init: RequestInit = {}) {
   ensureConfigured();
   let res: Response;
@@ -58,6 +69,8 @@ async function callMabrur(path: string, init: RequestInit = {}) {
 export const mabrurService = {
   /** Sinkronkan satu rombongan (group Safar) ke Mabrur. */
   async syncGroup(req: Request, groupId: string) {
+    ensureConfigured();
+    ensureCryptoReady(); // gagal SEBELUM membuat akun remote bila key belum siap
     const group = await db('groups as g')
       .join('departures as d', 'd.id', 'g.departure_id')
       .join('packages as p', 'p.id', 'd.package_id')

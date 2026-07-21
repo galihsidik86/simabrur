@@ -276,3 +276,31 @@ describe('PATCH /v1/jamaah/:id (edit profil oleh operasional)', () => {
     ).toBe(404);
   });
 });
+
+describe('keamanan upload dokumen (audit fixes)', () => {
+  it('menolak path traversal pada :id (id non-UUID) tanpa menulis file', async () => {
+    const res = await request(app)
+      .post('/v1/jamaah/..%2F..%2F..%2Fpwn/documents')
+      .field('docType', 'KTP')
+      .attach('file', Buffer.from('%PDF-1.4'), 'x.pdf');
+    expect([400, 404]).toContain(res.status);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('menolak docType di luar allow-list (cegah traversal via nama file)', async () => {
+    const jamaahRow = await db('jamaah').where({ nik: '9900000000000001' }).first();
+    const res = await request(app)
+      .post(`/v1/jamaah/${jamaahRow.id}/documents`)
+      .field('docType', '../../../../pwn')
+      .attach('file', Buffer.from('%PDF-1.4'), 'x.pdf');
+    expect(res.status).toBe(400);
+  });
+
+  it('menolak :id UUID yang tidak ada jamaah-nya (tanpa file yatim)', async () => {
+    const res = await request(app)
+      .post('/v1/jamaah/00000000-0000-0000-0000-000000000000/documents')
+      .field('docType', 'KTP')
+      .attach('file', Buffer.from('%PDF-1.4'), 'x.pdf');
+    expect(res.status).toBe(404);
+  });
+});
