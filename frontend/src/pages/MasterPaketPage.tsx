@@ -19,7 +19,7 @@ export function MasterPaketPage() {
   const { user } = useAuth();
   const canManage = !!user && ['admin', 'marketing'].includes(user.role);
   return (
-    <div className="grid grid-cols-3 gap-4 max-xl:grid-cols-1">
+    <div dir="ltr" className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
       <KategoriPanel canManage={canManage} />
       <HotelPanel canManage={canManage} />
       <MaskapaiPanel canManage={canManage} />
@@ -122,13 +122,16 @@ function KategoriPanel({ canManage }: { canManage: boolean }) {
       </table>
       {canManage && (
         <form onSubmit={submit} className="mt-3.5">
-          <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-3">
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-3">
             {crud.editingId ? 'Edit kategori' : 'Tambah kategori'}
           </div>
-          <div className="flex gap-2">
-            <input className="fld flex-1" placeholder="kode (mis. premium)" value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} required />
-            <input className="fld flex-1" placeholder="Label" value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })} required />
-            <input className="fld w-16" type="number" min={0} title="Urutan" value={f.sort} onChange={(e) => setF({ ...f, sort: Number(e.target.value) })} />
+          <div className="grid grid-cols-[1fr_88px] gap-2.5">
+            <div><label className="lbl">Kode</label>
+              <input className="fld" placeholder="mis. premium" value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} required /></div>
+            <div><label className="lbl">Urutan</label>
+              <input className="fld" type="number" min={0} value={f.sort} onChange={(e) => setF({ ...f, sort: Number(e.target.value) })} /></div>
+            <div className="col-span-2"><label className="lbl">Label</label>
+              <input className="fld" placeholder="mis. Premium" value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })} required /></div>
           </div>
           <ErrorRow msg={crud.error} />
           <div className="mt-2.5 flex justify-end gap-2">
@@ -183,15 +186,18 @@ function HotelPanel({ canManage }: { canManage: boolean }) {
       </table>
       {canManage && (
         <form onSubmit={submit} className="mt-3.5">
-          <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-3">
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-3">
             {crud.editingId ? 'Edit hotel' : 'Tambah hotel'}
           </div>
-          <div className="flex gap-2">
-            <input className="fld flex-1" placeholder="Nama hotel" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required />
-            <input className="fld w-28" placeholder="Kota" value={f.city} onChange={(e) => setF({ ...f, city: e.target.value })} required />
-            <select className="fld w-16" value={f.star} onChange={(e) => setF({ ...f, star: Number(e.target.value) })}>
-              {[1, 2, 3, 4, 5].map((s) => <option key={s} value={s}>{s}★</option>)}
-            </select>
+          <div className="grid grid-cols-[1fr_88px] gap-2.5">
+            <div className="col-span-2"><label className="lbl">Nama Hotel</label>
+              <input className="fld" placeholder="mis. Grand Makkah" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required /></div>
+            <div><label className="lbl">Kota</label>
+              <input className="fld" placeholder="mis. Makkah" value={f.city} onChange={(e) => setF({ ...f, city: e.target.value })} required /></div>
+            <div><label className="lbl">Bintang</label>
+              <select className="fld" value={f.star} onChange={(e) => setF({ ...f, star: Number(e.target.value) })}>
+                {[1, 2, 3, 4, 5].map((s) => <option key={s} value={s}>{s}★</option>)}
+              </select></div>
           </div>
           <ErrorRow msg={crud.error} />
           <div className="mt-2.5 flex justify-end gap-2">
@@ -245,12 +251,14 @@ function MaskapaiPanel({ canManage }: { canManage: boolean }) {
       </table>
       {canManage && (
         <form onSubmit={submit} className="mt-3.5">
-          <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-3">
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-3">
             {crud.editingId ? 'Edit maskapai' : 'Tambah maskapai'}
           </div>
-          <div className="flex gap-2">
-            <input className="fld flex-1" placeholder="Nama maskapai" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required />
-            <input className="fld w-20" placeholder="IATA" maxLength={3} value={f.iataCode} onChange={(e) => setF({ ...f, iataCode: e.target.value.toUpperCase() })} required />
+          <div className="grid grid-cols-[1fr_88px] gap-2.5">
+            <div><label className="lbl">Nama Maskapai</label>
+              <input className="fld" placeholder="mis. Garuda Indonesia" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required /></div>
+            <div><label className="lbl">Kode IATA</label>
+              <input className="fld font-mono uppercase" placeholder="GA" maxLength={3} value={f.iataCode} onChange={(e) => setF({ ...f, iataCode: e.target.value.toUpperCase() })} required /></div>
           </div>
           <ErrorRow msg={crud.error} />
           <div className="mt-2.5 flex justify-end gap-2">
