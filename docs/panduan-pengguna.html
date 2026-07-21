@@ -116,6 +116,12 @@
   <p class="sub">Ikuti dari atas ke bawah — kotak kuning adalah proses yang berjalan <b>otomatis</b> tanpa input pengguna.</p>
 
   <div class="flow">
+    <div class="fstep"><div class="fnum"><div class="fdot">0</div><div class="fline"></div></div><div class="fbody">
+      <b class="t">Siapkan master data</b> <span class="chip c-mkt">Marketing</span> <span class="chip c-keu">Keuangan</span>
+      <div class="fmeta">Sekali di awal / saat ada mitra baru. <span class="mono">/paket/master</span>: kategori paket, hotel, maskapai (Marketing) · <span class="mono">/keuangan-master</span>: vendor &amp; rekening bank (Keuangan). Pilihan langsung muncul di form Tambah Paket, wizard, dan Input Transaksi.</div>
+      <div class="fauto">⚙ Dijaga sistem: master yang masih dipakai paket/tagihan/jurnal/pembayaran <b>tidak bisa dihapus</b> · kode akun rekening wajib sudah ada di COA kelas 1 · <b>saldo rekening tidak bisa diedit</b> — hanya bergerak lewat jurnal.</div>
+    </div></div>
+
     <div class="fstep"><div class="fnum"><div class="fdot">1</div><div class="fline"></div></div><div class="fbody">
       <b class="t">Pendaftaran jamaah</b> <span class="chip c-jam">Jamaah</span> <span class="chip c-mkt">Marketing</span>
       <div class="fmeta">Halaman publik <span class="mono">/daftar</span> — wizard 6 langkah: paket → data diri → dokumen → kamar → skema bayar → konfirmasi akad wakalah. Opsional: kode referral agen.</div>
@@ -171,6 +177,7 @@
     <tbody>
       <tr><td>Dashboard eksekutif <span class="mono">/</span></td><td align="center" class="see">👁</td><td align="center" class="see">👁</td><td align="center" class="see">👁</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
       <tr><td>Paket &amp; jadwal <span class="mono">/paket</span></td><td align="center" class="mark">✅</td><td align="center">—</td><td align="center" class="see">👁 HPP</td><td align="center" class="see">👁</td><td align="center" class="see">👁 wizard</td></tr>
+      <tr><td>Master data paket: kategori, hotel, maskapai <span class="mono">/paket/master</span></td><td align="center" class="mark">✅</td><td align="center">—</td><td align="center">—</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
       <tr><td>Jamaah &amp; dokumen <span class="mono">/jamaah</span></td><td align="center" class="see">👁</td><td align="center" class="mark">✅ verifikasi</td><td align="center" class="see">👁</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
       <tr><td>Pendaftaran <span class="mono">/daftar</span></td><td align="center" class="mark">✅ dampingi</td><td align="center">—</td><td align="center">—</td><td align="center">—</td><td align="center" class="mark">✅ publik</td></tr>
       <tr><td>Pembayaran &amp; kwitansi <span class="mono">/pembayaran</span></td><td align="center" class="see">👁 piutang</td><td align="center">—</td><td align="center" class="mark">✅ catat+verifikasi</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
@@ -178,6 +185,7 @@
       <tr><td>Laporan operasional (aging/dokumen/kesiapan)</td><td align="center">—</td><td align="center" class="mark">✅ + ekspor</td><td align="center" class="see">👁 + ekspor</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
       <tr><td>Input Transaksi 4 tipe <span class="mono">/keuangan/input</span></td><td align="center">—</td><td align="center">—</td><td align="center" class="mark">✅</td><td align="center">—</td><td align="center">—</td></tr>
       <tr><td>Jurnal, buku besar, COA, rekonsiliasi</td><td align="center">—</td><td align="center">—</td><td align="center" class="mark">✅</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
+      <tr><td>Master data keuangan: vendor, rekening bank <span class="mono">/keuangan-master</span></td><td align="center">—</td><td align="center">—</td><td align="center" class="mark">✅</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
       <tr><td>Laporan keuangan (LR/Neraca/per Paket)</td><td align="center" class="see">👁 per paket</td><td align="center">—</td><td align="center" class="mark">✅ + ekspor</td><td align="center" class="see">👁 + ekspor</td><td align="center">—</td></tr>
       <tr><td>Agen &amp; leads <span class="mono">/marketing</span></td><td align="center" class="mark">✅</td><td align="center">—</td><td align="center" class="see">👁</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
       <tr><td>Persetujuan komisi</td><td align="center" class="mark">✅</td><td align="center">—</td><td align="center" class="mark">✅</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
@@ -207,11 +215,11 @@
   <h2>5 · Skenario Cepat per Peran</h2>
   <div class="scen">
     <div class="card"><b><span class="chip c-mkt">Marketing</span> — hari kerja biasa</b>
-      <p><span class="mono">/paket</span> tambah paket/jadwal → <span class="mono">/marketing</span> registrasi agen, cek leads &amp; konversi, setujui komisi → dampingi calon jamaah di <span class="mono">/daftar</span> dengan kode referral agen.</p></div>
+      <p><span class="mono">/paket</span> tambah paket/jadwal (butuh kategori/hotel/maskapai baru? tambahkan dulu di <span class="mono">/paket/master</span>) → <span class="mono">/marketing</span> registrasi agen, cek leads &amp; konversi, setujui komisi → dampingi calon jamaah di <span class="mono">/daftar</span> dengan kode referral agen.</p></div>
     <div class="card"><b><span class="chip c-ops">Operasional</span> — menjelang keberangkatan</b>
       <p><span class="mono">/jamaah</span> tab <i>Dokumen Belum Lengkap</i> → verifikasi/tolak → <span class="mono">/operasional</span> perbarui visa &amp; PNR → <span class="mono">/laporan-operasional</span> tab <i>Kesiapan</i>: kejar metrik merah.</p></div>
     <div class="card"><b><span class="chip c-keu">Keuangan</span> — siklus harian &amp; bulanan</b>
-      <p><span class="mono">/pembayaran</span> verifikasi setoran (kwitansi &amp; jurnal otomatis) → <span class="mono">/keuangan/input</span> bayar vendor &amp; posting PSAK 72 saat keberangkatan → akhir bulan: rekonsiliasi bank → <span class="mono">/laporan-keuangan</span> + ekspor.</p></div>
+      <p><span class="mono">/pembayaran</span> verifikasi setoran (kwitansi &amp; jurnal otomatis) → <span class="mono">/keuangan/input</span> bayar vendor &amp; posting PSAK 72 saat keberangkatan → akhir bulan: rekonsiliasi bank → <span class="mono">/laporan-keuangan</span> + ekspor. Vendor / rekening bank baru: daftarkan dulu di <span class="mono">/keuangan-master</span> (rekening terikat COA kelas 1, lahir bersaldo 0).</p></div>
     <div class="card"><b><span class="chip c-pim">Pimpinan</span> &amp; <span class="chip c-jam">Jamaah</span></b>
       <p>Pimpinan: cukup dashboard <span class="mono">/</span> + kedua laporan — angka live dari jurnal, tanpa risiko mengubah data. Jamaah: daftar di <span class="mono">/daftar</span>, simpan nomor registrasi, pantau semuanya di <span class="mono">/portal</span> (login No. Registrasi + NIK).</p></div>
   </div>

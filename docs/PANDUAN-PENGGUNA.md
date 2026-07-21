@@ -42,6 +42,7 @@ flowchart TD
 
 | # | Transaksi | Siapa | Di halaman | Yang terjadi otomatis |
 |---|---|---|---|---|
+| 0 | **Siapkan master data** (sekali di awal / saat ada mitra baru): kategori paket, hotel, maskapai · vendor, rekening bank | **Marketing** (paket) · **Keuangan** (keuangan) | `/paket/master` · `/keuangan-master` | Kategori/hotel/maskapai langsung muncul di form Tambah Paket & wizard. Pengaman: master yang **masih dipakai** paket/tagihan/jurnal/pembayaran tidak bisa dihapus; kode akun rekening wajib sudah ada di COA kelas 1; **saldo rekening tidak bisa diedit** — hanya bergerak lewat jurnal |
 | 1 | **Pendaftaran jamaah** (pilih paket → data diri → dokumen → kamar → skema bayar → konfirmasi akad wakalah) | **Jamaah** sendiri, atau Marketing mendampingi | `/daftar` (tanpa login) | Nomor registrasi `UMR/HAJ-tahun-seri`; kuota kursi berkurang; **invoice + jadwal termin** terbit (cicilan = DP 5 jt + 5 termin); bila diisi **kode agen** → lead terkonversi + komisi *pending*. Validasi otomatis: paspor ≥ 7 bulan setelah keberangkatan, perempuan < 45 th wajib mahram, kuota real-time |
 | 2 | **Verifikasi dokumen** (KTP, KK, Paspor, Pas Foto, Vaksin; Buku Nikah opsional) | **Operasional** | `/jamaah` → klik nama → tombol ✓ Verifikasi / Tolak | Saat 5 dokumen wajib terverifikasi → status registrasi menjadi **Aktif** |
 | 3 | **Catat pembayaran jamaah** (DP/termin/pelunasan) | **Keuangan** | `/pembayaran` → **Kelola**, atau `/keuangan/input` → *Terima Pembayaran* | Pembayaran tercatat *pending* → setelah **diverifikasi Keuangan**: termin lunas, **kwitansi bernomor + terbilang** terbit, **jurnal otomatis Dr Bank/Kas · Cr 2-1100 Uang Muka Jamaah** (dana jamaah = liabilitas, BUKAN pendapatan) |
@@ -64,6 +65,7 @@ flowchart TD
 |---|:-:|:-:|:-:|:-:|:-:|
 | Dashboard eksekutif (`/`) | 👁 | 👁 | 👁 | 👁 | — |
 | Paket & jadwal (`/paket`) | ✅ | — | 👁 (HPP) | 👁 | 👁 (wizard) |
+| Master data paket: kategori, hotel, maskapai (`/paket/master`) | ✅ | — | — | 👁 | — |
 | Data jamaah & dokumen (`/jamaah`) | 👁 | ✅ verifikasi | 👁 | 👁 | — |
 | Pendaftaran (`/daftar`) | ✅ (mendampingi) | — | — | — | ✅ (publik) |
 | Pembayaran & kwitansi (`/pembayaran`) | 👁 piutang | — | ✅ catat + verifikasi | 👁 | — |
@@ -71,6 +73,7 @@ flowchart TD
 | Laporan operasional (aging/dokumen/kesiapan) | — | ✅ + ekspor | 👁 + ekspor | 👁 | — |
 | Input Transaksi 4 tipe (`/keuangan/input`) | — | — | ✅ | — | — |
 | Jurnal, buku besar, COA, rekonsiliasi | — | — | ✅ | 👁 | — |
+| Master data keuangan: vendor, rekening bank (`/keuangan-master`) | — | — | ✅ | 👁 | — |
 | Laporan keuangan (LR/Neraca/per Paket) | 👁 laba per paket | — | ✅ + ekspor | 👁 + ekspor | — |
 | Agen & leads (`/marketing`) | ✅ | — | 👁 | 👁 | — |
 | Persetujuan komisi | ✅ | — | ✅ | 👁 | — |
@@ -98,11 +101,11 @@ Semua jurnal dibuat mesin melalui satu pintu (*journal engine*) dan **wajib bala
 
 ## 5. Skenario Cepat per Peran
 
-**Marketing — hari kerja biasa**: buka `/paket` (tambah paket/jadwal bila ada program baru) → `/marketing` (registrasi agen baru, cek leads & konversi, setujui komisi yang jatuh hak) → dampingi calon jamaah mengisi `/daftar` dengan kode referral agen.
+**Marketing — hari kerja biasa**: buka `/paket` (tambah paket/jadwal bila ada program baru; bila butuh kategori/hotel/maskapai baru, tambahkan dulu di `/paket/master`) → `/marketing` (registrasi agen baru, cek leads & konversi, setujui komisi yang jatuh hak) → dampingi calon jamaah mengisi `/daftar` dengan kode referral agen.
 
 **Operasional — menjelang keberangkatan**: `/jamaah` tab *Dokumen Belum Lengkap* → verifikasi/tolak dokumen masuk → `/operasional` perbarui visa & PNR → `/laporan-operasional` tab *Kesiapan* — kejar metrik yang merah (paspor bermasalah, visa belum terbit).
 
-**Keuangan — siklus harian & bulanan**: `/pembayaran` verifikasi setoran masuk (kwitansi & jurnal otomatis) → `/keuangan/input` bayar vendor & (saat tanggal keberangkatan) posting pengakuan pendapatan + HPP → akhir bulan: `/keuangan/jurnal` rekonsiliasi bank → `/laporan-keuangan` tutup laporan, ekspor Excel.
+**Keuangan — siklus harian & bulanan**: `/pembayaran` verifikasi setoran masuk (kwitansi & jurnal otomatis) → `/keuangan/input` bayar vendor & (saat tanggal keberangkatan) posting pengakuan pendapatan + HPP → akhir bulan: `/keuangan/jurnal` rekonsiliasi bank → `/laporan-keuangan` tutup laporan, ekspor Excel. Vendor baru atau rekening bank baru? Daftarkan dulu di `/keuangan-master` — rekening terikat akun COA kelas 1 dan lahir bersaldo 0 (saldo hanya bergerak lewat jurnal).
 
 **Pimpinan**: cukup `/` (dashboard), `/laporan-keuangan`, `/laporan-operasional` — semua angka live dari jurnal, tanpa risiko mengubah data.
 
