@@ -4,6 +4,10 @@ Manual ini menjelaskan **siapa melakukan apa, di halaman mana, dan apa yang terj
 
 Akun demo (password `safar123`): `admin@` · `keuangan@` · `ops@` · `marketing@` · `pimpinan@` — semua `safar.co.id`.
 
+**Header setiap halaman** menyediakan dua alat bantu cepat:
+- **Pencarian global** — ketik ≥2 huruf untuk menemukan jamaah (nama/no. registrasi/HP), paket, atau invoice; klik hasil untuk langsung membukanya. Bagian yang tampil menyesuaikan peran Anda.
+- **Lonceng notifikasi** — menampilkan hal yang **perlu tindakan** (dokumen & pembayaran menunggu verifikasi); titik merah menyala hanya bila memang ada antrean.
+
 ---
 
 ## 1. Enam Peran dan Tanggung Jawabnya
@@ -44,11 +48,11 @@ flowchart TD
 |---|---|---|---|---|
 | 0 | **Siapkan master data** (sekali di awal / saat ada mitra baru): kategori paket, hotel, maskapai · vendor, rekening bank | **Marketing** (paket) · **Keuangan** (keuangan) | `/paket/master` · `/keuangan-master` | Kategori/hotel/maskapai langsung muncul di form Tambah Paket & wizard. Pengaman: master yang **masih dipakai** paket/tagihan/jurnal/pembayaran tidak bisa dihapus; kode akun rekening wajib sudah ada di COA kelas 1; **saldo rekening tidak bisa diedit** — hanya bergerak lewat jurnal |
 | 1 | **Pendaftaran jamaah** (pilih paket → data diri → dokumen → kamar → skema bayar → konfirmasi akad wakalah) | **Jamaah** sendiri, atau Marketing mendampingi | `/daftar` (tanpa login) | Nomor registrasi `UMR/HAJ-tahun-seri`; kuota kursi berkurang; **invoice + jadwal termin** terbit (cicilan = DP 5 jt + 5 termin); bila diisi **kode agen** → lead terkonversi + komisi *pending*. Validasi otomatis: paspor ≥ 7 bulan setelah keberangkatan, perempuan < 45 th wajib mahram, kuota real-time |
-| 2 | **Verifikasi dokumen** (KTP, KK, Paspor, Pas Foto, Vaksin; Buku Nikah opsional) | **Operasional** | `/jamaah` → klik nama → tombol ✓ Verifikasi / Tolak | Saat 5 dokumen wajib terverifikasi → status registrasi menjadi **Aktif** |
-| 3 | **Catat pembayaran jamaah** (DP/termin/pelunasan) | **Keuangan** | `/pembayaran` → **Kelola**, atau `/keuangan/input` → *Terima Pembayaran* | Pembayaran tercatat *pending* → setelah **diverifikasi Keuangan**: termin lunas, **kwitansi bernomor + terbilang** terbit, **jurnal otomatis Dr Bank/Kas · Cr 2-1100 Uang Muka Jamaah** (dana jamaah = liabilitas, BUKAN pendapatan) |
+| 2 | **Verifikasi dokumen** (KTP, KK, Paspor, Pas Foto, Vaksin; Buku Nikah opsional) + **koreksi data jamaah** (nama, HP, gender, alamat, kontak darurat, mahram) | **Operasional** | `/jamaah` → klik nama → tombol ✓ Verifikasi / Tolak; **Edit** untuk koreksi data | Saat 5 dokumen wajib terverifikasi → status registrasi menjadi **Aktif**. Setiap koreksi data tercatat di audit log. Berkas dokumen (paspor/KTP = data pribadi) hanya bisa dibuka setelah login — tombol **Lihat file** |
+| 3 | **Catat pembayaran jamaah** (DP/termin/pelunasan) | **Keuangan** | `/pembayaran` → **Kelola**, atau `/keuangan/input` → *Terima Pembayaran* | Pembayaran tercatat *pending* → setelah **diverifikasi Keuangan**: termin lunas, **kwitansi bernomor + terbilang** terbit, **jurnal otomatis Dr Bank/Kas · Cr 2-1100 Uang Muka Jamaah** (dana jamaah = liabilitas, BUKAN pendapatan). Invoice bernomor `INV/YYYY/MM/NNNN`. Pengaman: pembayaran jamaah **wajib via rekening IDR**; nominal **tidak boleh melebihi sisa tagihan**; satu termin tidak bisa dilunasi dua kali |
 | 4 | **Bayar biaya vendor** (hotel/tiket/visa/katering — bisa valas SAR/USD) | **Keuangan** | `/keuangan/input` → *Pembayaran Biaya* | Jurnal multi-baris dalam IDR × kurs; pelunasan hutang valas menghitung **selisih kurs → 7-1000**; biaya menempel ke **cost center keberangkatan** |
 | 5 | **Update visa, tiket, rombongan** | **Operasional** | `/operasional` → pilih keberangkatan → **Ubah** | Status visa (Proses/Biometrik/Terbit) & PNR tampil di manifest; paspor < 7 bulan ditandai merah otomatis |
-| 6 | **Pengakuan pendapatan saat keberangkatan** (PSAK 72) + HPP | **Keuangan** | `/keuangan/input` → *Pengakuan Pendapatan* | Jurnal reclass **Dr 2-1100 · Cr 4-1000/4-2000**; HPP: **Dr 5-xxxx · Cr 1-1400 Uang Muka Vendor**. Sejak ini laba per paket muncul di dashboard & laporan |
+| 6 | **Pengakuan pendapatan saat keberangkatan** (PSAK 72) + HPP | **Keuangan** | `/keuangan/input` → *Pengakuan Pendapatan* | Jurnal reclass **Dr 2-1100 · Cr 4-1000/4-2000**; HPP: **Dr 5-xxxx · Cr 1-1400 Uang Muka Vendor**. Sejak ini laba per paket muncul di dashboard & laporan. Pengaman: pendapatan **tidak bisa diakui dua kali** untuk keberangkatan yang sama, dan **tidak boleh melebihi dana jamaah yang sudah diterima** (2-1100 tak boleh negatif) |
 | 7 | **Persetujuan komisi agen** | **Marketing** atau **Keuangan** | `/marketing` → *Setujui & Posting* | Jurnal **Dr 6-2000 Beban Komisi · Cr 2-1400 Hutang Komisi**; KPI "Komisi Terhutang" = saldo riil akun 2-1400 |
 | 8 | **Jurnal manual & rekonsiliasi bank** | **Keuangan** | `/keuangan/jurnal` | Jurnal wajib **balance** (Σdebit = Σkredit — server menolak yang pincang); rekonsiliasi: cocokkan mutasi koran, skedul penyesuaian dua sisi |
 | 9 | **Laporan** (laba rugi, neraca, laba per paket, aging, kepatuhan dokumen, kesiapan) + ekspor Excel/PDF | **Keuangan** & **Pimpinan** (operasional utk laporan ops) | `/laporan-keuangan` · `/laporan-operasional` | Semua angka diagregasi langsung dari jurnal — neraca selalu seimbang |
@@ -66,7 +70,7 @@ flowchart TD
 | Dashboard eksekutif (`/`) | 👁 | 👁 | 👁 | 👁 | — |
 | Paket & jadwal (`/paket`) | ✅ | — | 👁 (HPP) | 👁 | 👁 (wizard) |
 | Master data paket: kategori, hotel, maskapai (`/paket/master`) | ✅ | — | — | 👁 | — |
-| Data jamaah & dokumen (`/jamaah`) | 👁 | ✅ verifikasi | 👁 | 👁 | — |
+| Data jamaah & dokumen (`/jamaah`) | 👁 | ✅ verifikasi + edit data | 👁 | 👁 | — |
 | Pendaftaran (`/daftar`) | ✅ (mendampingi) | — | — | — | ✅ (publik) |
 | Pembayaran & kwitansi (`/pembayaran`) | 👁 piutang | — | ✅ catat + verifikasi | 👁 | — |
 | Manifest, visa, tiket (`/operasional`) | — | ✅ | — | 👁 | — |
@@ -96,6 +100,20 @@ Semua jurnal dibuat mesin melalui satu pintu (*journal engine*) dan **wajib bala
 | — | Jurnal manual (adm bank, penyesuaian, dsb.) | Keuangan | Bebas, wajib balance |
 
 **Prinsip yang dijaga sistem** (tidak bisa dilanggar pengguna): dana jamaah adalah **liabilitas** sampai keberangkatan (akad wakalah/ijarah, PSAK 72); setiap keberangkatan adalah **cost center**; setiap jurnal balance; setiap mutasi terekam audit log.
+
+### Pengaman yang mungkin Anda temui (pesan penolakan yang wajar)
+
+Sistem menolak aksi berikut demi menjaga data tetap benar — bila muncul pesan penolakan, itu bekerja sebagaimana mestinya:
+
+- **Pembayaran jamaah via rekening non-IDR** — invoice & liabilitas dalam Rupiah; gunakan rekening IDR. (Biaya vendor valas tetap bisa lewat *Pembayaran Biaya*.)
+- **Nominal pembayaran melebihi sisa tagihan** — cek sisa di kartu piutang.
+- **Melunasi termin yang sudah lunas** / memverifikasi pembayaran dua kali.
+- **Mengakui pendapatan dua kali** untuk keberangkatan yang sama, atau **melebihi dana jamaah yang sudah diterima** (agar 2-1100 tak negatif).
+- **Menghapus master (kategori/hotel/maskapai/vendor/rekening)** yang masih dipakai paket, tagihan, jurnal, atau pembayaran.
+- **Jurnal manual yang tidak balance** (Σdebit ≠ Σkredit) — ditolak, tidak tersimpan pincang.
+- **Membuka berkas dokumen tanpa login** — paspor/KTP hanya dapat diakses staf yang berwenang.
+
+Setiap perubahan data (termasuk koreksi data jamaah) tercatat di **audit log** (`/admin`): siapa, aksi apa, nilai lama & baru.
 
 ---
 
@@ -176,7 +194,7 @@ Menjelang dan selama keberangkatan, Safar terhubung dengan **aplikasi mobile Mab
 | 1 | Lengkapi rombongan: **nomor HP muthawwif/TL wajib** (penerima notifikasi SOS), tetapkan jamaah ke rombongan + kamar | Operasional | `/operasional` → Kelola Rombongan & tombol Ubah |
 | 2 | **Sinkron ke Mabrur** — akun (login = nomor HP), rombongan, dan jadwal tercipta otomatis; aman diulang (idempoten); akun lama tidak di-reset | Operasional | Kelola Rombongan → Sinkron ke Mabrur |
 | 3 | Bagikan **kredensial awal** (password 6 digit, hanya akun baru) — tampil di tabel kredensial ops **dan** otomatis di portal masing-masing jamaah (kartu maroon "Aplikasi Pendamping Mabrur") | Operasional / Jamaah | Kelola Rombongan · `/portal` |
-| 4 | Jamaah & muthawwif login aplikasi Mabrur (unduh dari petugas / mabrur.sosmartpro.com), **segera ganti password** | Jamaah, Muthawwif | Aplikasi Mabrur |
+| 4 | Jamaah & muthawwif login aplikasi Mabrur (unduh dari petugas / mabrur.sosmartpro.com), **wajib ganti password** (dipaksa sistem saat login pertama) | Jamaah, Muthawwif | Aplikasi Mabrur |
 | 5 | Selama di tanah suci: pantau **tab Lapangan** — status tiap anggota (aman/perlu perhatian, ihram, jarak miqat, umur sinyal lokasi) + **banner SOS live** dengan tombol Lihat Lokasi / WhatsApp / Telepon (refresh otomatis 30 dtk) | Operasional, Pimpinan | `/operasional` → Lapangan (live Mabrur) |
 
 **Pembagian tanggung jawab data**: Safar = sumber data induk (jamaah, rombongan, jadwal); Mabrur = sumber data lapangan (lokasi, ihram, SOS, counter ibadah). SOS ditangani pertama oleh **muthawwif di aplikasi Mabrur**; tab Lapangan Safar adalah lapis pemantauan kantor.

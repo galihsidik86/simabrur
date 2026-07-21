@@ -95,6 +95,9 @@
     Manual ini menjelaskan <b>siapa melakukan apa, di halaman mana, dan apa yang terjadi otomatis di belakang layar</b>.
     Akun demo (password <span class="mono">safar123</span>): admin@ · keuangan@ · ops@ · marketing@ · pimpinan@ — semua <span class="mono">safar.co.id</span>.
   </p>
+  <p style="margin-top:8px; font-size:12px; color:var(--mut2);">
+    <b>Header setiap halaman:</b> <b>Pencarian global</b> (ketik ≥2 huruf → jamaah/paket/invoice, klik untuk membuka) dan <b>Lonceng notifikasi</b> (dokumen & pembayaran yang menunggu verifikasi; titik merah menyala hanya bila ada antrean).
+  </p>
 
   <!-- ====== 1. Peran ====== -->
   <h2>1 · Enam Peran dan Tanggung Jawabnya</h2>
@@ -129,15 +132,15 @@
     </div></div>
 
     <div class="fstep"><div class="fnum"><div class="fdot">2</div><div class="fline"></div></div><div class="fbody">
-      <b class="t">Verifikasi dokumen</b> <span class="chip c-ops">Operasional</span>
-      <div class="fmeta"><span class="mono">/jamaah</span> → klik nama jamaah → tombol ✓ Verifikasi / Tolak per dokumen (KTP, KK, Paspor, Pas Foto, Vaksin; Buku Nikah opsional).</div>
-      <div class="fauto">⚙ Otomatis: saat 5 dokumen wajib terverifikasi → status registrasi menjadi <b>Aktif</b>.</div>
+      <b class="t">Verifikasi dokumen &amp; koreksi data jamaah</b> <span class="chip c-ops">Operasional</span>
+      <div class="fmeta"><span class="mono">/jamaah</span> → klik nama → ✓ Verifikasi / Tolak per dokumen (KTP, KK, Paspor, Pas Foto, Vaksin; Buku Nikah opsional). Tombol <b>Edit</b> untuk koreksi data (nama, HP, gender, alamat, kontak darurat, mahram). Berkas dokumen (paspor/KTP = data pribadi) dibuka lewat tombol <b>Lihat file</b> — hanya setelah login.</div>
+      <div class="fauto">⚙ Otomatis: saat 5 dokumen wajib terverifikasi → status registrasi menjadi <b>Aktif</b>. Setiap koreksi data tercatat di audit log.</div>
     </div></div>
 
     <div class="fstep"><div class="fnum"><div class="fdot">3</div><div class="fline"></div></div><div class="fbody">
       <b class="t">Terima &amp; verifikasi pembayaran jamaah</b> <span class="chip c-keu">Keuangan</span>
       <div class="fmeta"><span class="mono">/pembayaran</span> → Kelola, atau <span class="mono">/keuangan/input</span> → Terima Pembayaran. Jamaah membayar via VA BSI dari portal.</div>
-      <div class="fauto">⚙ Otomatis saat verifikasi: termin lunas · <b>kwitansi bernomor + terbilang</b> · jurnal <span class="mono">Dr Bank/Kas · Cr 2-1100 Uang Muka Jamaah</span> — dana jamaah = <b>liabilitas</b>, bukan pendapatan.</div>
+      <div class="fauto">⚙ Otomatis saat verifikasi: termin lunas · <b>kwitansi bernomor + terbilang</b> · invoice <span class="mono">INV/YYYY/MM/NNNN</span> · jurnal <span class="mono">Dr Bank/Kas · Cr 2-1100 Uang Muka Jamaah</span> — dana jamaah = <b>liabilitas</b>, bukan pendapatan. Pengaman: <b>wajib rekening IDR</b> · nominal <b>tidak melebihi sisa tagihan</b> · satu termin tak bisa dilunasi dua kali.</div>
     </div></div>
 
     <div class="fstep"><div class="fnum"><div class="fdot">4</div><div class="fline"></div></div><div class="fbody">
@@ -149,7 +152,7 @@
     <div class="fstep"><div class="fnum"><div class="fdot">5</div><div class="fline"></div></div><div class="fbody">
       <b class="t">Keberangkatan — pengakuan pendapatan (PSAK 72)</b> <span class="chip c-keu">Keuangan</span>
       <div class="fmeta"><span class="mono">/keuangan/input</span> → Pengakuan Pendapatan, pada tanggal keberangkatan grup.</div>
-      <div class="fauto">⚙ Otomatis: jurnal reclass <span class="mono">Dr 2-1100 · Cr 4-1000/4-2000</span> + HPP <span class="mono">Dr 5-xxxx · Cr 1-1400</span>. Sejak ini laba per paket muncul di dashboard &amp; laporan.</div>
+      <div class="fauto">⚙ Otomatis: jurnal reclass <span class="mono">Dr 2-1100 · Cr 4-1000/4-2000</span> + HPP <span class="mono">Dr 5-xxxx · Cr 1-1400</span>. Sejak ini laba per paket muncul di dashboard &amp; laporan. Pengaman: <b>tak bisa diakui dua kali</b> per keberangkatan &amp; <b>tak melebihi dana jamaah yang diterima</b> (2-1100 tak negatif).</div>
     </div></div>
 
     <div class="fstep"><div class="fnum"><div class="fdot">6</div><div class="fline"></div></div><div class="fbody">
@@ -178,7 +181,7 @@
       <tr><td>Dashboard eksekutif <span class="mono">/</span></td><td align="center" class="see">👁</td><td align="center" class="see">👁</td><td align="center" class="see">👁</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
       <tr><td>Paket &amp; jadwal <span class="mono">/paket</span></td><td align="center" class="mark">✅</td><td align="center">—</td><td align="center" class="see">👁 HPP</td><td align="center" class="see">👁</td><td align="center" class="see">👁 wizard</td></tr>
       <tr><td>Master data paket: kategori, hotel, maskapai <span class="mono">/paket/master</span></td><td align="center" class="mark">✅</td><td align="center">—</td><td align="center">—</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
-      <tr><td>Jamaah &amp; dokumen <span class="mono">/jamaah</span></td><td align="center" class="see">👁</td><td align="center" class="mark">✅ verifikasi</td><td align="center" class="see">👁</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
+      <tr><td>Jamaah &amp; dokumen <span class="mono">/jamaah</span></td><td align="center" class="see">👁</td><td align="center" class="mark">✅ verifikasi + edit</td><td align="center" class="see">👁</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
       <tr><td>Pendaftaran <span class="mono">/daftar</span></td><td align="center" class="mark">✅ dampingi</td><td align="center">—</td><td align="center">—</td><td align="center">—</td><td align="center" class="mark">✅ publik</td></tr>
       <tr><td>Pembayaran &amp; kwitansi <span class="mono">/pembayaran</span></td><td align="center" class="see">👁 piutang</td><td align="center">—</td><td align="center" class="mark">✅ catat+verifikasi</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
       <tr><td>Manifest, visa, tiket <span class="mono">/operasional</span></td><td align="center">—</td><td align="center" class="mark">✅</td><td align="center">—</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
@@ -210,6 +213,17 @@
     </tbody>
   </table></div>
   <div class="note"><b>Prinsip yang dijaga sistem</b> (tidak bisa dilanggar pengguna): dana jamaah adalah <b>liabilitas</b> sampai keberangkatan (akad wakalah/ijarah, PSAK 72) · setiap keberangkatan = <b>cost center</b> · setiap jurnal balance · setiap mutasi terekam audit log.</div>
+
+  <h3 style="font-family:'Marcellus',serif; font-weight:400; font-size:15px; margin:20px 0 6px;">Pengaman yang mungkin Anda temui</h3>
+  <p class="sub">Sistem menolak aksi berikut demi menjaga data tetap benar — bila muncul pesan penolakan, itu bekerja sebagaimana mestinya.</p>
+  <div class="card" style="font-size:12px; line-height:1.9;">
+    • Pembayaran jamaah via rekening <b>non-IDR</b> (invoice &amp; liabilitas dalam Rupiah; biaya vendor valas tetap lewat <i>Pembayaran Biaya</i>)<br>
+    • Nominal pembayaran <b>melebihi sisa tagihan</b>, atau melunasi/memverifikasi termin yang sudah lunas dua kali<br>
+    • <b>Mengakui pendapatan dua kali</b> untuk keberangkatan yang sama, atau <b>melebihi dana jamaah yang sudah diterima</b> (agar 2-1100 tak negatif)<br>
+    • <b>Menghapus master</b> (kategori/hotel/maskapai/vendor/rekening) yang masih dipakai paket, tagihan, jurnal, atau pembayaran<br>
+    • <b>Jurnal manual tidak balance</b> (Σdebit ≠ Σkredit) — ditolak, tidak tersimpan pincang<br>
+    • <b>Membuka berkas dokumen tanpa login</b> — paspor/KTP hanya untuk staf berwenang
+  </div>
 
   <!-- ====== 5. Skenario ====== -->
   <h2>5 · Skenario Cepat per Peran</h2>
@@ -303,7 +317,7 @@
       <tr><td>1</td><td>Lengkapi rombongan: <b>nomor HP muthawwif/TL wajib</b> (penerima SOS), tetapkan jamaah + kamar</td><td><span class="chip c-ops">Operasional</span></td><td><span class="mono">/operasional</span> → Kelola Rombongan</td></tr>
       <tr><td>2</td><td><b>Sinkron ke Mabrur</b> — akun (login = No. HP), rombongan &amp; jadwal tercipta otomatis; idempoten, akun lama tidak di-reset</td><td><span class="chip c-ops">Operasional</span></td><td>Kelola Rombongan → Sinkron</td></tr>
       <tr><td>3</td><td>Bagikan <b>kredensial awal</b> (6 digit, hanya akun baru) — tabel ops + kartu maroon di portal jamaah</td><td><span class="chip c-ops">Ops</span> <span class="chip c-jam">Jamaah</span></td><td>Kelola Rombongan · <span class="mono">/portal</span></td></tr>
-      <tr><td>4</td><td>Login aplikasi Mabrur, <b>segera ganti password</b></td><td><span class="chip c-jam">Jamaah</span></td><td>Aplikasi Mabrur (mabrur.sosmartpro.com)</td></tr>
+      <tr><td>4</td><td>Login aplikasi Mabrur — <b>wajib ganti password</b> (dipaksa saat login pertama)</td><td><span class="chip c-jam">Jamaah</span></td><td>Aplikasi Mabrur (mabrur.sosmartpro.com)</td></tr>
       <tr><td>5</td><td>Pantau tab <b>Lapangan</b>: status anggota (aman/perhatian, ihram, jarak miqat, sinyal lokasi) + <b>banner SOS live</b> dgn tombol Maps/WhatsApp/Telepon (refresh 30 dtk)</td><td><span class="chip c-ops">Ops</span> <span class="chip c-pim">Pimpinan</span></td><td><span class="mono">/operasional</span> → Lapangan</td></tr>
     </tbody>
   </table></div>
