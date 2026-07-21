@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { env } from './config/env.js';
 import { db } from './config/db.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
-import { airlinesRoutes, departuresRoutes, hotelsRoutes, packagesRoutes } from './modules/packages/packages.routes.js';
+import { airlinesRoutes, departuresRoutes, hotelsRoutes, packageCategoriesRoutes, packagesRoutes } from './modules/packages/packages.routes.js';
 import { documentsRoutes, jamaahRoutes, registrationsRoutes, UPLOAD_ROOT } from './modules/jamaah/jamaah.routes.js';
 import { bankAccountsRoutes, invoicesRoutes, paymentsRoutes, receiptsRoutes, receivablesRoutes } from './modules/payments/payments.routes.js';
 import { assignmentHandler, checklistsRoutes, groupStaffRoutes, manifestHandler, opsGroupsRoutes, reportsRoutes, ticketsRoutes, visasRoutes } from './modules/operations/operations.routes.js';
@@ -98,6 +98,7 @@ export function createApp() {
   app.use('/v1/departures', departuresRoutes);
   app.use('/v1/hotels', hotelsRoutes);
   app.use('/v1/airlines', airlinesRoutes);
+  app.use('/v1/package-categories', packageCategoriesRoutes);
   app.use('/v1/jamaah', jamaahRoutes);
   app.use('/v1/registrations', registrationsRoutes);
   app.use('/v1/documents', documentsRoutes);

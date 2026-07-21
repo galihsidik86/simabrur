@@ -5,6 +5,7 @@ import { RequireAuth } from './routes/RequireAuth';
 import { AppShell } from './layouts/AppShell';
 import { Login } from './pages/Login';
 import { PaketPage } from './pages/PaketPage';
+import { MasterPaketPage } from './pages/MasterPaketPage';
 import { JamaahPage } from './pages/JamaahPage';
 import { JamaahDetailPage } from './pages/JamaahDetailPage';
 import { DaftarWizard } from './pages/DaftarWizard';
@@ -43,6 +44,7 @@ export default function App() {
                 <Route path="/laporan-keuangan" element={<LaporanKeuanganPage />} />
                 <Route path="/admin" element={<AdminPage />} />
                 <Route path="/paket" element={<PaketPage />} />
+                <Route path="/paket/master" element={<MasterPaketPage />} />
                 <Route path="/jamaah" element={<JamaahPage />} />
                 <Route path="/jamaah/:id" element={<JamaahDetailPage />} />
                 <Route path="/pembayaran" element={<PembayaranPage />} />

@@ -4,7 +4,7 @@ export const createPackageSchema = z.object({
   code: z.string().min(3).max(30),
   name: z.string().min(3),
   type: z.enum(['umrah', 'haji']),
-  category: z.enum(['reguler', 'plus', 'vip', 'khusus']),
+  category: z.string().min(2).max(30), // divalidasi terhadap package_categories di service
   durationDays: z.number().int().min(1).max(60),
   basePrice: z.number().positive(),
   tripleUpcharge: z.number().min(0).default(3_500_000),
@@ -28,6 +28,32 @@ export const createDepartureSchema = z.object({
   packageId: z.string().uuid(),
   departureDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   quota: z.number().int().min(1)
+});
+
+// ===== Master data: kategori paket, hotel, maskapai =====
+export const upsertCategorySchema = z.object({
+  code: z
+    .string()
+    .min(2)
+    .max(30)
+    .regex(/^[a-z0-9-]+$/, 'Kode: huruf kecil/angka/tanda hubung'),
+  label: z.string().min(2).max(60),
+  sort: z.number().int().min(0).default(0)
+});
+
+export const upsertHotelSchema = z.object({
+  name: z.string().min(2).max(120),
+  city: z.string().min(2).max(60),
+  star: z.number().int().min(1).max(5).default(3)
+});
+
+export const upsertAirlineSchema = z.object({
+  name: z.string().min(2).max(120),
+  iataCode: z
+    .string()
+    .min(2)
+    .max(3)
+    .transform((s) => s.toUpperCase())
 });
 
 export const listPackagesQuery = z.object({

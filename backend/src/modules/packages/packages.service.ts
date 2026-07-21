@@ -5,11 +5,26 @@ import { db } from '../../config/db.js';
 import { errors } from '../../utils/http.js';
 import { audit } from '../../middleware/audit.js';
 import { packagesRepository } from './packages.repository.js';
-import type { createPackageSchema, updatePackageSchema, createDepartureSchema } from './packages.validation.js';
+import type {
+  createPackageSchema,
+  updatePackageSchema,
+  createDepartureSchema,
+  upsertCategorySchema,
+  upsertHotelSchema,
+  upsertAirlineSchema
+} from './packages.validation.js';
 
 type CreatePackageInput = z.infer<typeof createPackageSchema>;
 type UpdatePackageInput = z.infer<typeof updatePackageSchema>;
 type CreateDepartureInput = z.infer<typeof createDepartureSchema>;
+type CategoryInput = z.infer<typeof upsertCategorySchema>;
+type HotelInput = z.infer<typeof upsertHotelSchema>;
+type AirlineInput = z.infer<typeof upsertAirlineSchema>;
+
+async function assertCategoryExists(code: string) {
+  const found = await db('package_categories').where({ code }).first();
+  if (!found) throw errors.badRequest(`Kategori "${code}" tidak dikenal — tambahkan dulu di Master Data`);
+}
 
 function addDays(dateIso: string, days: number): string {
   const d = new Date(dateIso);
@@ -79,6 +94,7 @@ export const packagesService = {
   },
 
   async create(req: Request, input: CreatePackageInput) {
+    await assertCategoryExists(input.category);
     return db.transaction(async (trx) => {
       const [pkg] = await trx('packages')
         .insert({
@@ -119,6 +135,7 @@ export const packagesService = {
   async update(req: Request, id: string, input: UpdatePackageInput) {
     const before = await db('packages').where({ id }).first();
     if (!before) throw errors.notFound('Paket tidak ditemukan');
+    if (input.category !== undefined) await assertCategoryExists(input.category);
 
     return db.transaction(async (trx) => {
       const [pkg] = await trx('packages')
@@ -182,5 +199,93 @@ export const packagesService = {
       seatsLeft: d.quota - d.seats_taken,
       status: d.status
     };
+  },
+
+  // ===== Master data: kategori paket, hotel, maskapai =====
+  categories() {
+    return db('package_categories').select('id', 'code', 'label', 'sort').orderBy(['sort', 'label']);
+  },
+
+  async createCategory(req: Request, input: CategoryInput) {
+    const dup = await db('package_categories').where({ code: input.code }).first();
+    if (dup) throw errors.conflict(`Kode kategori "${input.code}" sudah ada`);
+    const [row] = await db('package_categories').insert(input).returning('*');
+    await audit(req, { action: 'master.category.create', entity: 'package_categories', entityId: row.id, newValues: input });
+    return row;
+  },
+
+  async updateCategory(req: Request, id: string, input: CategoryInput) {
+    const before = await db('package_categories').where({ id }).first();
+    if (!before) throw errors.notFound('Kategori tidak ditemukan');
+    const dup = await db('package_categories').where({ code: input.code }).whereNot({ id }).first();
+    if (dup) throw errors.conflict(`Kode kategori "${input.code}" sudah dipakai`);
+    // FK packages.category ON UPDATE CASCADE — ubah kode ikut memperbarui paket
+    const [row] = await db('package_categories').where({ id }).update({ ...input, updated_at: db.fn.now() }).returning('*');
+    await audit(req, { action: 'master.category.update', entity: 'package_categories', entityId: id, oldValues: before, newValues: input });
+    return row;
+  },
+
+  async deleteCategory(req: Request, id: string) {
+    const before = await db('package_categories').where({ id }).first();
+    if (!before) throw errors.notFound('Kategori tidak ditemukan');
+    const used = await db('packages').where({ category: before.code }).count<{ count: string }[]>('id as count').first();
+    if (Number(used?.count)) throw errors.conflict(`Kategori dipakai ${used?.count} paket — pindahkan paketnya dulu`);
+    await db('package_categories').where({ id }).del();
+    await audit(req, { action: 'master.category.delete', entity: 'package_categories', entityId: id, oldValues: before });
+    return { deleted: true };
+  },
+
+  async createHotel(req: Request, input: HotelInput) {
+    const [row] = await db('hotels').insert({ name: input.name, city: input.city, star: input.star }).returning('*');
+    await audit(req, { action: 'master.hotel.create', entity: 'hotels', entityId: row.id, newValues: input });
+    return row;
+  },
+
+  async updateHotel(req: Request, id: string, input: HotelInput) {
+    const before = await db('hotels').where({ id }).first();
+    if (!before) throw errors.notFound('Hotel tidak ditemukan');
+    const [row] = await db('hotels')
+      .where({ id })
+      .update({ name: input.name, city: input.city, star: input.star, updated_at: db.fn.now() })
+      .returning('*');
+    await audit(req, { action: 'master.hotel.update', entity: 'hotels', entityId: id, oldValues: before, newValues: input });
+    return row;
+  },
+
+  async deleteHotel(req: Request, id: string) {
+    const before = await db('hotels').where({ id }).first();
+    if (!before) throw errors.notFound('Hotel tidak ditemukan');
+    const used = await db('packages').where({ hotel_id: id }).count<{ count: string }[]>('id as count').first();
+    if (Number(used?.count)) throw errors.conflict(`Hotel dipakai ${used?.count} paket — ganti hotel paketnya dulu`);
+    await db('hotels').where({ id }).del();
+    await audit(req, { action: 'master.hotel.delete', entity: 'hotels', entityId: id, oldValues: before });
+    return { deleted: true };
+  },
+
+  async createAirline(req: Request, input: AirlineInput) {
+    const [row] = await db('airlines').insert({ name: input.name, iata_code: input.iataCode }).returning('*');
+    await audit(req, { action: 'master.airline.create', entity: 'airlines', entityId: row.id, newValues: input });
+    return row;
+  },
+
+  async updateAirline(req: Request, id: string, input: AirlineInput) {
+    const before = await db('airlines').where({ id }).first();
+    if (!before) throw errors.notFound('Maskapai tidak ditemukan');
+    const [row] = await db('airlines')
+      .where({ id })
+      .update({ name: input.name, iata_code: input.iataCode, updated_at: db.fn.now() })
+      .returning('*');
+    await audit(req, { action: 'master.airline.update', entity: 'airlines', entityId: id, oldValues: before, newValues: input });
+    return row;
+  },
+
+  async deleteAirline(req: Request, id: string) {
+    const before = await db('airlines').where({ id }).first();
+    if (!before) throw errors.notFound('Maskapai tidak ditemukan');
+    const used = await db('packages').where({ airline_id: id }).count<{ count: string }[]>('id as count').first();
+    if (Number(used?.count)) throw errors.conflict(`Maskapai dipakai ${used?.count} paket — ganti maskapai paketnya dulu`);
+    await db('airlines').where({ id }).del();
+    await audit(req, { action: 'master.airline.delete', entity: 'airlines', entityId: id, oldValues: before });
+    return { deleted: true };
   }
 };

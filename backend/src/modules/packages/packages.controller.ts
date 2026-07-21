@@ -2,7 +2,15 @@ import type { Request, Response } from 'express';
 import { ok } from '../../utils/http.js';
 import { packagesService } from './packages.service.js';
 import { packagesRepository } from './packages.repository.js';
-import { createDepartureSchema, createPackageSchema, listPackagesQuery, updatePackageSchema } from './packages.validation.js';
+import {
+  createDepartureSchema,
+  createPackageSchema,
+  listPackagesQuery,
+  updatePackageSchema,
+  upsertAirlineSchema,
+  upsertCategorySchema,
+  upsertHotelSchema
+} from './packages.validation.js';
 
 export const packagesController = {
   async list(req: Request, res: Response) {
@@ -36,5 +44,37 @@ export const packagesController = {
   },
   async airlines(_req: Request, res: Response) {
     ok(res, await packagesRepository.airlines());
+  },
+
+  // ===== Master data: kategori paket, hotel, maskapai =====
+  async categories(_req: Request, res: Response) {
+    ok(res, await packagesService.categories());
+  },
+  async createCategory(req: Request, res: Response) {
+    ok(res, await packagesService.createCategory(req, upsertCategorySchema.parse(req.body)), undefined, 201);
+  },
+  async updateCategory(req: Request, res: Response) {
+    ok(res, await packagesService.updateCategory(req, String(req.params.id), upsertCategorySchema.parse(req.body)));
+  },
+  async deleteCategory(req: Request, res: Response) {
+    ok(res, await packagesService.deleteCategory(req, String(req.params.id)));
+  },
+  async createHotel(req: Request, res: Response) {
+    ok(res, await packagesService.createHotel(req, upsertHotelSchema.parse(req.body)), undefined, 201);
+  },
+  async updateHotel(req: Request, res: Response) {
+    ok(res, await packagesService.updateHotel(req, String(req.params.id), upsertHotelSchema.parse(req.body)));
+  },
+  async deleteHotel(req: Request, res: Response) {
+    ok(res, await packagesService.deleteHotel(req, String(req.params.id)));
+  },
+  async createAirline(req: Request, res: Response) {
+    ok(res, await packagesService.createAirline(req, upsertAirlineSchema.parse(req.body)), undefined, 201);
+  },
+  async updateAirline(req: Request, res: Response) {
+    ok(res, await packagesService.updateAirline(req, String(req.params.id), upsertAirlineSchema.parse(req.body)));
+  },
+  async deleteAirline(req: Request, res: Response) {
+    ok(res, await packagesService.deleteAirline(req, String(req.params.id)));
   }
 };

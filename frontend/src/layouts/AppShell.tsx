@@ -8,6 +8,7 @@ import { useAuth } from '../store/auth';
 const NAV = [
   { to: '/', label: 'Dashboard', dot: 'var(--color-mod-dashboard)', roles: ['admin', 'pimpinan', 'keuangan', 'marketing', 'operasional'] },
   { to: '/paket', label: 'Paket & Jadwal', dot: 'var(--color-mod-paket)', roles: ['admin', 'pimpinan', 'marketing'] },
+  { to: '/paket/master', label: 'Master Data Paket', dot: 'var(--color-mod-paket)', roles: ['admin', 'pimpinan', 'marketing'] },
   { to: '/jamaah', label: 'Jamaah & Pendaftaran', dot: 'var(--color-mod-jamaah)', roles: ['admin', 'pimpinan', 'operasional', 'marketing'] },
   { to: '/pembayaran', label: 'Pembayaran', dot: 'var(--color-mod-pembayaran)', roles: ['admin', 'pimpinan', 'keuangan'] },
   { to: '/operasional', label: 'Operasional & Manifest', dot: 'var(--color-mod-operasional)', roles: ['admin', 'pimpinan', 'operasional'] },
@@ -21,6 +22,7 @@ const NAV = [
 const TITLES: Record<string, [string, string]> = {
   '/': ['Dashboard Eksekutif', 'Ringkasan omzet, jamaah, profitabilitas & arus kas'],
   '/paket': ['Paket & Jadwal Keberangkatan', 'Kelola paket Umrah/Haji, harga, kuota & status'],
+  '/paket/master': ['Master Data Paket', 'Kategori paket, hotel & maskapai — dipakai form paket dan wizard'],
   '/jamaah': ['Jamaah & Pendaftaran', 'Data jamaah, kelengkapan dokumen & status pendaftaran'],
   '/pembayaran': ['Manajemen Pembayaran', 'Kartu piutang, termin, dan jatuh tempo jamaah'],
   '/operasional': ['Operasional & Manifest', 'Manifest, visa, tiket & pembagian rombongan'],
@@ -226,7 +228,7 @@ export function AppShell() {
             <NavLink
               key={n.to}
               to={n.to}
-              end={n.to === '/'}
+              end={n.to === '/' || n.to === '/paket'}
               className="flex items-center gap-[11px] rounded-[9px] px-3 py-2.5 hover:bg-white/[0.06]"
               style={({ isActive }) => ({
                 background: isActive ? 'rgba(255,255,255,0.08)' : undefined,

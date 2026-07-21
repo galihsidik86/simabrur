@@ -35,6 +35,9 @@ const CATEGORY_GRADIENT: Record<string, string> = {
 };
 
 const CATEGORY_LABEL: Record<string, string> = { reguler: 'Reguler', plus: 'Plus', vip: 'VIP', khusus: 'Khusus' };
+// Kategori baru dari Master Data: label kapitalisasi kode, gradient default hijau
+const categoryLabel = (c: string) => CATEGORY_LABEL[c] ?? c.charAt(0).toUpperCase() + c.slice(1);
+const DEFAULT_GRADIENT = GRADIENTS['UMR-REG-9'];
 
 function paketStatus(p: PaketRow): { label: string; color: string } {
   if (!p.isActive || p.departure?.status === 'closed') return { label: 'Ditutup', color: 'oklch(0.5 0.15 28)' };
@@ -113,7 +116,7 @@ export function PaketPage() {
             <div key={p.id} className="overflow-hidden rounded-card border border-line bg-card shadow-card">
               <div
                 className="relative flex h-24 items-end p-4"
-                style={{ background: GRADIENTS[p.code] ?? CATEGORY_GRADIENT[p.category] }}
+                style={{ background: GRADIENTS[p.code] ?? CATEGORY_GRADIENT[p.category] ?? DEFAULT_GRADIENT }}
               >
                 <span
                   className="absolute right-3 top-3 rounded-pill px-2.5 py-[3px] text-[10.5px] font-semibold"
@@ -123,7 +126,7 @@ export function PaketPage() {
                 </span>
                 <div>
                   <div className="text-[10px] uppercase tracking-[1px] text-white/85">
-                    {p.type === 'haji' ? 'Haji' : 'Umrah'} {CATEGORY_LABEL[p.category]}
+                    {p.type === 'haji' ? 'Haji' : 'Umrah'} {categoryLabel(p.category)}
                   </div>
                   <div className="font-display text-[19px] text-white">{p.name}</div>
                 </div>
@@ -166,6 +169,10 @@ function PaketFormModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
   const { data: hotels } = useQuery({ queryKey: ['hotels'], queryFn: async () => (await api.get('/hotels')).data.data as { id: string; name: string; star: number }[] });
   const { data: airlines } = useQuery({ queryKey: ['airlines'], queryFn: async () => (await api.get('/airlines')).data.data as { id: string; name: string }[] });
+  const { data: categories } = useQuery({
+    queryKey: ['package-categories'],
+    queryFn: async () => (await api.get('/package-categories')).data.data as { id: string; code: string; label: string }[]
+  });
 
   const [f, setF] = useState({
     code: '', name: '', type: 'umrah', category: 'reguler', durationDays: 9,
@@ -206,7 +213,9 @@ function PaketFormModal({ onClose }: { onClose: () => void }) {
             <select className="fld" value={f.type} onChange={set('type')}><option value="umrah">Umrah</option><option value="haji">Haji</option></select></div>
           <div><label className="lbl">Kategori</label>
             <select className="fld" value={f.category} onChange={set('category')}>
-              <option value="reguler">Reguler</option><option value="plus">Plus</option><option value="vip">VIP</option><option value="khusus">Khusus</option>
+              {(categories ?? [{ id: '0', code: 'reguler', label: 'Reguler' }]).map((c) => (
+                <option key={c.id} value={c.code}>{c.label}</option>
+              ))}
             </select></div>
           <div><label className="lbl">Durasi (hari)</label><input type="number" min={1} className="fld" value={f.durationDays} onChange={set('durationDays')} required /></div>
           <div><label className="lbl">Harga Dasar (Rp)</label><input type="number" min={0} className="fld" value={f.basePrice} onChange={set('basePrice')} required /></div>
