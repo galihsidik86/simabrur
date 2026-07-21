@@ -30,3 +30,10 @@ bankReconciliationsRoutes.post('/:id/match', requireAuth, requireRoles('keuangan
 
 export const accountingSummaryRoutes = Router();
 accountingSummaryRoutes.get('/summary', requireAuth, requireRoles(...KEU), accountingController.summary);
+
+// Master data vendor: baca role keuangan/pimpinan, mutasi khusus keuangan
+export const vendorsRoutes = Router();
+vendorsRoutes.get('/', requireAuth, requireRoles(...KEU), accountingController.vendors);
+vendorsRoutes.post('/', requireAuth, requireRoles('keuangan'), accountingController.createVendor);
+vendorsRoutes.put('/:id', requireAuth, requireRoles('keuangan'), accountingController.updateVendor);
+vendorsRoutes.delete('/:id', requireAuth, requireRoles('keuangan'), accountingController.deleteVendor);

@@ -14,3 +14,11 @@ export const createPaymentSchema = z.object({
   reference: z.string().max(100).nullish(),
   note: z.string().max(500).nullish()
 });
+
+export const upsertBankAccountSchema = z.object({
+  accountCode: z.string().regex(/^1-\d{4}$/, 'Kode akun bank harus kelas 1 (aset), format 1-NNNN'),
+  name: z.string().min(2).max(120),
+  bank: z.string().min(2).max(60).nullish(),
+  accountNo: z.string().min(3).max(30).nullish(),
+  currency: z.enum(['IDR', 'USD', 'SAR']).default('IDR')
+});

@@ -14,7 +14,7 @@ import { bankAccountsRoutes, invoicesRoutes, paymentsRoutes, receiptsRoutes, rec
 import { assignmentHandler, checklistsRoutes, groupStaffRoutes, manifestHandler, opsGroupsRoutes, reportsRoutes, ticketsRoutes, visasRoutes } from './modules/operations/operations.routes.js';
 import {
   accountingSummaryRoutes, accountsRoutes, bankReconciliationsRoutes, costCentersRoutes,
-  journalsRoutes, ledgerRoutes, transactionsRoutes
+  journalsRoutes, ledgerRoutes, transactionsRoutes, vendorsRoutes
 } from './modules/accounting/accounting.routes.js';
 import { financeReportsRoutes } from './modules/reports/finance.routes.js';
 import { portalRoutes } from './modules/portal/portal.routes.js';
@@ -125,6 +125,7 @@ export function createApp() {
   app.use('/v1/commissions', commissionsRoutes);
   app.use('/v1/mabrur', mabrurRoutes);
   app.use('/v1/search', searchRoutes);
+  app.use('/v1/vendors', vendorsRoutes);
   app.use('/v1/accounts', accountsRoutes);
   app.use('/v1/cost-centers', costCentersRoutes);
   app.use('/v1/journals', journalsRoutes);

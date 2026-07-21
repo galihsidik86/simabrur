@@ -3,7 +3,7 @@ import { ok } from '../../utils/http.js';
 import { accountingService } from './accounting.service.js';
 import {
   commissionTxSchema, expenseTxSchema, journalsQuery, manualJournalSchema,
-  receiptTxSchema, reconciliationQuery, revenueTxSchema
+  receiptTxSchema, reconciliationQuery, revenueTxSchema, upsertVendorSchema
 } from './accounting.validation.js';
 
 export const accountingController = {
@@ -50,5 +50,17 @@ export const accountingController = {
   },
   async summary(_req: Request, res: Response) {
     ok(res, await accountingService.summary());
+  },
+  async vendors(_req: Request, res: Response) {
+    ok(res, await accountingService.vendors());
+  },
+  async createVendor(req: Request, res: Response) {
+    ok(res, await accountingService.createVendor(req, upsertVendorSchema.parse(req.body)), undefined, 201);
+  },
+  async updateVendor(req: Request, res: Response) {
+    ok(res, await accountingService.updateVendor(req, String(req.params.id), upsertVendorSchema.parse(req.body)));
+  },
+  async deleteVendor(req: Request, res: Response) {
+    ok(res, await accountingService.deleteVendor(req, String(req.params.id)));
   }
 };

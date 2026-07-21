@@ -61,3 +61,8 @@ export const reconciliationQuery = z.object({
   bankAccountCode: z.string().regex(/^\d-\d{4}$/).default('1-1200'),
   month: z.string().regex(/^\d{4}-\d{2}$/)
 });
+
+export const upsertVendorSchema = z.object({
+  name: z.string().min(2).max(120),
+  type: z.enum(['hotel', 'airline', 'visa', 'catering', 'transport', 'other']).default('other')
+});

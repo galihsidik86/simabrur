@@ -7,7 +7,7 @@ import { audit } from '../../middleware/audit.js';
 import { nextNumber } from '../../utils/numbering.js';
 import { terbilang } from '../../utils/terbilang.js';
 import { agingBucket, buildSchedules, invoiceNumber, receivableStatus, vaNumber } from './payments.rules.js';
-import type { createPaymentSchema } from './payments.validation.js';
+import type { createPaymentSchema, upsertBankAccountSchema } from './payments.validation.js';
 import { postJournal, receiptLines } from '../accounting/journal.engine.js';
 
 type CreatePaymentInput = z.infer<typeof createPaymentSchema>;
@@ -377,5 +377,71 @@ export const paymentsService = {
 
   async bankAccounts() {
     return db('bank_accounts').orderBy('account_code');
+  },
+
+  // ===== Master data: rekening bank =====
+  // Saldo TIDAK bisa diubah dari sini — hanya bergerak lewat jurnal (aturan §4 PLAN.md)
+  async createBankAccount(req: Request, input: BankAccountInput) {
+    await assertBankAccountCode(input.accountCode);
+    const dup = await db('bank_accounts').where({ account_code: input.accountCode }).first();
+    if (dup) throw errors.conflict(`Rekening dengan kode akun ${input.accountCode} sudah ada`);
+    const [row] = await db('bank_accounts')
+      .insert({
+        account_code: input.accountCode,
+        name: input.name,
+        bank: input.bank ?? null,
+        account_no: input.accountNo ?? null,
+        currency: input.currency,
+        balance: 0
+      })
+      .returning('*');
+    await audit(req, { action: 'master.bank.create', entity: 'bank_accounts', entityId: row.id, newValues: input });
+    return row;
+  },
+
+  async updateBankAccount(req: Request, id: string, input: BankAccountInput) {
+    const before = await db('bank_accounts').where({ id }).first();
+    if (!before) throw errors.notFound('Rekening bank tidak ditemukan');
+    if (input.accountCode !== before.account_code) {
+      await assertBankAccountCode(input.accountCode);
+      const dup = await db('bank_accounts').where({ account_code: input.accountCode }).whereNot({ id }).first();
+      if (dup) throw errors.conflict(`Kode akun ${input.accountCode} sudah dipakai rekening lain`);
+      if (Number(before.balance) !== 0)
+        throw errors.badRequest('Kode akun rekening bersaldo tidak boleh diganti — saldo terikat ke akun COA');
+    }
+    const [row] = await db('bank_accounts')
+      .where({ id })
+      .update({
+        account_code: input.accountCode,
+        name: input.name,
+        bank: input.bank ?? null,
+        account_no: input.accountNo ?? null,
+        currency: input.currency,
+        updated_at: db.fn.now()
+      })
+      .returning('*');
+    await audit(req, { action: 'master.bank.update', entity: 'bank_accounts', entityId: id, oldValues: before, newValues: input });
+    return row;
+  },
+
+  async deleteBankAccount(req: Request, id: string) {
+    const before = await db('bank_accounts').where({ id }).first();
+    if (!before) throw errors.notFound('Rekening bank tidak ditemukan');
+    if (Number(before.balance) !== 0)
+      throw errors.conflict('Rekening masih bersaldo — tidak bisa dihapus (saldo hanya bergerak lewat jurnal)');
+    const used = await db('payments').where({ bank_account_id: id }).count<{ count: string }[]>('id as count').first();
+    if (Number(used?.count)) throw errors.conflict(`Rekening dipakai ${used?.count} pembayaran — tidak bisa dihapus`);
+    await db('bank_accounts').where({ id }).del();
+    await audit(req, { action: 'master.bank.delete', entity: 'bank_accounts', entityId: id, oldValues: before });
+    return { deleted: true };
   }
 };
+
+type BankAccountInput = z.infer<typeof upsertBankAccountSchema>;
+
+/** Kode akun rekening wajib terdaftar di COA sebagai akun kelas 1 yang bisa diposting. */
+async function assertBankAccountCode(code: string) {
+  const acc = await db('accounts').where({ code }).first();
+  if (!acc) throw errors.badRequest(`Akun ${code} tidak ada di Bagan Akun — tambahkan dulu di COA`);
+  if (acc.class !== 1 || !acc.is_postable) throw errors.badRequest(`Akun ${code} bukan akun aset yang bisa diposting`);
+}

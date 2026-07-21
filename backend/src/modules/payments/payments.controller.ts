@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { ok } from '../../utils/http.js';
 import { paymentsService } from './payments.service.js';
-import { createInvoiceSchema, createPaymentSchema } from './payments.validation.js';
+import { createInvoiceSchema, createPaymentSchema, upsertBankAccountSchema } from './payments.validation.js';
 
 export const paymentsController = {
   async createInvoice(req: Request, res: Response) {
@@ -42,5 +42,15 @@ export const paymentsController = {
 
   async bankAccounts(_req: Request, res: Response) {
     ok(res, await paymentsService.bankAccounts());
+  },
+
+  async createBankAccount(req: Request, res: Response) {
+    ok(res, await paymentsService.createBankAccount(req, upsertBankAccountSchema.parse(req.body)), undefined, 201);
+  },
+  async updateBankAccount(req: Request, res: Response) {
+    ok(res, await paymentsService.updateBankAccount(req, String(req.params.id), upsertBankAccountSchema.parse(req.body)));
+  },
+  async deleteBankAccount(req: Request, res: Response) {
+    ok(res, await paymentsService.deleteBankAccount(req, String(req.params.id)));
   }
 };

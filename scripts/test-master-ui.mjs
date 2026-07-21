@@ -129,7 +129,77 @@ await page.waitForSelector('text=/dipakai \\d+ paket/', { timeout: 10000 });
 check(true, 'hapus kategori terpakai → ditolak dengan pesan jelas');
 
 await page.screenshot({ path: path.join(OUT, 'master-paket.png'), fullPage: true });
-console.log(`\nScreenshot: docs/screenshots/master-paket.png`);
+
+// ============================================================
+// Master Data Keuangan: vendor & rekening bank
+// ============================================================
+await page.click('text=Master Data Keuangan');
+await page.waitForURL('**/keuangan-master');
+await page.waitForSelector('text=Rekening Bank');
+await page.waitForTimeout(800);
+
+const inputs2 = page.locator('form input, form select');
+const n2 = await inputs2.count();
+let ltr2 = true;
+for (let i = 0; i < n2; i++) {
+  const s = await inputs2.nth(i).evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return { dir: cs.direction, align: cs.textAlign };
+  });
+  if (s.dir !== 'ltr' || (s.align !== 'left' && s.align !== 'start')) ltr2 = false;
+}
+check(ltr2, `keuangan-master: semua ${n2} input/select form LTR dan rata kiri`);
+
+let width2 = true;
+for (const [ph, sample] of [
+  ['1-1230', '1-1230'],
+  ['1230009911', '7201456789012'],
+  ['mis. Bank Mandiri Operasional', 'Bank Syariah Indonesia Operasional'],
+  ['mis. Grand Al Massa Hotel', 'PT Katering Barokah Internasional']
+]) {
+  const el = page.locator(`input[placeholder="${ph}"]`);
+  await el.fill(sample);
+  const m = await el.evaluate((e) => ({ scroll: e.scrollWidth, client: e.clientWidth, w: e.getBoundingClientRect().width }));
+  const fits = m.scroll <= m.client + 1;
+  if (!fits) width2 = false;
+  console.log(`   field "${ph}": lebar ${Math.round(m.w)}px, teks "${sample}" ${fits ? 'muat' : 'TERPOTONG'}`);
+  await el.fill('');
+}
+check(width2, 'keuangan-master: lebar field memadai — teks contoh tampil utuh');
+
+// Vendor: ketik per karakter + CRUD penuh
+const vName = page.locator('input[placeholder="mis. Grand Al Massa Hotel"]');
+await vName.click();
+await vName.pressSequentially('Katering Al Barokah', { delay: 25 });
+check((await vName.inputValue()) === 'Katering Al Barokah', 'ketik per karakter nama vendor → urutan benar');
+await page.locator('form').filter({ hasText: 'Tambah vendor' }).locator('select').selectOption('catering');
+await page.locator('form').filter({ hasText: 'Tambah vendor' }).locator('button[type="submit"]').click();
+await page.waitForSelector('td:has-text("Katering Al Barokah")', { timeout: 10000 });
+check(true, 'tambah vendor dari form → muncul di tabel');
+page.once('dialog', (d) => d.accept());
+await page.locator('tr', { hasText: 'Katering Al Barokah' }).locator('button:has-text("Hapus")').click();
+await page.waitForSelector('td:has-text("Katering Al Barokah")', { state: 'detached', timeout: 10000 });
+check(true, 'hapus vendor → hilang dari tabel');
+
+// Rekening bank: kode akun tak dikenal → pesan error jelas; kode valid → CRUD jalan
+await page.fill('input[placeholder="1-1230"]', '1-9999');
+await page.fill('input[placeholder="mis. Bank Mandiri Operasional"]', 'Bank Salah Kode');
+await page.locator('form').filter({ hasText: 'Tambah rekening' }).locator('button[type="submit"]').click();
+await page.waitForSelector('text=/Bagan Akun/', { timeout: 10000 });
+check(true, 'rekening dgn kode akun tak dikenal → ditolak dgn pesan jelas');
+
+await page.fill('input[placeholder="1-1230"]', '1-1300');
+await page.fill('input[placeholder="mis. Bank Mandiri Operasional"]', 'Rekening Uji Playwright');
+await page.locator('form').filter({ hasText: 'Tambah rekening' }).locator('button[type="submit"]').click();
+await page.waitForSelector('td:has-text("Rekening Uji Playwright")', { timeout: 10000 });
+check(true, 'tambah rekening (kode COA valid) → muncul di tabel, saldo 0');
+page.once('dialog', (d) => d.accept());
+await page.locator('tr', { hasText: 'Rekening Uji Playwright' }).locator('button:has-text("Hapus")').click();
+await page.waitForSelector('td:has-text("Rekening Uji Playwright")', { state: 'detached', timeout: 10000 });
+check(true, 'hapus rekening bersaldo 0 → hilang dari tabel');
+
+await page.screenshot({ path: path.join(OUT, 'master-keuangan.png'), fullPage: true });
+console.log(`\nScreenshot: docs/screenshots/master-paket.png & master-keuangan.png`);
 await browser.close();
 
 console.log(failures === 0 ? '\nSEMUA UJI LULUS' : `\n${failures} UJI GAGAL`);

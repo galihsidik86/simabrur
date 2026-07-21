@@ -21,3 +21,6 @@ receiptsRoutes.get('/:id/document', requireAuth, paymentsController.receiptDocum
 
 export const bankAccountsRoutes = Router();
 bankAccountsRoutes.get('/', requireAuth, requireRoles('keuangan', 'pimpinan'), paymentsController.bankAccounts);
+bankAccountsRoutes.post('/', requireAuth, requireRoles('keuangan'), paymentsController.createBankAccount);
+bankAccountsRoutes.put('/:id', requireAuth, requireRoles('keuangan'), paymentsController.updateBankAccount);
+bankAccountsRoutes.delete('/:id', requireAuth, requireRoles('keuangan'), paymentsController.deleteBankAccount);

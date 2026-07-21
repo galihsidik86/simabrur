@@ -15,6 +15,7 @@ const NAV = [
   { to: '/laporan-operasional', label: 'Laporan Operasional', dot: 'var(--color-mod-operasional)', roles: ['admin', 'pimpinan', 'operasional', 'keuangan'] },
   { to: '/marketing', label: 'Marketing & Komisi', dot: 'var(--color-mod-marketing)', roles: ['admin', 'pimpinan', 'marketing'] },
   { to: '/keuangan', label: 'Keuangan & Akuntansi', dot: 'var(--color-mod-keuangan)', roles: ['admin', 'pimpinan', 'keuangan'] },
+  { to: '/keuangan-master', label: 'Master Data Keuangan', dot: 'var(--color-mod-keuangan)', roles: ['admin', 'pimpinan', 'keuangan'] },
   { to: '/laporan-keuangan', label: 'Laporan Keuangan', dot: 'var(--color-mod-keuangan)', roles: ['admin', 'pimpinan', 'keuangan'] },
   { to: '/admin', label: 'Administrasi', dot: 'var(--color-mod-sistem)', roles: ['admin'] }
 ];
@@ -29,6 +30,7 @@ const TITLES: Record<string, [string, string]> = {
   '/laporan-operasional': ['Laporan Operasional', 'Piutang aging, kepatuhan dokumen & kesiapan keberangkatan'],
   '/marketing': ['Marketing, Agen & Komisi', 'Kinerja agen mitra, referral & perhitungan komisi'],
   '/keuangan': ['Keuangan & Akuntansi', 'Liabilitas jamaah, pengakuan pendapatan & laba per keberangkatan'],
+  '/keuangan-master': ['Master Data Keuangan', 'Vendor & rekening bank — dipakai Input Transaksi dan pembayaran'],
   '/laporan-keuangan': ['Laporan Keuangan', 'Laba rugi, neraca & laba per paket — PT Safar Barokah Wisata'],
   '/admin': ['Administrasi Sistem', 'Pengguna, role & audit log']
 };
