@@ -1,14 +1,15 @@
 /**
  * Potret layar aplikasi utk galeri README → docs/screenshots/*.png
- * Prasyarat: dev server hidup (backend :3001, frontend :5173), Microsoft Edge terpasang.
- * Jalankan: node scripts/screenshots.mjs
+ * Prasyarat: Microsoft Edge terpasang; target = dev server (default) atau produksi.
+ * Jalankan: node scripts/screenshots.mjs [BASE_URL]
+ *   contoh: node scripts/screenshots.mjs https://safar.sosmartpro.com
  */
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const BASE = 'http://localhost:5173';
-const API = 'http://localhost:3001/v1';
+const BASE = process.argv[2] ?? 'http://localhost:5173';
+const API = process.argv[2] ? `${process.argv[2]}/v1` : 'http://localhost:3001/v1';
 const OUT = path.resolve(import.meta.dirname, '../docs/screenshots');
 fs.mkdirSync(OUT, { recursive: true });
 
@@ -63,6 +64,9 @@ await shot('laporan-keuangan', {
     await staffLogin(p, 'keuangan@safar.co.id');
   }
 });
+// 5b. Master data paket (kategori, hotel, maskapai) & keuangan (vendor, rekening bank)
+await shot('master-paket', { url: '/paket/master', before: (p) => staffLogin(p) });
+await shot('master-keuangan', { url: '/keuangan-master', before: (p) => staffLogin(p) });
 // 6. Invoice A4 golden thread
 if (siti) {
   await shot('invoice-a4', { url: `/dokumen/invoice/${siti.invoiceId}`, before: (p) => staffLogin(p, 'keuangan@safar.co.id'), fullPage: true });

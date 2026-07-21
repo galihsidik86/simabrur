@@ -27,11 +27,15 @@ Implementasi full-stack dari mockup desain di repo ini (file `*.dc.html`). Renca
 |---|---|---|
 | ![Laporan Keuangan](docs/screenshots/laporan-keuangan.png) | <img src="docs/screenshots/portal-jamaah.png" width="280" alt="Portal Jamaah"> | <img src="docs/screenshots/invoice-a4.png" width="360" alt="Invoice A4"> |
 
+| Master Data Paket (kategori · hotel · maskapai) | Master Data Keuangan (vendor · rekening bank) |
+|---|---|
+| ![Master Data Paket](docs/screenshots/master-paket.png) | ![Master Data Keuangan](docs/screenshots/master-keuangan.png) |
+
 | Monitoring Lapangan (live Mabrur) | Kredensial Mabrur di Portal |
 |---|---|
 | ![Monitoring Lapangan](docs/screenshots/monitoring-lapangan.png) | <img src="docs/screenshots/portal-kredensial-mabrur.png" width="280" alt="Portal Mabrur"> |
 
-<sub>Regenerasi screenshot: jalankan dev server lalu `node scripts/screenshots.mjs` (butuh Microsoft Edge).</sub>
+<sub>Regenerasi screenshot: `node scripts/screenshots.mjs` (dev server) atau `node scripts/screenshots.mjs https://safar.sosmartpro.com` (produksi) — butuh Microsoft Edge.</sub>
 
 ## Stack
 
