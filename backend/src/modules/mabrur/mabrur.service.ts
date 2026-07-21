@@ -16,6 +16,14 @@ import { encrypt, decrypt } from '../../utils/crypto.js';
 const PHONE_RE = /^08\d{8,13}$/;
 const normalizePhone = (p: string | null | undefined) => (p ?? '').replace(/\D/g, '');
 const genPassword = () => String(crypto.randomInt(100000, 1000000));
+/** Dekripsi tahan-gagal utk listing: baris korup → null, bukan 500 untuk seluruh daftar. */
+const safeDecrypt = (enc: string): string | null => {
+  try {
+    return decrypt(enc);
+  } catch {
+    return null;
+  }
+};
 
 interface MabrurMemberResult {
   externalRef: string;
@@ -233,7 +241,8 @@ export const mabrurService = {
     return [...staffRows, ...jamaahRows].map((r) => ({
       name: r.name,
       phone: r.phone,
-      initialPassword: decrypt(r.initial_password_enc),
+      // Satu baris korup tidak boleh meng-crash listing seluruh rombongan
+      initialPassword: safeDecrypt(r.initial_password_enc),
       syncedAt: r.synced_at
     }));
   },

@@ -23,8 +23,15 @@ export function encrypt(plain: string): string {
 }
 
 export function decrypt(payload: string): string {
-  const [ivHex, tagHex, dataHex] = payload.split(':');
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key(), Buffer.from(ivHex, 'hex'));
-  decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+  const parts = String(payload).split(':');
+  if (parts.length !== 3) throw errors.badRequest('Format ciphertext tidak valid');
+  const [ivHex, tagHex, dataHex] = parts;
+  const iv = Buffer.from(ivHex, 'hex');
+  const tag = Buffer.from(tagHex, 'hex');
+  // GCM: IV 12 byte, auth tag WAJIB 16 byte — tag terpotong akan ditolak
+  // (tanpa ini setAuthTag menerima tag pendek → peluang forgery jauh lebih besar).
+  if (iv.length !== 12 || tag.length !== 16) throw errors.badRequest('IV/auth tag tidak valid');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key(), iv, { authTagLength: 16 });
+  decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(Buffer.from(dataHex, 'hex')), decipher.final()]).toString('utf8');
 }

@@ -24,6 +24,11 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
       }
     });
   }
+  // Unique-violation Postgres (23505) dari kondisi balapan (double-submit NIK,
+  // termin, dll) → 409 Konflik, bukan 500. Semantik "duplikat" = konflik.
+  if (typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505') {
+    return res.status(409).json({ success: false, error: { code: 'CONFLICT', message: 'Data sudah ada / sedang diproses — coba lagi' } });
+  }
   if (env.nodeEnv !== 'test') console.error(err);
   return res.status(500).json({ success: false, error: { code: 'INTERNAL', message: 'Terjadi kesalahan pada server' } });
 }

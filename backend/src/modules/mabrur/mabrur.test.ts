@@ -65,6 +65,13 @@ describe('util kripto (AES-256-GCM)', () => {
     expect(enc).not.toContain('123456');
     expect(decrypt(enc)).toBe('123456');
   });
+
+  it('menolak payload malformed & auth tag terpotong', () => {
+    expect(() => decrypt('bukan-format-benar')).toThrow();
+    const [iv, tag, data] = encrypt('rahasia').split(':');
+    expect(() => decrypt(`${iv}:${tag.slice(0, 16)}:${data}`)).toThrow(); // tag 8 byte
+    expect(() => decrypt(`${iv}:${tag}:${data}ff`)).toThrow(); // ciphertext diubah → auth gagal
+  });
 });
 
 describe('POST /v1/mabrur/groups/:id/sync', () => {

@@ -64,6 +64,6 @@ if (env.isProduction) {
     }
   }
   if (env.databaseUrl.includes('safar_dev')) {
-    console.warn('⚠ DATABASE_URL memakai password default dev — ganti untuk produksi.');
+    throw new Error('DATABASE_URL memakai kredensial default dev (safar_dev) — wajib diganti untuk produksi.');
   }
 }

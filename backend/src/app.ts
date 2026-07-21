@@ -48,7 +48,9 @@ export function createApp() {
       crossOriginResourcePolicy: { policy: 'same-site' }
     })
   );
-  app.use(cors(env.corsOrigin ? { origin: env.corsOrigin.split(','), credentials: false } : {}));
+  // CORS_ORIGIN kosong = deploy same-origin (frontend disajikan backend) → TOLAK
+  // cross-origin (origin:false), bukan wildcard '*' yang memantulkan semua origin.
+  app.use(cors(env.corsOrigin ? { origin: env.corsOrigin.split(','), credentials: false } : { origin: false }));
   app.use(express.json({ limit: '2mb' }));
 
   // Respons API tidak boleh di-cache proxy/hosting (dynamic cache shared hosting

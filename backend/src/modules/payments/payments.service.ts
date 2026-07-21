@@ -167,6 +167,10 @@ export const paymentsService = {
         updated_at: trx.fn.now()
       });
       if (payment.schedule_id) {
+        // Kunci termin & tolak bila sudah dilunasi pembayaran lain (cegah dua
+        // pembayaran pending atas termin sama sama-sama diverifikasi).
+        const sch = await trx('payment_schedules').where({ id: payment.schedule_id }).forUpdate().first();
+        if (sch?.status === 'paid') throw errors.conflict('Termin ini sudah dilunasi pembayaran lain');
         await trx('payment_schedules').where({ id: payment.schedule_id }).update({ status: 'paid', updated_at: trx.fn.now() });
       }
       const { status } = await recalcInvoiceStatus(trx, payment.invoice_id);

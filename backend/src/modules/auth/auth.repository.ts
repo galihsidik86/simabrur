@@ -55,5 +55,13 @@ export const authRepository = {
 
   revokeRefreshToken(tokenHash: string) {
     return db('refresh_tokens').where({ token_hash: tokenHash }).update({ revoked_at: db.fn.now() });
+  },
+
+  /** Cabut hanya bila belum tercabut — kembalikan jumlah baris terpengaruh (0 = sudah dicabut). */
+  revokeIfActive(tokenHash: string) {
+    return db('refresh_tokens')
+      .where({ token_hash: tokenHash })
+      .whereNull('revoked_at')
+      .update({ revoked_at: db.fn.now() });
   }
 };

@@ -55,7 +55,10 @@ export const authService = {
     const user = await authRepository.findUserById(row.user_id);
     if (!user || !user.is_active) throw errors.unauthorized('Akun tidak aktif');
 
-    await authRepository.revokeRefreshToken(hash);
+    // Pencabutan atomik: bila 0 baris terpengaruh, token sudah dipakai/dicabut
+    // proses lain (indikasi replay) — tolak, jangan terbitkan pasangan token kedua.
+    const revoked = await authRepository.revokeIfActive(hash);
+    if (!revoked) throw errors.unauthorized('Sesi berakhir, silakan login ulang');
     const tokens = await issueTokens(user);
     return { ...tokens, user: publicUser(user) };
   },
