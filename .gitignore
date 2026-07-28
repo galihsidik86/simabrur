@@ -8,3 +8,4 @@ backend/uploads/
 backend/public/
 backups/
 .DS_Store
+.gstack/
