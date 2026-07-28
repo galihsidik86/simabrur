@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import axios from 'axios';
-import { api, setAccessToken } from '../api/client';
+import { api, setAccessToken, refreshSession } from '../api/client';
 
 export interface User {
   id: string;
@@ -27,22 +26,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Pulihkan sesi dari refresh token saat reload
-    const refreshToken = localStorage.getItem('safar.refresh');
-    if (!refreshToken) return setLoading(false);
-    axios
-      .post('/v1/auth/refresh', { refreshToken })
-      .then(({ data }) => {
-        localStorage.setItem('safar.refresh', data.data.refreshToken);
-        setAccessToken(data.data.accessToken);
-        setUser(data.data.user);
+    // Pulihkan sesi dari refresh token saat reload — lewat singleton terdedup
+    // di client.ts agar StrictMode (efek dua kali) & tab lain tak saling balap.
+    let alive = true;
+    refreshSession()
+      .then((data) => {
+        if (alive && data) setUser(data.user);
       })
-      .catch(() => localStorage.removeItem('safar.refresh'))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
 
     const onLogout = () => setUser(null);
     window.addEventListener('safar:logout', onLogout);
-    return () => window.removeEventListener('safar:logout', onLogout);
+    return () => {
+      alive = false;
+      window.removeEventListener('safar:logout', onLogout);
+    };
   }, []);
 
   async function login(email: string, password: string) {
