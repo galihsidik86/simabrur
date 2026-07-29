@@ -213,16 +213,26 @@ function ManualJournalModal({ onClose }: { onClose: () => void }) {
 }
 
 /* ===== Sub-tab 2: Rekonsiliasi Bank ===== */
+interface BankAccountOpt { account_code: string; name: string; currency: string }
+
 function RekonBank() {
   const qc = useQueryClient();
   const [month, setMonth] = useState('2026-06');
+  const [bankCode, setBankCode] = useState('');
+  const { data: banks } = useQuery({
+    queryKey: ['bank-accounts'],
+    queryFn: async () => (await api.get('/bank-accounts')).data.data as BankAccountOpt[]
+  });
+  // Rekening aktif = pilihan pengguna, atau rekening pertama begitu daftar termuat.
+  const activeCode = bankCode || banks?.[0]?.account_code || '';
   const { data: d } = useQuery({
-    queryKey: ['reconciliation', month],
-    queryFn: async () => (await api.get('/bank-reconciliations', { params: { bankAccountCode: '1-1200', month } })).data.data as ReconData
+    queryKey: ['reconciliation', activeCode, month],
+    enabled: !!activeCode,
+    queryFn: async () => (await api.get('/bank-reconciliations', { params: { bankAccountCode: activeCode, month } })).data.data as ReconData
   });
   const match = useMutation({
     mutationFn: async (id: string) => api.post(`/bank-reconciliations/${id}/match`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['reconciliation', month] })
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['reconciliation', activeCode, month] })
   });
   if (!d) return <div className="text-[12.5px] text-muted-2">Memuat rekonsiliasi…</div>;
 
@@ -236,9 +246,16 @@ function RekonBank() {
   return (
     <div>
       <div className="mb-4 flex items-center gap-2">
-        <span className="rounded-[9px] border border-line-2 bg-white px-3.5 py-2 text-[12.5px] font-semibold">
-          {d.bank.name} · {d.bank.bank} {d.bank.accountNo}
-        </span>
+        <select className="fld !w-auto !py-2 font-semibold" value={activeCode} onChange={(e) => setBankCode(e.target.value)}>
+          {banks?.map((b) => (
+            <option key={b.account_code} value={b.account_code}>
+              {b.account_code} · {b.name}{b.currency !== 'IDR' ? ` · ${b.currency}` : ''}
+            </option>
+          ))}
+        </select>
+        {(d.bank.bank || d.bank.accountNo) && (
+          <span className="text-[11.5px] text-muted-2">{d.bank.bank} {d.bank.accountNo}</span>
+        )}
         <input type="month" className="fld !w-[160px] !py-2" value={month} onChange={(e) => setMonth(e.target.value)} />
       </div>
 
