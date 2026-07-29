@@ -91,7 +91,7 @@ export async function seed(knex: Knex): Promise<void> {
   const ccPlusTurki = ccByDeparture.get(plusTurkiDep.id)!;
 
   // DP vendor hotel (JV-0612 mockup): Dr 1-1400 · Cr 1-1200
-  const hotelJournal = await postJournal(knex, {
+  await postJournal(knex, {
     date: '2026-06-12',
     description: 'Pembayaran DP hotel — Grand Al Massa (Grup Plus Turki Agustus)',
     source: 'expense',
@@ -126,17 +126,50 @@ export async function seed(knex: Knex): Promise<void> {
     lines: commissionLines(4_230_000)
   });
 
-  // ---- Mutasi rekening koran Juni — BSI IDR (mockup Rekonsiliasi Bank) ----
+  // ---- Sesi rekonsiliasi bank Juni — BSI IDR (mockup Rekonsiliasi Bank) ----
+  // Rekening koran = cerminan mutasi buku besar 1-1200 s/d 30 Jun (semua matched),
+  // + 2 item bank-only yang belum dibukukan (jasa giro, biaya adm) untuk diposting,
+  // + 1 setoran "dalam perjalanan" (book-only) sebagai item pendamai murni.
   const bankIdr = await knex('bank_accounts').where({ account_code: '1-1200' }).first();
-  const sitiT2 = await knex('journals').whereILike('description', '%termin 2 — Hj. Siti Rohmah%').first();
-  const rahmatT2 = await knex('journals').whereILike('description', '%termin 2 — Rahmat Hidayat%').first();
+  const glLines = await knex('journal_lines as l')
+    .join('accounts as a', 'a.id', 'l.account_id')
+    .join('journals as j', 'j.id', 'l.journal_id')
+    .select('l.id', 'l.debit', 'l.credit', 'j.date', 'j.description')
+    .where('a.code', '1-1200')
+    .andWhere('j.date', '<=', '2026-06-30')
+    .orderBy('j.date');
+  const glTotal = glLines.reduce((s, l) => s + (Number(l.debit) - Number(l.credit)), 0);
 
-  await knex('bank_statement_lines').insert([
-    { bank_account_id: bankIdr.id, line_date: '2026-06-10', description: 'Setoran Termin 2 — Hj. Siti Rohmah', amount: 11_800_000, matched_journal_id: sitiT2?.id ?? null, status: sitiT2 ? 'matched' : 'unmatched' },
-    { bank_account_id: bankIdr.id, line_date: '2026-06-12', description: 'Transfer DP hotel Grand Al Massa', amount: -210_000_000, matched_journal_id: hotelJournal.id, status: 'matched' },
-    { bank_account_id: bankIdr.id, line_date: '2026-06-15', description: 'Setoran Termin 2 — Rahmat Hidayat', amount: 6_800_000, matched_journal_id: rahmatT2?.id ?? null, status: rahmatT2 ? 'matched' : 'unmatched' },
-    { bank_account_id: bankIdr.id, line_date: '2026-06-28', description: 'Setoran DP jamaah (dalam proses)', amount: 15_000_000, status: 'unmatched' },
-    { bank_account_id: bankIdr.id, line_date: '2026-06-30', description: 'Biaya administrasi bank', amount: -185_000, status: 'unmatched' },
-    { bank_account_id: bankIdr.id, line_date: '2026-06-30', description: 'Jasa giro', amount: 62_000, status: 'unmatched' }
-  ]);
+  // Sisakan satu setoran Juni terakhir sebagai setoran dalam perjalanan (book-only).
+  const dit = [...glLines].reverse().find(
+    (l) => Number(l.debit) - Number(l.credit) > 0 && new Date(l.date) >= new Date('2026-06-01')
+  );
+  const ditAmount = dit ? Number(dit.debit) - Number(dit.credit) : 0;
+
+  // Saldo akhir rekening koran (EKSTERNAL, seperti diinput admin) =
+  //   saldo buku + item bank-only (jasa giro 62rb − biaya adm 185rb) − setoran dalam perjalanan.
+  const closingBalance = glTotal - 123_000 - ditAmount;
+
+  const [recon] = await knex('bank_reconciliations')
+    .insert({
+      bank_account_id: bankIdr.id, period: '2026-06', statement_date: '2026-06-30',
+      opening_balance: 0, closing_balance: closingBalance, status: 'draft'
+    })
+    .returning('*');
+
+  const stmtRows: Record<string, unknown>[] = [];
+  for (const l of glLines) {
+    if (dit && l.id === dit.id) continue; // biarkan book-only
+    const amt = Number(l.debit) - Number(l.credit);
+    stmtRows.push({
+      bank_account_id: bankIdr.id, reconciliation_id: recon.id, line_date: l.date,
+      description: l.description, amount: amt, line_type: amt >= 0 ? 'setoran' : 'penarikan',
+      matched_journal_line_id: l.id, status: 'matched'
+    });
+  }
+  stmtRows.push(
+    { bank_account_id: bankIdr.id, reconciliation_id: recon.id, line_date: '2026-06-30', description: 'Jasa giro', amount: 62_000, line_type: 'jasa_giro', status: 'unmatched' },
+    { bank_account_id: bankIdr.id, reconciliation_id: recon.id, line_date: '2026-06-30', description: 'Biaya administrasi bank', amount: -185_000, line_type: 'biaya_adm', status: 'unmatched' }
+  );
+  await knex('bank_statement_lines').insert(stmtRows);
 }

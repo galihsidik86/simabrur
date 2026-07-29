@@ -62,6 +62,32 @@ export const reconciliationQuery = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/)
 });
 
+const LINE_TYPES = ['setoran', 'penarikan', 'jasa_giro', 'biaya_adm', 'pajak_giro', 'transfer', 'lain'] as const;
+
+export const openReconciliationSchema = z.object({
+  bankAccountCode: z.string().regex(/^\d-\d{4}$/),
+  period: z.string().regex(/^\d{4}-\d{2}$/),
+  statementDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  openingBalance: z.number().nullish(),
+  closingBalance: z.number()
+});
+
+export const statementLineSchema = z.object({
+  lineDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  description: z.string().min(2).max(200),
+  amount: z.number().refine((n) => n !== 0, 'Nominal tidak boleh 0'),
+  lineType: z.enum(LINE_TYPES).default('lain'),
+  externalRef: z.string().max(120).nullish()
+});
+
+export const importStatementSchema = z.object({
+  rows: z.array(statementLineSchema).min(1).max(1000)
+});
+
+export const matchLineSchema = z.object({
+  journalLineId: z.string().uuid().nullish()
+});
+
 export const upsertVendorSchema = z.object({
   name: z.string().min(2).max(120),
   type: z.enum(['hotel', 'airline', 'visa', 'catering', 'transport', 'other']).default('other')

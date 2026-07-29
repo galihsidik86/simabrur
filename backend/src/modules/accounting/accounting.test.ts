@@ -285,27 +285,94 @@ describe('GET /v1/journals + filter', () => {
   });
 });
 
-describe('rekonsiliasi bank Juni (mockup)', () => {
-  it('penyesuaian dua sisi seimbang; 3 mutasi belum tercocok', async () => {
+describe('rekonsiliasi bank — sesi, pencocokan, penyesuaian, finalisasi', () => {
+  const recon = (keu: string) =>
+    request(app).get('/v1/bank-reconciliations').query({ bankAccountCode: '1-1200', month: '2026-06' }).set('Authorization', `Bearer ${keu}`);
+
+  it('saldo koran independen dari buku besar → selisih NYATA (bukan tautologi)', async () => {
     const keu = await token('keuangan@safar.co.id');
-    const res = await request(app).get('/v1/bank-reconciliations')
-      .query({ bankAccountCode: '1-1200', month: '2026-06' })
-      .set('Authorization', `Bearer ${keu}`);
-    expect(res.status).toBe(200);
-    const d = res.body.data;
-    expect(d.totalCount).toBe(6);
-    expect(d.matchedCount).toBe(3);
-    expect(d.adjusted.balanced).toBe(true);
-    expect(d.adjustments.depositsInTransit[0].amount).toBe(15_000_000);
-    expect(d.adjustments.bankOnlyCharges[0].amount).toBe(-185_000);
-    expect(d.adjustments.bankOnlyIncome.find((l: { description: string }) => l.description === 'Jasa giro').amount).toBe(62_000);
+    const d = (await recon(keu)).body.data;
+    expect(d.session.status).toBe('draft');
+    expect(d.statementBalance).not.toBe(d.ledgerBalance); // angka koran independen
+    expect(d.difference).not.toBe(0); // selisih nyata bisa ada
+    expect(d.unexplained).toBe(0); // namun terjelaskan penuh oleh item pendamai
+    expect(d.balanced).toBe(true);
+    expect(d.canFinalize).toBe(false); // penyesuaian bank-only belum diposting
+    expect(d.adjustments.bankOnlyIncome.some((a: { lineType: string }) => a.lineType === 'jasa_giro')).toBe(true);
+    expect(d.adjustments.bankOnlyCharges.some((a: { lineType: string }) => a.lineType === 'biaya_adm')).toBe(true);
+    expect(d.adjustments.depositsInTransit.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('tombol Cocokkan: toggle matched', async () => {
+  it('closing keliru → unexplained ≠ 0 & balanced=false (deteksi selisih)', async () => {
     const keu = await token('keuangan@safar.co.id');
-    const line = await db('bank_statement_lines').where({ status: 'unmatched' }).first();
-    const res = await request(app).post(`/v1/bank-reconciliations/${line.id}/match`).set('Authorization', `Bearer ${keu}`);
-    expect(res.body.data.status).toBe('matched');
+    const res = await request(app).post('/v1/bank-reconciliations').set('Authorization', `Bearer ${keu}`)
+      .send({ bankAccountCode: '1-1210', period: '2026-06', statementDate: '2026-06-30', closingBalance: 123_456_789 });
+    expect(res.status).toBe(201);
+    expect(res.body.data.balanced).toBe(false);
+    expect(res.body.data.unexplained).not.toBe(0);
+  });
+
+  it('posting penyesuaian → jurnal source=reconciliation, ledger bergerak; finalize lalu terkunci', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const d = (await recon(keu)).body.data;
+    const sid = d.session.id;
+    const giro = d.adjustments.bankOnlyIncome.find((a: { lineType: string }) => a.lineType === 'jasa_giro');
+    const adm = d.adjustments.bankOnlyCharges.find((a: { lineType: string }) => a.lineType === 'biaya_adm');
+    const ledger0 = d.ledgerBalance;
+
+    // finalize ditolak sebelum penyesuaian diposting
+    expect((await request(app).post(`/v1/bank-reconciliations/${sid}/finalize`).set('Authorization', `Bearer ${keu}`)).status).toBe(400);
+
+    const a1 = await request(app).post(`/v1/bank-reconciliations/lines/${giro.id}/adjust`).set('Authorization', `Bearer ${keu}`);
+    expect(a1.status).toBe(201);
+    expect(a1.body.data.ledgerBalance).toBe(ledger0 + 62_000);
+
+    const a2 = await request(app).post(`/v1/bank-reconciliations/lines/${adm.id}/adjust`).set('Authorization', `Bearer ${keu}`);
+    expect(a2.body.data.ledgerBalance).toBe(ledger0 + 62_000 - 185_000);
+    expect(a2.body.data.canFinalize).toBe(true);
+
+    const jr = await request(app).get('/v1/journals').query({ source: 'reconciliation' }).set('Authorization', `Bearer ${keu}`);
+    expect(jr.body.data.entries.length).toBeGreaterThanOrEqual(2);
+
+    const fin = await request(app).post(`/v1/bank-reconciliations/${sid}/finalize`).set('Authorization', `Bearer ${keu}`);
+    expect(fin.status).toBe(200);
+    expect(fin.body.data.session.status).toBe('completed');
+    expect(fin.body.data.session.reconciledBy).toBeTruthy();
+
+    // mutasi setelah terkunci ditolak 409
+    const anyLine = fin.body.data.lines.find((l: { status: string }) => l.status === 'matched');
+    expect((await request(app).post(`/v1/bank-reconciliations/lines/${anyLine.id}/match`).set('Authorization', `Bearer ${keu}`).send({})).status).toBe(409);
+  });
+
+  it('entri manual + impor CSV dengan dedup externalRef', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const open = await request(app).post('/v1/bank-reconciliations').set('Authorization', `Bearer ${keu}`)
+      .send({ bankAccountCode: '1-1100', period: '2026-07', statementDate: '2026-07-31', closingBalance: 0 });
+    const sid = open.body.data.session.id;
+
+    const add = await request(app).post(`/v1/bank-reconciliations/${sid}/lines`).set('Authorization', `Bearer ${keu}`)
+      .send({ lineDate: '2026-07-05', description: 'Setoran tunai', amount: 500_000, lineType: 'setoran' });
+    expect(add.status).toBe(201);
+    expect(add.body.data.totalCount).toBe(1);
+
+    const imp1 = await request(app).post(`/v1/bank-reconciliations/${sid}/import`).set('Authorization', `Bearer ${keu}`)
+      .send({ rows: [
+        { lineDate: '2026-07-06', description: 'Giro X', amount: 100_000, externalRef: 'TRX-1' },
+        { lineDate: '2026-07-07', description: 'Giro Y', amount: 200_000, externalRef: 'TRX-2' }
+      ] });
+    expect(imp1.body.data.inserted).toBe(2);
+
+    const imp2 = await request(app).post(`/v1/bank-reconciliations/${sid}/import`).set('Authorization', `Bearer ${keu}`)
+      .send({ rows: [{ lineDate: '2026-07-06', description: 'Giro X (dup)', amount: 100_000, externalRef: 'TRX-1' }] });
+    expect(imp2.body.data.inserted).toBe(0);
+    expect(imp2.body.data.skipped).toBe(1);
+  });
+
+  it('RBAC: marketing tidak bisa membuka sesi (403)', async () => {
+    const mkt = await token('marketing@safar.co.id');
+    const res = await request(app).post('/v1/bank-reconciliations').set('Authorization', `Bearer ${mkt}`)
+      .send({ bankAccountCode: '1-1200', period: '2026-08', statementDate: '2026-08-31', closingBalance: 0 });
+    expect(res.status).toBe(403);
   });
 });
 

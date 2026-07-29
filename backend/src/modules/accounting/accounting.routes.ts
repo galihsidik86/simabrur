@@ -26,7 +26,14 @@ transactionsRoutes.post('/commission', requireAuth, requireRoles('keuangan'), ac
 
 export const bankReconciliationsRoutes = Router();
 bankReconciliationsRoutes.get('/', requireAuth, requireRoles(...KEU), accountingController.reconciliation);
-bankReconciliationsRoutes.post('/:id/match', requireAuth, requireRoles('keuangan'), accountingController.matchStatementLine);
+bankReconciliationsRoutes.post('/', requireAuth, requireRoles('keuangan'), accountingController.openReconciliation);
+// Operasi per-baris mutasi koran (definisikan sebelum '/:id/...' agar tak bentrok)
+bankReconciliationsRoutes.post('/lines/:lineId/match', requireAuth, requireRoles('keuangan'), accountingController.matchStatementLine);
+bankReconciliationsRoutes.post('/lines/:lineId/adjust', requireAuth, requireRoles('keuangan'), accountingController.postAdjustment);
+// Operasi sesi
+bankReconciliationsRoutes.post('/:id/lines', requireAuth, requireRoles('keuangan'), accountingController.addStatementLine);
+bankReconciliationsRoutes.post('/:id/import', requireAuth, requireRoles('keuangan'), accountingController.importStatementLines);
+bankReconciliationsRoutes.post('/:id/finalize', requireAuth, requireRoles('keuangan'), accountingController.finalizeReconciliation);
 
 export const accountingSummaryRoutes = Router();
 accountingSummaryRoutes.get('/summary', requireAuth, requireRoles(...KEU), accountingController.summary);

@@ -2,8 +2,9 @@ import type { Request, Response } from 'express';
 import { ok } from '../../utils/http.js';
 import { accountingService } from './accounting.service.js';
 import {
-  commissionTxSchema, expenseTxSchema, journalsQuery, manualJournalSchema,
-  receiptTxSchema, reconciliationQuery, revenueTxSchema, upsertVendorSchema
+  commissionTxSchema, expenseTxSchema, importStatementSchema, journalsQuery, manualJournalSchema,
+  matchLineSchema, openReconciliationSchema, receiptTxSchema, reconciliationQuery, revenueTxSchema,
+  statementLineSchema, upsertVendorSchema
 } from './accounting.validation.js';
 
 export const accountingController = {
@@ -45,8 +46,27 @@ export const accountingController = {
     const q = reconciliationQuery.parse(req.query);
     ok(res, await accountingService.reconciliation(q.bankAccountCode, q.month));
   },
+  async openReconciliation(req: Request, res: Response) {
+    const input = openReconciliationSchema.parse(req.body);
+    ok(res, await accountingService.openReconciliation(req, input), undefined, 201);
+  },
+  async addStatementLine(req: Request, res: Response) {
+    const input = statementLineSchema.parse(req.body);
+    ok(res, await accountingService.addStatementLine(req, String(req.params.id), input), undefined, 201);
+  },
+  async importStatementLines(req: Request, res: Response) {
+    const { rows } = importStatementSchema.parse(req.body);
+    ok(res, await accountingService.importStatementLines(req, String(req.params.id), rows), undefined, 201);
+  },
   async matchStatementLine(req: Request, res: Response) {
-    ok(res, await accountingService.matchStatementLine(req, String(req.params.id)));
+    const { journalLineId } = matchLineSchema.parse(req.body ?? {});
+    ok(res, await accountingService.matchStatementLine(req, String(req.params.lineId), journalLineId));
+  },
+  async postAdjustment(req: Request, res: Response) {
+    ok(res, await accountingService.postAdjustment(req, String(req.params.lineId)), undefined, 201);
+  },
+  async finalizeReconciliation(req: Request, res: Response) {
+    ok(res, await accountingService.finalizeReconciliation(req, String(req.params.id)));
   },
   async summary(_req: Request, res: Response) {
     ok(res, await accountingService.summary());
