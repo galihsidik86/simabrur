@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { fmtShort, fmtFull, fmtDate } from '../../utils/format';
@@ -11,18 +11,38 @@ interface JournalEntry {
   lines: { accountCode: string; accountName: string; debit: number; credit: number; amountForeign: number | null }[];
 }
 interface JournalsData { entries: JournalEntry[]; kpi: { totalDebit: number; totalCredit: number; balanced: boolean; count: number } }
-interface ReconData {
-  bank: { code: string; name: string; bank: string | null; accountNo: string | null };
-  ledgerBalance: number; statementBalance: number; difference: number;
-  adjusted: { statement: number; ledger: number; balanced: boolean };
-  adjustments: {
-    depositsInTransit: { description: string; amount: number }[];
-    bankOnlyIncome: { description: string; amount: number }[];
-    bankOnlyCharges: { description: string; amount: number }[];
-  };
-  lines: { id: string; date: string; description: string; amount: number; source: string; status: string }[];
-  matchedCount: number; totalCount: number;
+interface ReconLine {
+  id: string; date: string; description: string; amount: number; lineType: string;
+  source: string; status: 'matched' | 'unmatched';
+  suggestion: { journalLineId: string; journalNo: string } | null;
 }
+interface BankOnlyItem { id: string; description: string; amount: number; lineType: string; postable: boolean }
+interface BookOnlyItem { id: string; description: string; amount: number; journalNo: string }
+interface ReconSession {
+  id: string; period: string; statementDate: string; openingBalance: number; closingBalance: number;
+  status: 'draft' | 'completed'; reconciledAt: string | null; reconciledBy: string | null; reconciledDiff: number | null;
+}
+interface ReconData {
+  bank: { code: string; name: string; bank: string | null; accountNo: string | null; currency: string };
+  session: ReconSession | null;
+  ledgerBalance: number; statementBalance: number | null; difference: number | null;
+  expectedDiff: number; unexplained: number | null; balanced: boolean; canFinalize: boolean;
+  adjusted: { ledger: number; statement: number };
+  adjustments: {
+    bankOnlyIncome: BankOnlyItem[]; bankOnlyCharges: BankOnlyItem[];
+    depositsInTransit: BookOnlyItem[]; outstanding: BookOnlyItem[];
+  };
+  lines: ReconLine[]; bookOnly: BookOnlyItem[];
+  matchedCount: number; totalCount: number; unmatchedCount: number;
+}
+const LINE_TYPE_LABEL: Record<string, string> = {
+  setoran: 'Setoran', penarikan: 'Penarikan', jasa_giro: 'Jasa giro', biaya_adm: 'Biaya adm',
+  pajak_giro: 'Pajak giro', transfer: 'Transfer', lain: 'Lain'
+};
+const lastDayOfMonth = (m: string) => {
+  const [y, mo] = m.split('-').map(Number);
+  return new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10);
+};
 
 const SOURCE_BADGE: Record<string, { label: string; color: string; bg: string }> = {
   payment: { label: 'Pembayaran', color: 'oklch(0.45 0.06 245)', bg: 'oklch(0.95 0.03 245)' },
@@ -219,44 +239,109 @@ function RekonBank() {
   const qc = useQueryClient();
   const [month, setMonth] = useState('2026-06');
   const [bankCode, setBankCode] = useState('');
+  const [err, setErr] = useState('');
+  const [showAdd, setShowAdd] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+
   const { data: banks } = useQuery({
     queryKey: ['bank-accounts'],
     queryFn: async () => (await api.get('/bank-accounts')).data.data as BankAccountOpt[]
   });
-  // Rekening aktif = pilihan pengguna, atau rekening pertama begitu daftar termuat.
   const activeCode = bankCode || banks?.[0]?.account_code || '';
+  const key = ['reconciliation', activeCode, month];
   const { data: d } = useQuery({
-    queryKey: ['reconciliation', activeCode, month],
+    queryKey: key,
     enabled: !!activeCode,
     queryFn: async () => (await api.get('/bank-reconciliations', { params: { bankAccountCode: activeCode, month } })).data.data as ReconData
   });
-  const match = useMutation({
-    mutationFn: async (id: string) => api.post(`/bank-reconciliations/${id}/match`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['reconciliation', activeCode, month] })
-  });
+
+  const errMsg = (e: unknown) => (e as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Terjadi kesalahan';
+  const mut = <T,>(fn: (v: T) => Promise<unknown>) =>
+    useMutation({
+      mutationFn: fn,
+      onMutate: () => setErr(''),
+      onSuccess: () => qc.invalidateQueries({ queryKey: key }),
+      onError: (e) => setErr(errMsg(e))
+    });
+
+  const match = mut<{ lineId: string; journalLineId?: string }>((v) =>
+    api.post(`/bank-reconciliations/lines/${v.lineId}/match`, { journalLineId: v.journalLineId }));
+  const adjust = mut<string>((lineId) => api.post(`/bank-reconciliations/lines/${lineId}/adjust`));
+  const finalize = mut<string>((id) => api.post(`/bank-reconciliations/${id}/finalize`));
+
   if (!d) return <div className="text-[12.5px] text-muted-2">Memuat rekonsiliasi…</div>;
 
+  const s = d.session;
+  const locked = s?.status === 'completed';
+  const sel = (
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      <select className="fld !w-auto !py-2 font-semibold" value={activeCode} onChange={(e) => { setBankCode(e.target.value); setErr(''); }}>
+        {banks?.map((b) => (
+          <option key={b.account_code} value={b.account_code}>
+            {b.account_code} · {b.name}{b.currency !== 'IDR' ? ` · ${b.currency}` : ''}
+          </option>
+        ))}
+      </select>
+      <input type="month" className="fld !w-[160px] !py-2" value={month} onChange={(e) => { setMonth(e.target.value); setErr(''); }} />
+      {(d.bank.bank || d.bank.accountNo) && <span className="text-[11.5px] text-muted-2">{d.bank.bank} {d.bank.accountNo}</span>}
+    </div>
+  );
+
+  // Belum ada sesi → form mulai rekonsiliasi
+  if (!s) {
+    return (
+      <div>
+        {sel}
+        {err && <ErrBar msg={err} />}
+        <StartReconciliation bankCode={activeCode} month={month} ledgerBalance={d.ledgerBalance}
+          onDone={() => qc.invalidateQueries({ queryKey: key })} onError={setErr} />
+      </div>
+    );
+  }
+
+  const money = (n: number | null) => (n == null ? '—' : fmtFull(n));
   const tiles = [
-    { label: 'Saldo Buku Besar', value: fmtFull(d.ledgerBalance), sub: `Akun ${d.bank.code}`, accent: 'oklch(0.52 0.08 165)' },
-    { label: 'Saldo Rekening Koran', value: fmtFull(d.statementBalance), sub: `${d.bank.bank ?? ''} ${d.bank.accountNo ?? ''}`, accent: 'oklch(0.52 0.09 245)' },
-    { label: 'Selisih', value: fmtFull(Math.abs(d.difference)), sub: `${d.totalCount - d.matchedCount} item belum tercocok`, accent: 'oklch(0.55 0.15 28)' },
-    { label: 'Setelah Penyesuaian', value: d.adjusted.balanced ? 'Rp 0' : fmtFull(Math.abs(d.adjusted.statement - d.adjusted.ledger)), sub: d.adjusted.balanced ? 'Rekonsiliasi seimbang ✓' : 'BELUM seimbang', accent: d.adjusted.balanced ? 'oklch(0.46 0.07 158)' : 'oklch(0.55 0.15 28)' }
+    { label: 'Saldo Buku Besar', value: money(d.ledgerBalance), sub: `Akun ${d.bank.code} · s/d ${fmtDate(s.statementDate)}`, accent: 'oklch(0.52 0.08 165)' },
+    { label: 'Saldo Rekening Koran', value: money(d.statementBalance), sub: 'diinput dari lembar bank', accent: 'oklch(0.52 0.09 245)' },
+    { label: 'Selisih (Koran − Buku)', value: money(d.difference), sub: `${d.unmatchedCount} mutasi belum tercocok`, accent: 'oklch(0.56 0.11 78)' },
+    {
+      label: 'Selisih Tak Terjelaskan',
+      value: d.balanced ? 'Rp 0' : money(d.unexplained),
+      sub: d.balanced ? 'terjelaskan penuh ✓' : 'PERLU DITELUSURI',
+      accent: d.balanced ? 'oklch(0.46 0.07 158)' : 'oklch(0.55 0.15 28)'
+    }
   ];
 
   return (
     <div>
-      <div className="mb-4 flex items-center gap-2">
-        <select className="fld !w-auto !py-2 font-semibold" value={activeCode} onChange={(e) => setBankCode(e.target.value)}>
-          {banks?.map((b) => (
-            <option key={b.account_code} value={b.account_code}>
-              {b.account_code} · {b.name}{b.currency !== 'IDR' ? ` · ${b.currency}` : ''}
-            </option>
-          ))}
-        </select>
-        {(d.bank.bank || d.bank.accountNo) && (
-          <span className="text-[11.5px] text-muted-2">{d.bank.bank} {d.bank.accountNo}</span>
+      {sel}
+      {err && <ErrBar msg={err} />}
+
+      {/* Bar status sesi */}
+      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-card border border-line bg-panel px-4 py-3">
+        <span className="rounded-pill px-2.5 py-[3px] text-[10.5px] font-semibold"
+          style={locked ? { background: 'oklch(0.95 0.03 158)', color: 'oklch(0.42 0.07 158)' } : { background: 'oklch(0.96 0.04 78)', color: 'oklch(0.5 0.1 78)' }}>
+          {locked ? '● Selesai & terkunci' : '● Draft'}
+        </span>
+        <span className="text-[11.5px] text-muted-2">Periode {s.period} · cut-off {fmtDate(s.statementDate)} · saldo koran <b className="font-mono">{fmtFull(s.closingBalance)}</b></span>
+        {locked && s.reconciledBy && (
+          <span className="text-[11px] text-muted-3">Direkonsiliasi oleh {s.reconciledBy}{s.reconciledAt ? ` · ${fmtDate(s.reconciledAt)}` : ''}{s.reconciledDiff != null ? ` · sisa timing ${fmtFull(s.reconciledDiff)}` : ''}</span>
         )}
-        <input type="month" className="fld !w-[160px] !py-2" value={month} onChange={(e) => setMonth(e.target.value)} />
+        <div className="ml-auto flex gap-2">
+          {!locked && (
+            <>
+              <button onClick={() => setShowEdit(true)} className="cursor-pointer rounded-[9px] border border-line-2 bg-white px-3 py-1.5 text-[11.5px] font-semibold text-muted">Ubah saldo/tanggal</button>
+              <button onClick={() => setShowAdd(true)} className="cursor-pointer rounded-[9px] border border-line-2 bg-white px-3 py-1.5 text-[11.5px] font-semibold text-muted">+ Mutasi</button>
+              <button onClick={() => setShowImport(true)} className="cursor-pointer rounded-[9px] border border-line-2 bg-white px-3 py-1.5 text-[11.5px] font-semibold text-muted">Impor CSV</button>
+              <button onClick={() => finalize.mutate(s.id)} disabled={!d.canFinalize || finalize.isPending}
+                className="cursor-pointer rounded-[9px] bg-primary px-3.5 py-1.5 text-[11.5px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                title={d.canFinalize ? '' : 'Selesaikan setelah selisih terjelaskan & semua item bank diposting'}>
+                Selesaikan Rekonsiliasi
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="mb-4 grid grid-cols-4 gap-4 max-md:grid-cols-2">
@@ -269,75 +354,239 @@ function RekonBank() {
         ))}
       </div>
 
-      {/* Skedul penyesuaian dua sisi */}
+      {/* Penyesuaian */}
       <div className="mb-4 grid grid-cols-2 gap-4 max-md:grid-cols-1">
         <div className="rounded-card border border-line bg-card p-4 shadow-card">
-          <div className="mb-2 text-[12.5px] font-semibold">Saldo per Rekening Koran</div>
-          <AdjRow label="Saldo rekening koran" amount={d.statementBalance} bold />
-          {d.adjustments.depositsInTransit.map((a) => <AdjRow key={a.description} label={`(−) ${a.description}`} amount={-a.amount} />)}
-          <AdjRow label="Saldo disesuaikan" amount={d.adjusted.statement} bold topline />
+          <div className="mb-1 text-[12.5px] font-semibold">Item bank belum dibukukan</div>
+          <div className="mb-2 text-[10.5px] text-muted-3">Ada di rekening koran, belum di buku besar — posting agar buku menyusul.</div>
+          {[...d.adjustments.bankOnlyIncome, ...d.adjustments.bankOnlyCharges].map((a) => (
+            <div key={a.id} className="flex items-center gap-2 border-t border-[#f6f1e6] py-1.5 first:border-0 text-[11.5px]">
+              <span className="rounded-pill bg-panel px-2 py-[2px] text-[9.5px] font-semibold text-muted-2">{LINE_TYPE_LABEL[a.lineType] ?? a.lineType}</span>
+              <span className="text-muted">{a.description}</span>
+              <span className="ml-auto font-mono" style={{ color: a.amount >= 0 ? 'oklch(0.46 0.07 158)' : 'oklch(0.5 0.13 28)' }}>{fmtFull(a.amount)}</span>
+              {!locked && a.postable && (
+                <button onClick={() => adjust.mutate(a.id)} disabled={adjust.isPending}
+                  className="cursor-pointer rounded-pill bg-primary px-2.5 py-[3px] text-[10px] font-semibold text-white disabled:opacity-50">Posting</button>
+              )}
+              {!locked && !a.postable && <span className="text-[10px] text-muted-4">cocokkan ke jurnal</span>}
+            </div>
+          ))}
+          {d.adjustments.bankOnlyIncome.length + d.adjustments.bankOnlyCharges.length === 0 && (
+            <div className="py-1.5 text-[11.5px] text-muted-3">Tidak ada — semua mutasi koran sudah dibukukan.</div>
+          )}
         </div>
         <div className="rounded-card border border-line bg-card p-4 shadow-card">
-          <div className="mb-2 text-[12.5px] font-semibold">Saldo per Buku Besar</div>
-          <AdjRow label="Saldo buku besar" amount={d.ledgerBalance} bold />
-          {d.adjustments.bankOnlyIncome.map((a) => <AdjRow key={a.description} label={`(+) ${a.description} (belum dicatat)`} amount={a.amount} />)}
-          {d.adjustments.bankOnlyCharges.map((a) => <AdjRow key={a.description} label={`(−) ${a.description} (belum dicatat)`} amount={a.amount} />)}
-          <AdjRow label="Saldo disesuaikan" amount={d.adjusted.ledger} bold topline />
+          <div className="mb-1 text-[12.5px] font-semibold">Belum masuk koran (timing)</div>
+          <div className="mb-2 text-[10.5px] text-muted-3">Sudah di buku besar, belum tampil di rekening koran — item pendamai, tak perlu jurnal.</div>
+          {[...d.adjustments.depositsInTransit, ...d.adjustments.outstanding].map((a) => (
+            <div key={a.id} className="flex items-center gap-2 border-t border-[#f6f1e6] py-1.5 first:border-0 text-[11.5px]">
+              <span className="text-muted">{a.description}</span>
+              <span className="font-mono text-[10px] text-muted-4">{a.journalNo}</span>
+              <span className="ml-auto font-mono" style={{ color: a.amount >= 0 ? 'oklch(0.46 0.07 158)' : 'oklch(0.5 0.13 28)' }}>{fmtFull(a.amount)}</span>
+            </div>
+          ))}
+          {d.adjustments.depositsInTransit.length + d.adjustments.outstanding.length === 0 && (
+            <div className="py-1.5 text-[11.5px] text-muted-3">Tidak ada item timing.</div>
+          )}
         </div>
       </div>
 
       {/* Pencocokan mutasi */}
       <div className="overflow-hidden rounded-card border border-line bg-card shadow-card">
         <div className="flex items-center justify-between border-b border-line-3 px-5 py-3.5">
-          <span className="text-[14px] font-semibold">Pencocokan Mutasi</span>
+          <span className="text-[14px] font-semibold">Pencocokan Mutasi Rekening Koran</span>
           <span className="text-[11.5px] text-muted-2">{d.matchedCount} dari {d.totalCount} mutasi tercocok</span>
         </div>
-        <table className="w-full border-collapse text-[12.5px]">
-          <thead>
-            <tr className="bg-thead text-left text-[10.5px] uppercase tracking-[0.4px] text-muted-3">
-              <th className="px-5 py-[11px] font-semibold">Tanggal</th><th className="px-3 py-[11px] font-semibold">Keterangan</th>
-              <th className="px-3 py-[11px] font-semibold">Sumber</th><th className="px-3 py-[11px] text-right font-semibold">Nominal</th>
-              <th className="px-5 py-[11px] font-semibold">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {d.lines.map((l) => (
-              <tr key={l.id} className="border-t border-line-3">
-                <td className="px-5 py-3 text-muted">{fmtDate(l.date)}</td>
-                <td className="px-3 py-3 font-medium">{l.description}</td>
-                <td className="px-3 py-3 font-mono text-[11px] text-muted-2">{l.source}</td>
-                <td className="px-3 py-3 text-right font-mono font-semibold" style={{ color: l.amount >= 0 ? 'oklch(0.46 0.07 158)' : 'oklch(0.5 0.13 28)' }}>
-                  {l.amount >= 0 ? '+' : '−'}{fmtFull(Math.abs(l.amount)).slice(3)}
-                </td>
-                <td className="px-5 py-3">
-                  {l.status === 'matched' ? (
-                    <button onClick={() => match.mutate(l.id)}
-                      className="cursor-pointer rounded-pill bg-[oklch(0.95_0.03_158)] px-2.5 py-[3px] text-[10.5px] font-semibold text-[oklch(0.42_0.07_158)]">
-                      ✓ Cocok
-                    </button>
-                  ) : (
-                    <button onClick={() => match.mutate(l.id)} disabled={match.isPending}
-                      className="cursor-pointer rounded-pill px-2.5 py-[3px] text-[10.5px] font-semibold text-white"
-                      style={{ background: 'oklch(0.58 0.12 45)' }}>
-                      Cocokkan
-                    </button>
-                  )}
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-[12.5px]">
+            <thead>
+              <tr className="bg-thead text-left text-[10.5px] uppercase tracking-[0.4px] text-muted-3">
+                <th className="px-5 py-[11px] font-semibold">Tanggal</th><th className="px-3 py-[11px] font-semibold">Keterangan</th>
+                <th className="px-3 py-[11px] font-semibold">Tipe</th><th className="px-3 py-[11px] font-semibold">Cocok dgn</th>
+                <th className="px-3 py-[11px] text-right font-semibold">Nominal</th><th className="px-5 py-[11px] font-semibold">Aksi</th>
               </tr>
-            ))}
-            {d.lines.length === 0 && <tr><td colSpan={5} className="px-5 py-6 text-muted-2">Tidak ada mutasi pada periode ini.</td></tr>}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {d.lines.map((l) => (
+                <tr key={l.id} className="border-t border-line-3">
+                  <td className="whitespace-nowrap px-5 py-3 text-muted">{fmtDate(l.date)}</td>
+                  <td className="px-3 py-3 font-medium">{l.description}</td>
+                  <td className="px-3 py-3"><span className="rounded-pill bg-panel px-2 py-[2px] text-[9.5px] font-semibold text-muted-2">{LINE_TYPE_LABEL[l.lineType] ?? l.lineType}</span></td>
+                  <td className="px-3 py-3 font-mono text-[11px] text-muted-2">{l.status === 'matched' ? l.source : '—'}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right font-mono font-semibold" style={{ color: l.amount >= 0 ? 'oklch(0.46 0.07 158)' : 'oklch(0.5 0.13 28)' }}>
+                    {l.amount >= 0 ? '+' : '−'}{fmtFull(Math.abs(l.amount)).slice(3)}
+                  </td>
+                  <td className="px-5 py-3">
+                    {l.status === 'matched' ? (
+                      locked
+                        ? <span className="rounded-pill bg-[oklch(0.95_0.03_158)] px-2.5 py-[3px] text-[10.5px] font-semibold text-[oklch(0.42_0.07_158)]">✓ Cocok</span>
+                        : <button onClick={() => match.mutate({ lineId: l.id })} disabled={match.isPending}
+                            className="cursor-pointer rounded-pill bg-[oklch(0.95_0.03_158)] px-2.5 py-[3px] text-[10.5px] font-semibold text-[oklch(0.42_0.07_158)]" title="Batalkan pencocokan">✓ Cocok · batalkan</button>
+                    ) : locked ? (
+                      <span className="text-[10.5px] text-muted-4">belum tercocok</span>
+                    ) : l.suggestion ? (
+                      <button onClick={() => match.mutate({ lineId: l.id, journalLineId: l.suggestion!.journalLineId })} disabled={match.isPending}
+                        className="cursor-pointer rounded-pill px-2.5 py-[3px] text-[10.5px] font-semibold text-white" style={{ background: 'oklch(0.58 0.12 45)' }}
+                        title={`Cocokkan ke jurnal ${l.suggestion.journalNo}`}>
+                        Cocokkan → {l.suggestion.journalNo}
+                      </button>
+                    ) : ['jasa_giro', 'biaya_adm', 'pajak_giro'].includes(l.lineType) ? (
+                      <button onClick={() => adjust.mutate(l.id)} disabled={adjust.isPending}
+                        className="cursor-pointer rounded-pill bg-primary px-2.5 py-[3px] text-[10.5px] font-semibold text-white disabled:opacity-50">Posting</button>
+                    ) : (
+                      <span className="text-[10.5px] text-muted-4">tak ada padanan</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {d.lines.length === 0 && <tr><td colSpan={6} className="px-5 py-6 text-muted-2">Belum ada mutasi rekening koran. Tambah manual atau impor CSV.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showEdit && <EditSessionModal data={d} month={month} onClose={() => setShowEdit(false)} onDone={() => { setShowEdit(false); qc.invalidateQueries({ queryKey: key }); }} onError={setErr} />}
+      {showAdd && <AddLineModal sessionId={s.id} onClose={() => setShowAdd(false)} onDone={() => { setShowAdd(false); qc.invalidateQueries({ queryKey: key }); }} onError={setErr} />}
+      {showImport && <ImportModal sessionId={s.id} onClose={() => setShowImport(false)} onDone={() => { setShowImport(false); qc.invalidateQueries({ queryKey: key }); }} onError={setErr} />}
+    </div>
+  );
+}
+
+function ErrBar({ msg }: { msg: string }) {
+  return <div className="mb-3 rounded-[9px] bg-danger-bg px-3 py-2 text-[12px] font-medium text-danger-deep">{msg}</div>;
+}
+
+function StartReconciliation({ bankCode, month, ledgerBalance, onDone, onError }: {
+  bankCode: string; month: string; ledgerBalance: number; onDone: () => void; onError: (m: string) => void;
+}) {
+  const [statementDate, setStatementDate] = useState(lastDayOfMonth(month));
+  const [closing, setClosing] = useState('');
+  const open = useMutation({
+    mutationFn: async () => api.post('/bank-reconciliations', {
+      bankAccountCode: bankCode, period: month, statementDate, closingBalance: Number(closing)
+    }),
+    onSuccess: onDone,
+    onError: (e) => onError((e as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Gagal membuka sesi')
+  });
+  return (
+    <div className="rounded-card border border-line bg-card p-6 shadow-card">
+      <div className="font-display text-[17px] text-ink-strong">Mulai Rekonsiliasi {month}</div>
+      <p className="mt-1 mb-4 max-w-[560px] text-[12px] text-muted-2">
+        Masukkan <b>saldo akhir dari lembar rekening koran</b> bank (angka riil dari bank), lalu sistem
+        membandingkannya dengan saldo buku besar untuk menemukan selisih. Saldo buku besar akun {bankCode} saat ini
+        <b className="font-mono"> {fmtFull(ledgerBalance)}</b>.
+      </p>
+      <div className="grid max-w-[520px] grid-cols-2 gap-3">
+        <div><label className="lbl">Tanggal cut-off koran</label><input type="date" className="fld" value={statementDate} onChange={(e) => setStatementDate(e.target.value)} /></div>
+        <div><label className="lbl">Saldo akhir rekening koran (Rp)</label><input type="number" className="fld font-mono" placeholder="mis. 83477000" value={closing} onChange={(e) => setClosing(e.target.value)} /></div>
+      </div>
+      <button onClick={() => closing !== '' && open.mutate()} disabled={closing === '' || open.isPending}
+        className="mt-4 cursor-pointer rounded-[9px] bg-primary px-4 py-2 text-[12.5px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">
+        {open.isPending ? 'Membuka…' : 'Buka Sesi Rekonsiliasi'}
+      </button>
+    </div>
+  );
+}
+
+function EditSessionModal({ data, month, onClose, onDone, onError }: {
+  data: ReconData; month: string; onClose: () => void; onDone: () => void; onError: (m: string) => void;
+}) {
+  const s = data.session!;
+  const [statementDate, setStatementDate] = useState(String(s.statementDate).slice(0, 10));
+  const [closing, setClosing] = useState(String(s.closingBalance));
+  const save = useMutation({
+    mutationFn: async () => api.post('/bank-reconciliations', {
+      bankAccountCode: data.bank.code, period: month, statementDate, closingBalance: Number(closing)
+    }),
+    onSuccess: onDone,
+    onError: (e) => onError((e as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Gagal menyimpan')
+  });
+  return (
+    <Modal title="Ubah Saldo & Tanggal Koran" onClose={onClose}>
+      <div className="grid grid-cols-2 gap-3">
+        <div><label className="lbl">Tanggal cut-off</label><input type="date" className="fld" value={statementDate} onChange={(e) => setStatementDate(e.target.value)} /></div>
+        <div><label className="lbl">Saldo akhir koran (Rp)</label><input type="number" className="fld font-mono" value={closing} onChange={(e) => setClosing(e.target.value)} /></div>
+      </div>
+      <ModalActions onClose={onClose} onSave={() => save.mutate()} saving={save.isPending} />
+    </Modal>
+  );
+}
+
+function AddLineModal({ sessionId, onClose, onDone, onError }: {
+  sessionId: string; onClose: () => void; onDone: () => void; onError: (m: string) => void;
+}) {
+  const [f, setF] = useState({ lineDate: '', description: '', amount: '', lineType: 'setoran' });
+  const add = useMutation({
+    mutationFn: async () => api.post(`/bank-reconciliations/${sessionId}/lines`, {
+      lineDate: f.lineDate, description: f.description, amount: Number(f.amount), lineType: f.lineType
+    }),
+    onSuccess: onDone,
+    onError: (e) => onError((e as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Gagal menambah')
+  });
+  const valid = f.lineDate && f.description.length >= 2 && f.amount !== '' && Number(f.amount) !== 0;
+  return (
+    <Modal title="Tambah Mutasi Rekening Koran" onClose={onClose}>
+      <div className="grid grid-cols-2 gap-3">
+        <div><label className="lbl">Tanggal</label><input type="date" className="fld" value={f.lineDate} onChange={(e) => setF({ ...f, lineDate: e.target.value })} /></div>
+        <div><label className="lbl">Tipe</label>
+          <select className="fld" value={f.lineType} onChange={(e) => setF({ ...f, lineType: e.target.value })}>
+            {Object.entries(LINE_TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </div>
+        <div className="col-span-2"><label className="lbl">Keterangan</label><input className="fld" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} placeholder="mis. Setoran tunai jamaah" /></div>
+        <div className="col-span-2"><label className="lbl">Nominal (Rp — negatif untuk uang keluar)</label><input type="number" className="fld font-mono" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} placeholder="mis. 500000 atau -185000" /></div>
+      </div>
+      <ModalActions onClose={onClose} onSave={() => valid && add.mutate()} saving={add.isPending} disabled={!valid} />
+    </Modal>
+  );
+}
+
+function ImportModal({ sessionId, onClose, onDone, onError }: {
+  sessionId: string; onClose: () => void; onDone: () => void; onError: (m: string) => void;
+}) {
+  const [text, setText] = useState('');
+  const parse = () => text.split('\n').map((ln) => ln.trim()).filter(Boolean).map((ln) => {
+    const [lineDate, description, amount, lineType, externalRef] = ln.split(',').map((x) => x.trim());
+    return { lineDate, description, amount: Number(amount), lineType: lineType || 'lain', externalRef: externalRef || null };
+  }).filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.lineDate) && r.description && !Number.isNaN(r.amount) && r.amount !== 0);
+  const rows = parse();
+  const imp = useMutation({
+    mutationFn: async () => api.post(`/bank-reconciliations/${sessionId}/import`, { rows }),
+    onSuccess: onDone,
+    onError: (e) => onError((e as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Gagal impor')
+  });
+  return (
+    <Modal title="Impor Mutasi (CSV)" onClose={onClose}>
+      <p className="mb-2 text-[11.5px] text-muted-2">Format per baris: <code className="font-mono text-[11px]">tanggal,keterangan,nominal[,tipe[,ref]]</code>. Contoh:</p>
+      <pre className="mb-2 overflow-x-auto rounded-[8px] bg-panel p-2 text-[10.5px] text-muted-2">2026-07-05,Setoran tunai,500000,setoran{'\n'}2026-07-31,Jasa giro,62000,jasa_giro,GIRO-07</pre>
+      <textarea className="fld h-40 w-full font-mono !text-[11px]" value={text} onChange={(e) => setText(e.target.value)} placeholder="Tempel baris CSV di sini…" />
+      <div className="mt-1 text-[11px] text-muted-3">{rows.length} baris valid terbaca.</div>
+      <ModalActions onClose={onClose} onSave={() => rows.length > 0 && imp.mutate()} saving={imp.isPending} disabled={rows.length === 0} saveLabel={`Impor ${rows.length} baris`} />
+    </Modal>
+  );
+}
+
+function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-[560px] max-w-full rounded-[15px] bg-card p-6 shadow-float">
+        <div className="mb-4 font-display text-[18px] text-ink-strong">{title}</div>
+        {children}
       </div>
     </div>
   );
 }
 
-function AdjRow({ label, amount, bold, topline }: { label: string; amount: number; bold?: boolean; topline?: boolean }) {
+function ModalActions({ onClose, onSave, saving, disabled, saveLabel }: {
+  onClose: () => void; onSave: () => void; saving: boolean; disabled?: boolean; saveLabel?: string;
+}) {
   return (
-    <div className={`flex justify-between py-1 text-[11.5px] ${topline ? 'mt-1 border-t border-line-2 pt-1.5' : ''}`}>
-      <span className={bold ? 'font-semibold' : 'text-muted'}>{label}</span>
-      <span className={`font-mono ${bold ? 'font-bold' : ''}`}>{fmtFull(amount)}</span>
+    <div className="mt-4 flex justify-end gap-2">
+      <button onClick={onClose} className="cursor-pointer rounded-[9px] border border-line-2 bg-white px-4 py-2 text-[12.5px] font-semibold text-muted">Batal</button>
+      <button onClick={onSave} disabled={saving || disabled}
+        className="cursor-pointer rounded-[9px] bg-primary px-4 py-2 text-[12.5px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">
+        {saving ? 'Menyimpan…' : (saveLabel ?? 'Simpan')}
+      </button>
     </div>
   );
 }
