@@ -8,6 +8,8 @@ Akun demo (password `safar123`): `admin@` · `keuangan@` · `ops@` · `marketing
 - **Pencarian global** — ketik ≥2 huruf untuk menemukan jamaah (nama/no. registrasi/HP), paket, atau invoice; klik hasil untuk langsung membukanya. Bagian yang tampil menyesuaikan peran Anda.
 - **Lonceng notifikasi** — menampilkan hal yang **perlu tindakan** (dokumen & pembayaran menunggu verifikasi); titik merah menyala hanya bila memang ada antrean.
 
+**Sesi login bertahan saat halaman dimuat ulang** — menekan refresh (F5) atau membuka Safar di beberapa tab **tidak lagi** memaksa Anda masuk kembali; sesi dipulihkan otomatis dan aman. Untuk mengakhiri sesi, gunakan tombol **Keluar** di kiri bawah.
+
 ---
 
 ## 1. Enam Peran dan Tanggung Jawabnya
