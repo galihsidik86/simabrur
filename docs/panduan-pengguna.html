@@ -225,7 +225,18 @@
     • <b>Mengakui pendapatan dua kali</b> untuk keberangkatan yang sama, atau <b>melebihi dana jamaah yang sudah diterima</b> (agar 2-1100 tak negatif)<br>
     • <b>Menghapus master</b> (kategori/hotel/maskapai/vendor/rekening) yang masih dipakai paket, tagihan, jurnal, atau pembayaran<br>
     • <b>Jurnal manual tidak balance</b> (Σdebit ≠ Σkredit) — ditolak, tidak tersimpan pincang<br>
+    • <b>Menyelesaikan rekonsiliasi</b> saat selisih belum terjelaskan / masih ada mutasi bank belum dibukukan — ditolak; periode yang sudah <b>Selesai</b> terkunci (pencocokan &amp; penyesuaian tak bisa diubah)<br>
     • <b>Membuka berkas dokumen tanpa login</b> — paspor/KTP hanya untuk staf berwenang
+  </div>
+
+  <!-- Rekonsiliasi bank: alur ringkas -->
+  <h2>Rekonsiliasi Bank — Alur Ringkas</h2>
+  <p class="sub">Tab <b>Rekonsiliasi</b> di <span class="mono">/keuangan/jurnal</span> — mencocokkan buku besar dengan lembar rekening koran bank.</p>
+  <div class="card" style="font-size:12px; line-height:1.9;">
+    <b>1.</b> Pilih rekening &amp; bulan → <b>Mulai Rekonsiliasi</b>: isi tanggal cut-off + <b>saldo akhir dari lembar koran</b> (angka riil bank).<br>
+    <b>2.</b> Sistem menampilkan <b>selisih nyata</b> (koran − buku) dan <b>selisih tak terjelaskan</b> — 0 berarti seluruh selisih sudah dijelaskan; ≠0 berarti ada yang perlu ditelusuri.<br>
+    <b>3.</b> <b>Cocokkan</b> mutasi koran ke baris jurnal (nominal harus sama); <b>Posting</b> item bank yang belum dibukukan (jasa giro → 4-9000, biaya adm → 7-2000) agar buku menyusul; setoran/penarikan dalam perjalanan cukup jadi item pendamai.<br>
+    <b>4.</b> <b>Selesaikan Rekonsiliasi</b> → periode terkunci, tercatat siapa &amp; kapan. Mutasi bisa dientri manual atau <b>impor CSV</b> (anti-duplikat via referensi).
   </div>
 
   <!-- ====== 5. Skenario ====== -->
