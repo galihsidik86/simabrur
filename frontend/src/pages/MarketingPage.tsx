@@ -6,6 +6,7 @@ import { fmtShort, fmtDate } from '../utils/format';
 
 interface AgentRow {
   id: string; name: string; code: string; referralCode: string; commissionPct: number; isActive: boolean;
+  phone: string | null; portalEnabled: boolean;
   leads: number; converted: number; conversionPct: number; commissionTotal: number; commissionPending: number;
 }
 interface Kpi { activeAgents: number; totalLeads: number; avgConversionPct: number; commissionOwed: number; agentsWithPending: number }
@@ -51,6 +52,19 @@ export function MarketingPage() {
     mutationFn: async (id: string) => api.post(`/commissions/${id}/reverse`),
     onMutate: () => setError(''), onSuccess: invalidate, onError: (e) => err(e, 'Gagal membatalkan')
   });
+  const [cred, setCred] = useState<{ agentName: string; phone: string; initialPassword: string } | null>(null);
+  const portalActivate = useMutation({
+    mutationFn: async ({ a, phone }: { a: AgentRow; phone?: string }) =>
+      ({ agent: a, data: (await api.post(`/agents/${a.id}/portal-activate`, phone ? { phone } : {})).data.data }),
+    onMutate: () => setError(''),
+    onSuccess: ({ agent, data }) => { setCred({ agentName: agent.name, phone: data.phone, initialPassword: data.initialPassword }); invalidate(); },
+    onError: (e) => err(e, 'Gagal mengaktifkan portal')
+  });
+  const activatePortal = (a: AgentRow) => {
+    let phone = a.phone ?? undefined;
+    if (!phone) { const p = window.prompt(`Nomor HP untuk agen ${a.name} (jadi username Portal Agen):`); if (!p) return; phone = p.trim(); }
+    portalActivate.mutate({ a, phone });
+  };
 
   const kpi = data?.kpi;
   const tiles = kpi
@@ -94,7 +108,8 @@ export function MarketingPage() {
               <th className="px-3 py-[11px] text-right font-semibold">Leads</th>
               <th className="px-3 py-[11px] text-right font-semibold">Konversi</th>
               <th className="px-3 py-[11px] text-right font-semibold">Jamaah</th>
-              <th className="px-5 py-[11px] text-right font-semibold">Komisi</th>
+              <th className="px-3 py-[11px] text-right font-semibold">Komisi</th>
+              <th className="px-5 py-[11px] font-semibold">Portal</th>
             </tr>
           </thead>
           <tbody>
@@ -107,7 +122,17 @@ export function MarketingPage() {
                 <td className="px-3 py-3 text-right font-mono">{a.leads}</td>
                 <td className="px-3 py-3 text-right font-mono">{a.conversionPct}%</td>
                 <td className="px-3 py-3 text-right font-mono">{a.converted}</td>
-                <td className="px-5 py-3 text-right font-mono font-semibold">{fmtShort(a.commissionTotal)}</td>
+                <td className="px-3 py-3 text-right font-mono font-semibold">{fmtShort(a.commissionTotal)}</td>
+                <td className="px-5 py-3">
+                  {canManage ? (
+                    <button onClick={() => activatePortal(a)} disabled={portalActivate.isPending}
+                      className="cursor-pointer rounded-[8px] border border-line-2 bg-white px-2.5 py-1 text-[10.5px] font-semibold text-muted disabled:opacity-50">
+                      {a.portalEnabled ? 'Reset Password' : 'Aktifkan Portal'}
+                    </button>
+                  ) : (
+                    <span className="text-[10.5px] text-muted-4">{a.portalEnabled ? 'aktif' : '—'}</span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -183,6 +208,22 @@ export function MarketingPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {cred && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setCred(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-[440px] max-w-full rounded-[15px] bg-card p-6 shadow-float">
+            <div className="font-display text-[18px] text-ink-strong">Kredensial Portal Agen</div>
+            <p className="mt-1 mb-4 text-[12px] text-muted-2">Serahkan ke <b>{cred.agentName}</b>. Password ini <b>hanya tampil sekali</b> — agen wajib menggantinya saat login pertama di <span className="font-mono">/portal-agen</span>.</p>
+            <div className="flex flex-col gap-2">
+              <div className="flex justify-between rounded-[9px] bg-panel px-3.5 py-2.5"><span className="text-[12px] text-muted">Nomor HP (username)</span><span className="font-mono text-[13px] font-semibold">{cred.phone}</span></div>
+              <div className="flex justify-between rounded-[9px] bg-panel px-3.5 py-2.5"><span className="text-[12px] text-muted">Password awal</span><span className="font-mono text-[15px] font-bold tracking-wider">{cred.initialPassword}</span></div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button onClick={() => setCred(null)} className="cursor-pointer rounded-[9px] bg-primary px-4 py-2 text-[12.5px] font-semibold text-white">Selesai</button>
+            </div>
+          </div>
         </div>
       )}
 

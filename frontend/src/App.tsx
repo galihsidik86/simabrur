@@ -22,6 +22,7 @@ import { CoaPage } from './pages/keuangan/CoaPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LaporanKeuanganPage } from './pages/LaporanKeuanganPage';
 import { PortalPage } from './pages/portal/PortalPage';
+import { AgenPortalPage } from './pages/portal/AgenPortalPage';
 import { AdminPage } from './pages/AdminPage';
 import { MarketingPage } from './pages/MarketingPage';
 
@@ -36,6 +37,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/daftar" element={<DaftarWizard />} />
             <Route path="/portal" element={<PortalPage />} />
+            <Route path="/portal-agen" element={<AgenPortalPage />} />
             <Route element={<RequireAuth />}>
               {/* Dokumen A4 printable — di luar AppShell */}
               <Route path="/dokumen/invoice/:id" element={<InvoiceDoc />} />
