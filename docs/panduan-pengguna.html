@@ -239,6 +239,14 @@
     <b>4.</b> <b>Selesaikan Rekonsiliasi</b> → periode terkunci, tercatat siapa &amp; kapan. Mutasi bisa dientri manual atau <b>impor CSV</b> (anti-duplikat via referensi).
   </div>
 
+  <p class="sub" style="margin-top:14px;">Status rekonsiliasi — <b>tiap rekening bank punya status sendiri per bulan</b>:</p>
+  <div class="card" style="font-size:12px; line-height:1.9;">
+    • <b>Belum dimulai</b> — belum ada sesi; muncul form <i>Mulai Rekonsiliasi</i>.<br>
+    • <b>Draft</b> — sedang dikerjakan; saldo koran, mutasi, dan pencocokan masih bisa diubah/ditambah. Badge <span class="chip" style="background:oklch(0.96 0.04 78); color:oklch(0.5 0.1 78)">● Draft</span>.<br>
+    • <b>Selesai &amp; terkunci</b> — sudah difinalisasi; pencocokan &amp; penyesuaian <b>tidak bisa diubah lagi</b>, tercatat pereview + tanggal + sisa selisih timing. Badge <span class="chip" style="background:oklch(0.95 0.03 158); color:oklch(0.42 0.07 158)">● Selesai &amp; terkunci</span>.<br>
+    <span style="color:var(--mut2)">Rekening tanpa mutasi bulan itu langsung seimbang (selisih 0) dan bisa langsung diselesaikan. Rekening ber-aktivitas perlu mutasi koran dimasukkan &amp; dicocokkan dulu sebelum bisa diselesaikan.</span>
+  </div>
+
   <!-- ====== 5. Skenario ====== -->
   <h2>5 · Skenario Cepat per Peran</h2>
   <div class="scen">

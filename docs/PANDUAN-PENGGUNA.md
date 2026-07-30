@@ -118,6 +118,16 @@ Sistem menolak aksi berikut demi menjaga data tetap benar — bila muncul pesan 
 
 Setiap perubahan data (termasuk koreksi data jamaah) tercatat di **audit log** (`/admin`): siapa, aksi apa, nilai lama & baru.
 
+### Status rekonsiliasi bank
+
+**Tiap rekening bank punya status rekonsiliasi sendiri per bulan** (di tab Rekonsiliasi, `/keuangan/jurnal`):
+
+- **Belum dimulai** — belum ada sesi; muncul form *Mulai Rekonsiliasi* (isi tanggal cut-off + saldo akhir koran).
+- **● Draft** — sedang dikerjakan; saldo koran, mutasi, dan pencocokan masih bisa diubah/ditambah (entri manual atau impor CSV).
+- **● Selesai & terkunci** — sudah difinalisasi; pencocokan & penyesuaian **tidak bisa diubah lagi**, tercatat pereview + tanggal + sisa selisih *timing*.
+
+Rekening **tanpa mutasi** pada bulan itu langsung seimbang (selisih 0) dan bisa langsung diselesaikan. Rekening **ber-aktivitas** perlu mutasi koran dimasukkan & dicocokkan (dan item bank-only diposting) sampai **selisih tak terjelaskan = 0** sebelum bisa diselesaikan.
+
 ---
 
 ## 5. Skenario Cepat per Peran
