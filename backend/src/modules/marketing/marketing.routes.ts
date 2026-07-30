@@ -5,7 +5,9 @@ import { ok, errors } from '../../utils/http.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireRoles } from '../../middleware/rbac.js';
 import { audit } from '../../middleware/audit.js';
+import bcrypt from 'bcryptjs';
 import { postJournal, commissionLines, reverseJournal } from '../accounting/journal.engine.js';
+import { generateInitialPassword } from '../agent-portal/agent-portal.service.js';
 
 const MKT = ['marketing', 'pimpinan', 'keuangan'] as const;
 
@@ -44,6 +46,7 @@ agentsRoutes.get('/', requireAuth, requireRoles(...MKT), async (_req, res) => {
     return {
       id: a.id, name: a.name, code: a.code, referralCode: a.referral_code,
       commissionPct: Number(a.commission_pct), isActive: a.is_active,
+      phone: a.phone ?? null, portalEnabled: !!a.portal_enabled,
       leads: totalLeads, converted,
       conversionPct: totalLeads ? Math.round((converted / totalLeads) * 100) : 0,
       commissionTotal, commissionPending
@@ -87,6 +90,32 @@ agentsRoutes.post('/', requireAuth, requireRoles('marketing'), async (req, res) 
     .returning('*');
   await audit(req, { action: 'agents.create', entity: 'agents', entityId: agent.id, newValues: input });
   ok(res, agent, undefined, 201);
+});
+
+/** Aktifkan / reset kredensial Portal Agen — terbitkan password awal (ditampilkan sekali). */
+agentsRoutes.post('/:id/portal-activate', requireAuth, requireRoles('marketing'), async (req, res) => {
+  const { phone: bodyPhone } = z.object({ phone: z.string().min(6).max(30).nullish() }).parse(req.body ?? {});
+  const agent = await db('agents').where({ id: String(req.params.id) }).first();
+  if (!agent) throw errors.notFound('Agen tidak ditemukan');
+  // HP = username portal; boleh diisi saat aktivasi bila agen belum punya
+  const phone = agent.phone ?? bodyPhone;
+  if (!phone) throw errors.badRequest('Agen belum punya nomor HP — isi nomor HP untuk mengaktifkan portal.');
+  const dupe = await db('agents')
+    .whereRaw('lower(phone) = ?', [String(phone).toLowerCase()])
+    .andWhere('portal_enabled', true)
+    .andWhereNot('id', agent.id)
+    .first();
+  if (dupe) throw errors.conflict('Nomor HP sudah dipakai agen lain yang portalnya aktif');
+  if (!agent.phone) await db('agents').where({ id: agent.id }).update({ phone });
+
+  const initialPassword = generateInitialPassword();
+  const passwordHash = await bcrypt.hash(initialPassword, 10);
+  await db('agents').where({ id: agent.id }).update({
+    password_hash: passwordHash, must_change_password: true, portal_enabled: true, updated_at: db.fn.now()
+  });
+  await audit(req, { action: 'agents.portal_activate', entity: 'agents', entityId: agent.id });
+  // Password plaintext HANYA ditampilkan sekali ke staf untuk diserahkan ke agen
+  ok(res, { phone, initialPassword });
 });
 
 /* ===== Leads ===== */

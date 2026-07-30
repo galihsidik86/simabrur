@@ -30,10 +30,12 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
   } catch {
     throw errors.unauthorized('Token tidak valid atau kedaluwarsa');
   }
-  // Token portal jamaah ditandatangani kunci yang sama — TOLAK di guard staf.
-  // Tanpa ini token portal lolos requireAuth dan (endpoint tanpa requireRoles)
-  // bisa membaca invoice/kwitansi jamaah lain via IDOR.
-  if (payload.kind === 'portal') throw errors.forbidden('Token portal tidak berlaku untuk endpoint staf');
+  // Token portal (jamaah) & portal agen ditandatangani kunci yang sama — TOLAK di
+  // guard staf. Tanpa ini token portal lolos requireAuth dan (endpoint tanpa
+  // requireRoles) bisa membaca data staf/jamaah lain via IDOR.
+  if (payload.kind === 'portal' || payload.kind === 'agent') {
+    throw errors.forbidden('Token portal tidak berlaku untuk endpoint staf');
+  }
   req.user = { id: payload.id, role: payload.role, branchId: payload.branchId, name: payload.name, email: payload.email };
   next();
 }

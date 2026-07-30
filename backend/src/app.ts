@@ -18,6 +18,7 @@ import {
 } from './modules/accounting/accounting.routes.js';
 import { financeReportsRoutes } from './modules/reports/finance.routes.js';
 import { portalRoutes } from './modules/portal/portal.routes.js';
+import { agentPortalRoutes } from './modules/agent-portal/agent-portal.routes.js';
 import { auditLogsRoutes, rolesRoutes, usersRoutes } from './modules/admin/admin.routes.js';
 import { agentsRoutes, commissionsRoutes, leadsRoutes } from './modules/marketing/marketing.routes.js';
 import { mabrurRoutes } from './modules/mabrur/mabrur.routes.js';
@@ -71,6 +72,7 @@ export function createApp() {
     });
     app.use('/v1/auth/login', authLimiter);
     app.use('/v1/portal/login', authLimiter);
+    app.use('/v1/portal-agen/login', authLimiter);
     app.use(
       '/v1/registrations',
       rateLimit({
@@ -131,6 +133,7 @@ export function createApp() {
   app.use('/v1/reports', financeReportsRoutes);
   app.use('/v1/reports', reportsRoutes);
   app.use('/v1/portal', portalRoutes);
+  app.use('/v1/portal-agen', agentPortalRoutes);
   app.use('/v1/audit-logs', auditLogsRoutes);
   app.use('/v1/users', usersRoutes);
   app.use('/v1/roles', rolesRoutes);
