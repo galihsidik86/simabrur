@@ -94,6 +94,8 @@ describe('POST /v1/commissions/:id/approve', () => {
   it('approve → jurnal F (Dr 6-2000 · Cr 2-1400) + status approved; approve ulang 409', async () => {
     const keu = await token('keuangan@safar.co.id');
     const pending = await db('commissions').where({ status: 'pending' }).first();
+    // Gate: hanya registrasi aktif yang komisinya bisa disetujui
+    await db('registrations').where({ id: pending.registration_id }).update({ status: 'active' });
     const before2400 = await db('journal_lines as l')
       .join('accounts as a', 'a.id', 'l.account_id')
       .where('a.code', '2-1400')
@@ -129,10 +131,98 @@ describe('POST /v1/commissions/:id/approve', () => {
     expect(again.status).toBe(409);
   });
 
-  it('RBAC: operasional tidak boleh approve (403)', async () => {
+  it('RBAC: operasional & marketing tidak boleh approve (403) — pemisahan tugas', async () => {
     const ops = await token('ops@safar.co.id');
+    const mkt = await token('marketing@safar.co.id');
     const c = await db('commissions').first();
     expect((await request(app).post(`/v1/commissions/${c.id}/approve`).set('Authorization', `Bearer ${ops}`)).status).toBe(403);
+    expect((await request(app).post(`/v1/commissions/${c.id}/approve`).set('Authorization', `Bearer ${mkt}`)).status).toBe(403);
+  });
+
+  it('gate: komisi registrasi belum aktif tak bisa disetujui (400)', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const pending = await db('commissions as c').join('registrations as r', 'r.id', 'c.registration_id')
+      .where('c.status', 'pending').andWhere('r.status', 'pending_documents').select('c.id').first();
+    if (!pending) return; // tak ada kandidat → lewati
+    const res = await request(app).post(`/v1/commissions/${pending.id}/approve`).set('Authorization', `Bearer ${keu}`);
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('belum aktif');
+  });
+});
+
+describe('siklus komisi: bayar, batalkan (storno), atribusi, komisi manual', () => {
+  // Buat komisi approved segar via jalur manual (agentId) — mandiri dari jumlah komisi seed
+  async function approvedCommission(keu: string) {
+    const agent = await db('agents').where({ code: 'BRKH-07' }).first();
+    const res = await request(app).post('/v1/transactions/commission').set('Authorization', `Bearer ${keu}`)
+      .send({ agentId: agent.id, base: 5_000_000, pct: 3 });
+    return res.body.data.commissionId as string;
+  }
+
+  it('bayar komisi approved → Dr 2-1400 · Cr Bank, status paid', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const id = await approvedCommission(keu);
+    const res = await request(app).post(`/v1/commissions/${id}/pay`).set('Authorization', `Bearer ${keu}`).send({ bankAccountCode: '1-1200' });
+    expect(res.status).toBe(200);
+    const c = await db('commissions').where({ id }).first();
+    expect(c.status).toBe('paid');
+    const lines = await db('journal_lines as l').join('accounts as a', 'a.id', 'l.account_id')
+      .select('a.code', 'l.debit', 'l.credit').where('l.journal_id', c.payment_journal_id);
+    expect(Number(lines.find((l) => l.code === '2-1400')?.debit)).toBe(Number(c.amount));
+    expect(Number(lines.find((l) => l.code === '1-1200')?.credit)).toBe(Number(c.amount));
+  });
+
+  it('batalkan (storno) komisi approved → jurnal balik, kembali pending; komisi paid tak bisa dibatalkan (409)', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const id = await approvedCommission(keu);
+    const rev = await request(app).post(`/v1/commissions/${id}/reverse`).set('Authorization', `Bearer ${keu}`);
+    expect(rev.status).toBe(200);
+    const c = await db('commissions').where({ id }).first();
+    expect(c.status).toBe('pending');
+    expect(c.reversed_at).toBeTruthy();
+    // jurnal storno membalik: Dr 2-1400 · Cr 6-2000
+    const lines = await db('journal_lines as l').join('accounts as a', 'a.id', 'l.account_id')
+      .select('a.code', 'l.debit', 'l.credit').where('l.journal_id', c.reversal_journal_id);
+    expect(Number(lines.find((l) => l.code === '2-1400')?.debit)).toBe(Number(c.amount));
+    expect(Number(lines.find((l) => l.code === '6-2000')?.credit)).toBe(Number(c.amount));
+
+    // paid → reverse ditolak
+    const id2 = await approvedCommission(keu);
+    await request(app).post(`/v1/commissions/${id2}/pay`).set('Authorization', `Bearer ${keu}`).send({ bankAccountCode: '1-1200' });
+    expect((await request(app).post(`/v1/commissions/${id2}/reverse`).set('Authorization', `Bearer ${keu}`)).status).toBe(409);
+  });
+
+  it('komisi manual via agentId (FK) → baris commissions terlacak + approved; agentName bebas ditolak', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const agent = await db('agents').where({ code: 'BRKH-07' }).first();
+    const ok = await request(app).post('/v1/transactions/commission').set('Authorization', `Bearer ${keu}`)
+      .send({ agentId: agent.id, base: 10_000_000, pct: 3 });
+    expect(ok.status).toBe(201);
+    const c = await db('commissions').where({ id: ok.body.data.commissionId }).first();
+    expect(c.status).toBe('approved');
+    expect(c.registration_id).toBeNull();
+    expect(Number(c.amount)).toBe(300_000);
+
+    const bad = await request(app).post('/v1/transactions/commission').set('Authorization', `Bearer ${keu}`)
+      .send({ agentName: 'Bebas', base: 1_000_000, pct: 3 });
+    expect(bad.status).toBe(400);
+  });
+
+  it('atribusi ulang: tetapkan agen pada registrasi yang belum bersumber agen', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const agent = await db('agents').where({ code: 'AMNH-12' }).first();
+    // registrasi tanpa komisi (source web)
+    const reg = await db('registrations as r')
+      .leftJoin('commissions as c', 'c.registration_id', 'r.id')
+      .whereNull('c.id').select('r.id').first();
+    if (!reg) return;
+    const res = await request(app).post('/v1/commissions/attribute').set('Authorization', `Bearer ${keu}`)
+      .send({ registrationId: reg.id, agentId: agent.id });
+    expect(res.status).toBe(200);
+    const c = await db('commissions').where({ registration_id: reg.id }).first();
+    expect(c.agent_id).toBe(agent.id);
+    const r = await db('registrations').where({ id: reg.id }).first();
+    expect(r.agent_id).toBe(agent.id);
   });
 });
 

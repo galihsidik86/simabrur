@@ -44,6 +44,13 @@ export const jamaahController = {
     const q = passportCheckQuery.parse(req.query);
     ok(res, await jamaahService.passportCheck(q.departureId, q.expiry));
   },
+  /** Validasi kode referral agen (publik — wizard step bayar). */
+  async agentCheck(req: Request, res: Response) {
+    const code = typeof req.query.code === 'string' ? req.query.code.trim().toUpperCase() : '';
+    if (!code) return ok(res, { found: false });
+    const agent = await db('agents').whereRaw('upper(referral_code) = ?', [code]).andWhere('is_active', true).first();
+    ok(res, agent ? { found: true, agentName: agent.name, code: agent.code } : { found: false });
+  },
 
   async uploadDocument(req: Request, res: Response) {
     const docType = String(req.body.docType ?? '');

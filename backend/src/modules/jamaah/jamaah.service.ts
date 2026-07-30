@@ -191,11 +191,18 @@ export const jamaahService = {
       const upcharge =
         input.roomType === 'triple' ? Number(dep.triple_upcharge) : input.roomType === 'double' ? Number(dep.double_upcharge) : 0;
 
-      // Fase 7: sumber "agent:<kode-referral>" → lead terkonversi + komisi pending
+      // Fase 7: sumber "agent:<kode-referral>" → atribusi agen + lead terkonversi + komisi pending.
+      // Kode di-trim (klien API/portal lain tak selalu trim); hanya agen AKTIF yang menerima
+      // komisi; bila kode disebut tapi agen tak ditemukan → dicatat audit (tak hilang senyap).
       const referral = /^agent:(.+)$/i.exec(input.source ?? '');
       if (referral) {
-        const agent = await trx('agents').whereRaw('upper(referral_code) = ?', [referral[1].toUpperCase()]).first();
+        const code = referral[1].trim().toUpperCase();
+        const agent = code
+          ? await trx('agents').whereRaw('upper(referral_code) = ?', [code]).andWhere('is_active', true).first()
+          : null;
         if (agent) {
+          // Atribusi ternormalisasi (sumber kebenaran) — bukan lagi hanya string source
+          await trx('registrations').where({ id: registration.id }).update({ agent_id: agent.id });
           await trx('leads').insert({
             agent_id: agent.id,
             jamaah_id: jamaahRow.id,
@@ -204,7 +211,8 @@ export const jamaahService = {
             source: 'referral',
             status: 'converted'
           });
-          const base = Number(dep.base_price) + upcharge;
+          // M6: dasar komisi = total invoice aktual (satu sumber kebenaran), bukan hitung ulang harga paket
+          const base = Number(invoice.total_amount);
           await trx('commissions').insert({
             agent_id: agent.id,
             registration_id: registration.id,
@@ -212,6 +220,14 @@ export const jamaahService = {
             pct: agent.commission_pct,
             amount: Math.round((base * Number(agent.commission_pct)) / 100)
           });
+        } else {
+          // Kode referral disebut tapi tak cocok agen aktif → jejak audit agar bisa ditindaklanjuti
+          await audit(req, {
+            action: 'registrations.referral_unmatched',
+            entity: 'registrations',
+            entityId: registration.id,
+            newValues: { referralCode: code }
+          }, trx);
         }
       }
 

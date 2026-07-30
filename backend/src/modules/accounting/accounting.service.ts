@@ -419,22 +419,41 @@ export const accountingService = {
     });
   },
 
-  /** Pengakuan Komisi agen (base × pct). */
+  /** Pengakuan Komisi agen manual (ad-hoc, tanpa registrasi) — dibukukan sebagai baris
+   *  `commissions` terlacak (bukan jurnal lepas), tertaut agen (FK), langsung approved. */
   async transactionCommission(req: Request, input: {
-    agentName: string; costCenterId?: string | null; base: number; pct: number; date?: string | null;
+    agentId: string; costCenterId?: string | null; base: number; pct: number; date?: string | null;
   }) {
     return db.transaction(async (trx) => {
+      const agent = await trx('agents').where({ id: input.agentId }).first();
+      if (!agent) throw errors.badRequest('Agen tidak ditemukan');
+      if (!agent.is_active) throw errors.badRequest('Agen tidak aktif');
       const amount = Math.round((input.base * input.pct) / 100);
       const journal = await postJournal(trx, {
         date: input.date ?? today(),
-        description: `Komisi agen — ${input.agentName} (${input.pct}% × Rp ${input.base.toLocaleString('id-ID')})`,
+        description: `Komisi agen — ${agent.name} (${input.pct}% × Rp ${input.base.toLocaleString('id-ID')})`,
         source: 'commission',
+        refType: 'commissions',
         costCenterId: input.costCenterId ?? null,
         createdBy: req.user?.id ?? null,
         lines: commissionLines(amount)
       });
-      await audit(req, { action: 'transactions.commission', entity: 'journals', entityId: journal.id, newValues: input }, trx);
-      return journal;
+      const [commission] = await trx('commissions')
+        .insert({
+          agent_id: agent.id,
+          registration_id: null,
+          base_amount: input.base,
+          pct: input.pct,
+          amount,
+          status: 'approved',
+          journal_id: journal.id,
+          approved_by: req.user?.id ?? null,
+          approved_at: trx.fn.now()
+        })
+        .returning('*');
+      await trx('journals').where({ id: journal.id }).update({ ref_id: commission.id });
+      await audit(req, { action: 'transactions.commission', entity: 'commissions', entityId: commission.id, newValues: { agentId: agent.id, amount } }, trx);
+      return { ...journal, commissionId: commission.id };
     });
   },
 

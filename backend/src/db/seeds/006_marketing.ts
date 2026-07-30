@@ -66,7 +66,7 @@ export async function seed(knex: Knex): Promise<void> {
     if (!reg) continue;
     const agent = agentRows[code];
 
-    await knex('registrations').where({ id: reg.id }).update({ source: `agent:${code}` });
+    await knex('registrations').where({ id: reg.id }).update({ source: `agent:${code}`, agent_id: agent.id });
     await knex('leads').insert({
       agent_id: agent.id, jamaah_id: reg.jamaah_id, name: reg.full_name, phone: reg.phone,
       source: 'referral', status: 'converted'

@@ -234,13 +234,16 @@ describe('POST /v1/transactions/revenue-recognition (PSAK 72)', () => {
 });
 
 describe('POST /v1/transactions/commission', () => {
-  it('3% × 141 jt = 4,23 jt (kalkulasi mockup Input Transaksi)', async () => {
+  it('3% × 141 jt = 4,23 jt via agentId (kalkulasi mockup Input Transaksi) → baris commissions terlacak', async () => {
     const keu = await token('keuangan@safar.co.id');
+    const agent = await db('agents').where({ code: 'BRKH-07' }).first();
     const res = await request(app).post('/v1/transactions/commission').set('Authorization', `Bearer ${keu}`).send({
-      agentName: 'Barokah Tour', base: 141_000_000, pct: 3
+      agentId: agent.id, base: 141_000_000, pct: 3
     });
     expect(res.status).toBe(201);
     expect(res.body.data.totalDebit).toBe(4_230_000);
+    const c = await db('commissions').where({ id: res.body.data.commissionId }).first();
+    expect(c.status).toBe('approved');
   });
 });
 

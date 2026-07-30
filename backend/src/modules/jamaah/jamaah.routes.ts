@@ -66,6 +66,7 @@ jamaahRoutes.post('/:id/documents', upload.single('file'), jamaahController.uplo
 export const registrationsRoutes = Router();
 registrationsRoutes.post('/', jamaahController.register); // publik (wizard)
 registrationsRoutes.get('/passport-check', jamaahController.passportCheck); // publik (wizard step 3)
+registrationsRoutes.get('/agent-check', jamaahController.agentCheck); // publik (wizard step bayar)
 
 export const documentsRoutes = Router();
 documentsRoutes.patch('/:id/verify', requireAuth, requireRoles('operasional'), jamaahController.verifyDocument);

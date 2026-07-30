@@ -104,6 +104,38 @@ export async function postJournal(trx: Knex, input: JournalInput) {
   return { ...journal, totalDebit, totalCredit, lines: norm };
 }
 
+/** Storno — balik sebuah jurnal (tukar debit↔kredit). Dipakai mis. pembatalan komisi. */
+export async function reverseJournal(
+  trx: Knex,
+  sourceJournalId: string,
+  opts: { date: string; description: string; createdBy?: string | null }
+) {
+  const src = await trx('journals').where({ id: sourceJournalId }).first();
+  if (!src) throw errors.badRequest('Jurnal yang akan dibalik tidak ditemukan');
+  const srcLines = await trx('journal_lines as l')
+    .join('accounts as a', 'a.id', 'l.account_id')
+    .select('a.code', 'l.debit', 'l.credit', 'l.amount_foreign')
+    .where('l.journal_id', sourceJournalId);
+  const lines: JournalLineInput[] = srcLines.map((l) => ({
+    accountCode: l.code,
+    debit: Number(l.credit),
+    credit: Number(l.debit),
+    amountForeign: l.amount_foreign != null ? Number(l.amount_foreign) : null
+  }));
+  return postJournal(trx, {
+    date: opts.date,
+    description: opts.description,
+    source: src.source,
+    refType: src.ref_type ?? undefined,
+    refId: src.ref_id ?? undefined,
+    costCenterId: src.cost_center_id ?? null,
+    currency: src.currency,
+    exchangeRate: Number(src.exchange_rate),
+    createdBy: opts.createdBy ?? null,
+    lines
+  });
+}
+
 /* ===== Template ayat jurnal kunci (Chart of Accounts.dc.html, alur A–F) ===== */
 
 /** A/B — Penerimaan DP/pelunasan jamaah: Dr Bank/Kas · Cr 2-1100 Uang Muka Jamaah. */

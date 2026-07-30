@@ -45,10 +45,10 @@ export const revenueTxSchema = z.object({
 });
 
 export const commissionTxSchema = z.object({
-  agentName: z.string().min(2),
+  agentId: z.string().uuid(),
   costCenterId: z.string().uuid().nullish(),
   base: z.number().positive(),
-  pct: z.number().positive().max(100),
+  pct: z.number().positive().max(30),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish()
 });
 
