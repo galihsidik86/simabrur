@@ -109,7 +109,7 @@
     <thead><tr><th style="width:120px">Peran</th><th style="width:150px">Siapa</th><th>Tanggung jawab utama</th></tr></thead>
     <tbody>
       <tr><td><span class="chip c-adm">Admin</span></td><td>Pengelola sistem</td><td>Semua akses + kelola pengguna, role, audit log</td></tr>
-      <tr><td><span class="chip c-mkt">Marketing</span></td><td>Tim penjualan</td><td>Paket &amp; jadwal, agen &amp; referral, leads, persetujuan komisi</td></tr>
+      <tr><td><span class="chip c-mkt">Marketing</span></td><td>Tim penjualan</td><td>Paket &amp; jadwal, agen &amp; referral, leads (komisi disetujui Keuangan)</td></tr>
       <tr><td><span class="chip c-ops">Operasional</span></td><td>Tim ops/dokumen</td><td>Verifikasi dokumen, manifest, visa, tiket, rombongan, checklist</td></tr>
       <tr><td><span class="chip c-keu">Keuangan</span></td><td>Kasir &amp; akuntan</td><td>Pembayaran, kwitansi, 4 transaksi akuntansi, jurnal, rekonsiliasi, laporan keuangan</td></tr>
       <tr><td><span class="chip c-pim">Pimpinan</span></td><td>Direksi</td><td><b>Hanya melihat</b>: dashboard &amp; seluruh laporan</td></tr>
@@ -159,9 +159,9 @@
     </div></div>
 
     <div class="fstep"><div class="fnum"><div class="fdot">6</div><div class="fline"></div></div><div class="fbody">
-      <b class="t">Persetujuan komisi agen</b> <span class="chip c-mkt">Marketing</span> <span class="chip c-keu">Keuangan</span>
-      <div class="fmeta"><span class="mono">/marketing</span> → panel "Komisi Menunggu Persetujuan" → Setujui &amp; Posting.</div>
-      <div class="fauto">⚙ Otomatis: jurnal <span class="mono">Dr 6-2000 Beban Komisi · Cr 2-1400 Hutang Komisi</span> · KPI "Komisi Terhutang" = saldo riil akun 2-1400.</div>
+      <b class="t">Siklus komisi agen</b> <span class="chip c-keu">Keuangan</span>
+      <div class="fmeta"><span class="mono">/marketing</span> → <b>Setujui</b> (hanya bila registrasi aktif &amp; agen aktif) → <b>Bayar</b> → opsional <b>Batalkan</b> (storno). Pemisahan tugas: Marketing membuat agen, Keuangan menyetujui/membayar.</div>
+      <div class="fauto">⚙ Otomatis: setujui <span class="mono">Dr 6-2000 · Cr 2-1400</span> · bayar <span class="mono">Dr 2-1400 · Cr Bank</span> · batalkan = jurnal balik. KPI "Komisi Terhutang" = saldo riil 2-1400. Kode referral divalidasi live di wizard.</div>
     </div></div>
 
     <div class="fstep"><div class="fnum"><div class="fdot">7</div></div><div class="fbody">
@@ -194,7 +194,7 @@
       <tr><td>Master data keuangan: vendor, rekening bank <span class="mono">/keuangan-master</span></td><td align="center">—</td><td align="center">—</td><td align="center" class="mark">✅</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
       <tr><td>Laporan keuangan (LR/Neraca/per Paket)</td><td align="center" class="see">👁 per paket</td><td align="center">—</td><td align="center" class="mark">✅ + ekspor</td><td align="center" class="see">👁 + ekspor</td><td align="center">—</td></tr>
       <tr><td>Agen &amp; leads <span class="mono">/marketing</span></td><td align="center" class="mark">✅</td><td align="center">—</td><td align="center" class="see">👁</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
-      <tr><td>Persetujuan komisi</td><td align="center" class="mark">✅</td><td align="center">—</td><td align="center" class="mark">✅</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
+      <tr><td>Komisi: setujui / bayar / batalkan</td><td align="center" class="see">👁</td><td align="center">—</td><td align="center" class="mark">✅</td><td align="center" class="see">👁</td><td align="center">—</td></tr>
       <tr><td>Pengguna, role, audit log <span class="mono">/admin</span></td><td align="center">—</td><td align="center">—</td><td align="center">—</td><td align="center">—</td><td align="center">—</td></tr>
       <tr><td>Portal jamaah <span class="mono">/portal</span></td><td align="center">—</td><td align="center">—</td><td align="center">—</td><td align="center">—</td><td align="center" class="mark">✅</td></tr>
     </tbody>
@@ -211,7 +211,8 @@
       <tr><td class="mono">C</td><td>Pembayaran biaya / DP vendor (opsional valas)</td><td><span class="chip c-keu">Keuangan</span></td><td class="mono jr">Dr 1-1400 / 5-xxxx (IDR × kurs) · Cr Bank — selisih kurs → 7-1000</td></tr>
       <tr><td class="mono">D</td><td>Pengakuan pendapatan saat keberangkatan</td><td><span class="chip c-keu">Keuangan</span></td><td class="mono jr">Dr 2-1100 · Cr 4-1000 / 4-2000</td></tr>
       <tr><td class="mono">E</td><td>Pengakuan HPP saat keberangkatan</td><td><span class="chip c-keu">Keuangan</span></td><td class="mono jr">Dr 5-1000…5-7000 per komponen · Cr 1-1400</td></tr>
-      <tr><td class="mono">F</td><td>Persetujuan komisi agen</td><td><span class="chip c-mkt">Mkt</span> <span class="chip c-keu">Keu</span></td><td class="mono jr">Dr 6-2000 · Cr 2-1400</td></tr>
+      <tr><td class="mono">F</td><td>Persetujuan komisi agen</td><td><span class="chip c-keu">Keu</span></td><td class="mono jr">Dr 6-2000 · Cr 2-1400</td></tr>
+      <tr><td class="mono">F2</td><td>Pembayaran komisi agen</td><td><span class="chip c-keu">Keu</span></td><td class="mono jr">Dr 2-1400 · Cr Bank/Kas</td></tr>
       <tr><td class="mono">—</td><td>Jurnal manual (adm bank, penyesuaian)</td><td><span class="chip c-keu">Keuangan</span></td><td class="mono jr">Bebas — wajib balance</td></tr>
     </tbody>
   </table></div>

@@ -17,7 +17,7 @@ Akun demo (password `safar123`): `admin@` · `keuangan@` · `ops@` · `marketing
 | Peran | Siapa | Tanggung jawab utama |
 |---|---|---|
 | **Admin** | Pengelola sistem | Semua akses + kelola pengguna, role, audit log |
-| **Marketing** | Tim penjualan | Paket & jadwal, agen & referral, leads, persetujuan komisi |
+| **Marketing** | Tim penjualan | Paket & jadwal, agen & referral, leads (komisi diusulkan, disetujui Keuangan) |
 | **Operasional** | Tim ops/dokumen | Verifikasi dokumen jamaah, manifest, visa, tiket, rombongan, checklist |
 | **Keuangan** | Kasir & akuntan | Pembayaran, kwitansi, 4 transaksi akuntansi, jurnal, rekonsiliasi, laporan keuangan |
 | **Pimpinan** | Direksi | **Hanya melihat**: dashboard & seluruh laporan |
@@ -49,13 +49,13 @@ flowchart TD
 | # | Transaksi | Siapa | Di halaman | Yang terjadi otomatis |
 |---|---|---|---|---|
 | 0 | **Siapkan master data** (sekali di awal / saat ada mitra baru): kategori paket, hotel, maskapai · vendor, rekening bank | **Marketing** (paket) · **Keuangan** (keuangan) | `/paket/master` · `/keuangan-master` | Kategori/hotel/maskapai langsung muncul di form Tambah Paket & wizard. Pengaman: master yang **masih dipakai** paket/tagihan/jurnal/pembayaran tidak bisa dihapus; kode akun rekening wajib sudah ada di COA kelas 1; **saldo rekening tidak bisa diedit** — hanya bergerak lewat jurnal |
-| 1 | **Pendaftaran jamaah** (pilih paket → data diri → dokumen → kamar → skema bayar → konfirmasi akad wakalah) | **Jamaah** sendiri, atau Marketing mendampingi | `/daftar` (tanpa login) | Nomor registrasi `UMR/HAJ-tahun-seri`; kuota kursi berkurang; **invoice + jadwal termin** terbit (cicilan = DP 5 jt + 5 termin); bila diisi **kode agen** → lead terkonversi + komisi *pending*. Validasi otomatis: paspor ≥ 7 bulan setelah keberangkatan, perempuan < 45 th wajib mahram, kuota real-time |
+| 1 | **Pendaftaran jamaah** (pilih paket → data diri → dokumen → kamar → skema bayar → konfirmasi akad wakalah) | **Jamaah** sendiri, atau Marketing mendampingi | `/daftar` (tanpa login) | Nomor registrasi `UMR/HAJ-tahun-seri`; kuota kursi berkurang; **invoice + jadwal termin** terbit (cicilan = DP 5 jt + 5 termin); bila diisi **kode agen** → wizard **memvalidasi kode secara langsung** (menampilkan "✓ dikreditkan ke agen X" atau "kode tidak dikenal"); bila cocok agen aktif → lead terkonversi + komisi *pending* (dasar = total invoice). Validasi otomatis: paspor ≥ 7 bulan setelah keberangkatan, perempuan < 45 th wajib mahram, kuota real-time |
 | 2 | **Verifikasi dokumen** (KTP, KK, Paspor, Pas Foto, Vaksin; Buku Nikah opsional) + **koreksi data jamaah** (nama, HP, gender, alamat, kontak darurat, mahram) | **Operasional** | `/jamaah` → klik nama → tombol ✓ Verifikasi / Tolak; **Edit** untuk koreksi data | Saat 5 dokumen wajib terverifikasi → status registrasi menjadi **Aktif**. Setiap koreksi data tercatat di audit log. Berkas dokumen (paspor/KTP = data pribadi) hanya bisa dibuka setelah login — tombol **Lihat file** |
 | 3 | **Catat pembayaran jamaah** (DP/termin/pelunasan) | **Keuangan** | `/pembayaran` → **Kelola**, atau `/keuangan/input` → *Terima Pembayaran* | Pembayaran tercatat *pending* → setelah **diverifikasi Keuangan**: termin lunas, **kwitansi bernomor + terbilang** terbit, **jurnal otomatis Dr Bank/Kas · Cr 2-1100 Uang Muka Jamaah** (dana jamaah = liabilitas, BUKAN pendapatan). Invoice bernomor `INV/YYYY/MM/NNNN`. Pengaman: pembayaran jamaah **wajib via rekening IDR**; nominal **tidak boleh melebihi sisa tagihan**; satu termin tidak bisa dilunasi dua kali |
 | 4 | **Bayar biaya vendor** (hotel/tiket/visa/katering — bisa valas SAR/USD) | **Keuangan** | `/keuangan/input` → *Pembayaran Biaya* | Jurnal multi-baris dalam IDR × kurs; pelunasan hutang valas menghitung **selisih kurs → 7-1000**; biaya menempel ke **cost center keberangkatan** |
 | 5 | **Update visa, tiket, rombongan** | **Operasional** | `/operasional` → pilih keberangkatan → **Ubah** | Status visa (Proses/Biometrik/Terbit) & PNR tampil di manifest; paspor < 7 bulan ditandai merah otomatis |
 | 6 | **Pengakuan pendapatan saat keberangkatan** (PSAK 72) + HPP | **Keuangan** | `/keuangan/input` → *Pengakuan Pendapatan* | Jurnal reclass **Dr 2-1100 · Cr 4-1000/4-2000**; HPP: **Dr 5-xxxx · Cr 1-1400 Uang Muka Vendor**. Sejak ini laba per paket muncul di dashboard & laporan. Pengaman: pendapatan **tidak bisa diakui dua kali** untuk keberangkatan yang sama, dan **tidak boleh melebihi dana jamaah yang sudah diterima** (2-1100 tak boleh negatif) |
-| 7 | **Persetujuan komisi agen** | **Marketing** atau **Keuangan** | `/marketing` → *Setujui & Posting* | Jurnal **Dr 6-2000 Beban Komisi · Cr 2-1400 Hutang Komisi**; KPI "Komisi Terhutang" = saldo riil akun 2-1400 |
+| 7 | **Siklus komisi agen** (setujui → bayar → *opsional* batalkan) | **Keuangan** (pemisahan tugas — Marketing yang membuat agen tidak menyetujui) | `/marketing` | **Setujui** (hanya bila registrasi sudah **aktif** & agen aktif) → jurnal **Dr 6-2000 · Cr 2-1400**; **Bayar** → **Dr 2-1400 · Cr Bank**, status *paid*; **Batalkan** (storno) bila registrasi batal → jurnal balik, komisi kembali *pending*. KPI "Komisi Terhutang" = saldo riil 2-1400. Komisi manual (Input Transaksi) memilih agen dari daftar (bukan nama bebas) → tercatat & bisa dibayar/dibatalkan juga |
 | 8 | **Jurnal manual & rekonsiliasi bank** | **Keuangan** | `/keuangan/jurnal` | Jurnal wajib **balance** (Σdebit = Σkredit — server menolak yang pincang). **Rekonsiliasi bank** (tab Rekonsiliasi): (1) pilih rekening & bulan → **Mulai Rekonsiliasi**: masukkan tanggal cut-off + **saldo akhir dari lembar rekening koran** (angka riil bank); (2) sistem menampilkan **selisih nyata** vs buku besar dan **selisih tak terjelaskan** (0 = beres, ≠0 = perlu ditelusuri); (3) **cocokkan** mutasi koran ke baris jurnal (nominal harus sama), **posting** item bank-only (jasa giro → 4-9000, biaya adm → 7-2000) agar buku menyusul; setoran/penarikan dalam perjalanan cukup jadi item pendamai; (4) **Selesaikan Rekonsiliasi** → periode **terkunci** (tercatat pereview & tanggal). Bisa entri manual atau **impor CSV** (anti-duplikat via referensi). |
 | 9 | **Laporan** (laba rugi, neraca, laba per paket, aging, kepatuhan dokumen, kesiapan) + ekspor Excel/PDF | **Keuangan** & **Pimpinan** (operasional utk laporan ops) | `/laporan-keuangan` · `/laporan-operasional` | Semua angka diagregasi langsung dari jurnal — neraca selalu seimbang |
 | 10 | **Kelola pengguna & audit** | **Admin** | `/admin` | Setiap mutasi keuangan & data sensitif terekam di audit log (aktor, aksi, nilai) |
@@ -82,7 +82,7 @@ flowchart TD
 | Master data keuangan: vendor, rekening bank (`/keuangan-master`) | — | — | ✅ | 👁 | — |
 | Laporan keuangan (LR/Neraca/per Paket) | 👁 laba per paket | — | ✅ + ekspor | 👁 + ekspor | — |
 | Agen & leads (`/marketing`) | ✅ | — | 👁 | 👁 | — |
-| Persetujuan komisi | ✅ | — | ✅ | 👁 | — |
+| Komisi: setujui / bayar / batalkan | 👁 (usul) | — | ✅ | 👁 | — |
 | Pengguna, role, audit log (`/admin`) | — | — | — | — | — |
 | Portal jamaah (`/portal`) | — | — | — | — | ✅ |
 
@@ -98,7 +98,8 @@ Semua jurnal dibuat mesin melalui satu pintu (*journal engine*) dan **wajib bala
 | C | Pembayaran biaya / DP vendor (opsional valas) | Keuangan | **Dr** 1-1400 atau 5-xxxx (IDR × kurs) · **Cr** Bank — selisih kurs realisasi → 7-1000 |
 | D | Pengakuan pendapatan saat keberangkatan | Keuangan | **Dr** 2-1100 · **Cr** 4-1000/4-2000 |
 | E | Pengakuan HPP saat keberangkatan | Keuangan | **Dr** 5-1000…5-7000 per komponen · **Cr** 1-1400 |
-| F | Persetujuan komisi agen | Marketing/Keuangan | **Dr** 6-2000 · **Cr** 2-1400 |
+| F | Persetujuan komisi agen | Keuangan | **Dr** 6-2000 · **Cr** 2-1400 |
+| F2 | Pembayaran komisi agen | Keuangan | **Dr** 2-1400 · **Cr** Bank/Kas |
 | — | Jurnal manual (adm bank, penyesuaian, dsb.) | Keuangan | Bebas, wajib balance |
 
 **Prinsip yang dijaga sistem** (tidak bisa dilanggar pengguna): dana jamaah adalah **liabilitas** sampai keberangkatan (akad wakalah/ijarah, PSAK 72); setiap keberangkatan adalah **cost center**; setiap jurnal balance; setiap mutasi terekam audit log.
