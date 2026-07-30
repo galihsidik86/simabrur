@@ -491,6 +491,12 @@ function StepBayar({ scheme, setScheme, method, setMethod, total, referral, setR
   referral: string;
   setReferral: (v: string) => void;
 }) {
+  const code = referral.trim();
+  const { data: agentCheck, isFetching: checkingAgent } = useQuery({
+    queryKey: ['agent-check', code],
+    enabled: code.length >= 3,
+    queryFn: async () => (await api.get('/registrations/agent-check', { params: { code } })).data.data as { found: boolean; agentName?: string }
+  });
   return (
     <div>
       <StepTitle title="Skema & Metode Pembayaran" sub="Dana jamaah dikelola dengan akad wakalah — dicatat sebagai titipan hingga keberangkatan." />
@@ -539,7 +545,17 @@ function StepBayar({ scheme, setScheme, method, setMethod, total, referral, setR
       <div className="mt-5 rounded-[11px] border border-line-3 bg-panel p-4">
         <label className="lbl">Kode Referral Agen (opsional)</label>
         <input className="fld font-mono !w-[220px]" value={referral} onChange={(e) => setReferral(e.target.value.toUpperCase())} placeholder="mis. BRKH-07" />
-        <div className="mt-1.5 text-[10.5px] text-muted-3">Isi bila Anda mendaftar melalui agen/mitra Safar.</div>
+        {code.length >= 3 ? (
+          checkingAgent ? (
+            <div className="mt-1.5 text-[10.5px] text-muted-3">Memeriksa kode…</div>
+          ) : agentCheck?.found ? (
+            <div className="mt-1.5 text-[10.5px] font-semibold" style={{ color: 'oklch(0.46 0.07 158)' }}>✓ Dikreditkan ke agen {agentCheck.agentName}</div>
+          ) : (
+            <div className="mt-1.5 text-[10.5px] font-semibold" style={{ color: 'oklch(0.55 0.15 28)' }}>Kode tidak dikenal — komisi tidak akan tercatat. Periksa kembali.</div>
+          )
+        ) : (
+          <div className="mt-1.5 text-[10.5px] text-muted-3">Isi bila Anda mendaftar melalui agen/mitra Safar.</div>
+        )}
       </div>
     </div>
   );

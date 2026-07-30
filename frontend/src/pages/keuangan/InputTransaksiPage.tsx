@@ -36,6 +36,7 @@ export function InputTransaksiPage() {
   // Referensi
   const { data: banks } = useQuery({ queryKey: ['bank-accounts'], queryFn: async () => (await api.get('/bank-accounts')).data.data as BankAccount[] });
   const { data: ccs } = useQuery({ queryKey: ['cost-centers'], queryFn: async () => (await api.get('/cost-centers')).data.data as CostCenter[] });
+  const { data: agents } = useQuery({ queryKey: ['agents'], queryFn: async () => (await api.get('/agents')).data.data.agents as { id: string; name: string; code: string; isActive: boolean }[] });
   const { data: recv } = useQuery({ queryKey: ['receivables'], queryFn: async () => (await api.get('/receivables')).data.data as { data: Receivable[] } });
 
   // ---- state form Terima ----
@@ -73,12 +74,15 @@ export function InputTransaksiPage() {
   const [pAmount, setPAmount] = useState(0);
 
   // ---- state form Komisi ----
-  const [kAgent, setKAgent] = useState('Barokah Tour — BRKH-07');
+  const [kAgentId, setKAgentId] = useState('');
   const [kCc, setKCc] = useState('');
   const [kDate, setKDate] = useState(today());
   const [kBase, setKBase] = useState(141_000_000);
   const [kPct, setKPct] = useState(3);
   const komisi = Math.round((kBase * kPct) / 100);
+  const activeAgents = agents?.filter((a) => a.isActive) ?? [];
+  const kActiveAgentId = kAgentId || activeAgents[0]?.id || '';
+  const kAgentName = (() => { const a = agents?.find((x) => x.id === kActiveAgentId); return a ? `${a.name} — ${a.code}` : ''; })();
 
   /* ===== Preview jurnal (mencerminkan template engine) ===== */
   const preview: { desc: string; lines: PreviewLine[]; note: string } = useMemo(() => {
@@ -130,14 +134,14 @@ export function InputTransaksiPage() {
       };
     }
     return {
-      desc: `Komisi agen — ${kAgent}`,
+      desc: `Komisi agen — ${kAgentName || '(pilih agen)'}`,
       lines: [
         { code: '6-2000', name: 'Beban Komisi Agen', debit: komisi, credit: 0 },
         { code: '2-1400', name: 'Hutang Komisi Agen', debit: 0, credit: komisi }
       ],
-      note: 'Komisi diakui sebagai beban + hutang; dibayar terpisah dari kas.'
+      note: 'Komisi diakui sebagai beban + hutang terlacak (baris commissions); dibayar/dibatalkan lewat menu Marketing.'
     };
-  }, [tx, tBank, tAmount, banks, bLines, bRate, bCurrency, bSettle, bKursHutang, bVendor, bBank, pAmount, pAccount, kAgent, komisi]);
+  }, [tx, tBank, tAmount, banks, bLines, bRate, bCurrency, bSettle, bKursHutang, bVendor, bBank, pAmount, pAccount, kAgentName, komisi]);
 
   const totalDebit = preview.lines.reduce((s, l) => s + l.debit, 0);
   const totalCredit = preview.lines.reduce((s, l) => s + l.credit, 0);
@@ -169,8 +173,8 @@ export function InputTransaksiPage() {
         });
         return `Tersimpan — jurnal ${data.data.revenue.journal_no}`;
       }
-      const { data } = await api.post('/transactions/commission', { agentName: kAgent, costCenterId: kCc || null, base: kBase, pct: kPct, date: kDate });
-      return `Tersimpan — jurnal ${data.data.journal_no}`;
+      const { data } = await api.post('/transactions/commission', { agentId: kActiveAgentId, costCenterId: kCc || null, base: kBase, pct: kPct, date: kDate });
+      return `Tersimpan — jurnal ${data.data.journal_no} (komisi terlacak)`;
     },
     onSuccess: (msg) => {
       setSuccess(msg);
@@ -331,7 +335,12 @@ export function InputTransaksiPage() {
 
           {tx === 'komisi' && (
             <div className="grid grid-cols-2 gap-3.5">
-              <div><label className="lbl">Agen / Mitra</label><input className="fld" value={kAgent} onChange={(e) => setKAgent(e.target.value)} /></div>
+              <div><label className="lbl">Agen / Mitra</label>
+                <select className="fld" value={kActiveAgentId} onChange={(e) => setKAgentId(e.target.value)}>
+                  {activeAgents.length === 0 && <option value="">— belum ada agen —</option>}
+                  {activeAgents.map((a) => <option key={a.id} value={a.id}>{a.name} — {a.code}</option>)}
+                </select>
+              </div>
               <div>
                 <label className="lbl">Terkait Keberangkatan</label>
                 <select className="fld" value={kCc} onChange={(e) => setKCc(e.target.value)}>

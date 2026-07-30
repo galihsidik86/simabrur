@@ -10,8 +10,9 @@ interface AgentRow {
 }
 interface Kpi { activeAgents: number; totalLeads: number; avgConversionPct: number; commissionOwed: number; agentsWithPending: number }
 interface CommissionRow {
-  id: string; agentName: string; agentCode: string; regNumber: string; jamaahName: string;
-  baseAmount: number; pct: number; amount: number; status: string; journalNo: string | null; createdAt: string;
+  id: string; agentName: string; agentCode: string; regNumber: string | null; jamaahName: string; regStatus: string | null;
+  baseAmount: number; pct: number; amount: number; status: string; journalNo: string | null;
+  paidAt: string | null; reversedAt: string | null; createdAt: string;
 }
 
 export function MarketingPage() {
@@ -28,13 +29,27 @@ export function MarketingPage() {
     queryKey: ['commissions-pending'],
     queryFn: async () => (await api.get('/commissions', { params: { status: 'pending' } })).data.data as CommissionRow[]
   });
+  const { data: approved } = useQuery({
+    queryKey: ['commissions-approved'],
+    queryFn: async () => (await api.get('/commissions', { params: { status: 'approved' } })).data.data as CommissionRow[]
+  });
+  const err = (e: unknown, fb: string) => setError((e as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? fb);
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['agents'] });
+    qc.invalidateQueries({ queryKey: ['commissions-pending'] });
+    qc.invalidateQueries({ queryKey: ['commissions-approved'] });
+  };
   const approve = useMutation({
     mutationFn: async (id: string) => api.post(`/commissions/${id}/approve`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['agents'] });
-      qc.invalidateQueries({ queryKey: ['commissions-pending'] });
-    },
-    onError: (e: unknown) => setError((e as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Gagal menyetujui')
+    onMutate: () => setError(''), onSuccess: invalidate, onError: (e) => err(e, 'Gagal menyetujui')
+  });
+  const pay = useMutation({
+    mutationFn: async (id: string) => api.post(`/commissions/${id}/pay`, { bankAccountCode: '1-1200' }),
+    onMutate: () => setError(''), onSuccess: invalidate, onError: (e) => err(e, 'Gagal membayar')
+  });
+  const reverse = useMutation({
+    mutationFn: async (id: string) => api.post(`/commissions/${id}/reverse`),
+    onMutate: () => setError(''), onSuccess: invalidate, onError: (e) => err(e, 'Gagal membatalkan')
   });
 
   const kpi = data?.kpi;
@@ -45,7 +60,8 @@ export function MarketingPage() {
         { label: 'Komisi Terhutang', value: fmtShort(kpi.commissionOwed), sub: `Akun 2-1400 · ${kpi.agentsWithPending} agen menunggu persetujuan`, accent: 'oklch(0.56 0.09 78)' }
       ]
     : [];
-  const canApprove = user && ['admin', 'marketing', 'keuangan'].includes(user.role);
+  // Pemisahan tugas: hanya keuangan (bukan marketing yang membuat agen) yang menyetujui/membayar
+  const canApprove = user && ['admin', 'keuangan'].includes(user.role);
   const canManage = user && ['admin', 'marketing'].includes(user.role);
 
   return (
@@ -132,6 +148,44 @@ export function MarketingPage() {
         </div>
       )}
 
+      {/* Komisi disetujui — siap dibayar atau dibatalkan (keuangan) */}
+      {approved && approved.length > 0 && (
+        <div className="mt-4 overflow-hidden rounded-card border border-line bg-card shadow-card">
+          <div className="border-b border-line-3 px-5 py-4 text-[14px] font-semibold">
+            Komisi Disetujui <span className="text-[11px] font-normal text-muted-4">— bayar → Dr 2-1400 · Cr Bank; batalkan → storno</span>
+          </div>
+          <table className="w-full border-collapse text-[12.5px]">
+            <tbody>
+              {approved.map((c) => (
+                <tr key={c.id} className="border-t border-line-3">
+                  <td className="px-5 py-3">
+                    <span className="font-semibold">{c.agentName}</span>
+                    <span className="ml-2 font-mono text-[10.5px] text-muted-4">{c.agentCode}</span>
+                  </td>
+                  <td className="px-3 py-3">{c.jamaahName} <span className="font-mono text-[10.5px] text-muted-4">{c.regNumber ?? ''}</span></td>
+                  <td className="px-3 py-3 text-right font-mono font-bold">{fmtShort(c.amount)}</td>
+                  <td className="px-3 py-3 font-mono text-[10.5px] text-muted-4">{c.journalNo}</td>
+                  <td className="px-5 py-3 text-right">
+                    {canApprove ? (
+                      <span className="inline-flex gap-2">
+                        <button onClick={() => pay.mutate(c.id)} disabled={pay.isPending}
+                          className="cursor-pointer rounded-[8px] bg-primary px-3 py-1.5 text-[11px] font-bold text-white disabled:opacity-60">
+                          Bayar
+                        </button>
+                        <button onClick={() => window.confirm('Batalkan komisi ini? Jurnal beban & hutang akan di-storno.') && reverse.mutate(c.id)} disabled={reverse.isPending}
+                          className="cursor-pointer rounded-[8px] border border-line-2 bg-white px-3 py-1.5 text-[11px] font-semibold text-danger-deep disabled:opacity-60">
+                          Batalkan
+                        </button>
+                      </span>
+                    ) : <span className="text-[11px] text-muted-4">menunggu keuangan</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {showForm && <AgentFormModal onClose={() => setShowForm(false)} />}
     </div>
   );
@@ -155,7 +209,7 @@ function AgentFormModal({ onClose }: { onClose: () => void }) {
           <div><label className="lbl">Nama Agen / Mitra</label><input className="fld" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Barokah Tour" required /></div>
           <div><label className="lbl">Kode Referral (unik)</label><input className="fld font-mono" value={f.code} onChange={(e) => setF({ ...f, code: e.target.value.toUpperCase() })} placeholder="BRKH-07" required /></div>
           <div><label className="lbl">No. HP (opsional)</label><input className="fld" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></div>
-          <div><label className="lbl">Persentase Komisi (%)</label><input type="number" step="0.5" min="0.5" max="100" className="fld font-mono" value={f.commissionPct} onChange={(e) => setF({ ...f, commissionPct: Number(e.target.value) })} required /></div>
+          <div><label className="lbl">Persentase Komisi (%)</label><input type="number" step="0.5" min="0.5" max="30" className="fld font-mono" value={f.commissionPct} onChange={(e) => setF({ ...f, commissionPct: Number(e.target.value) })} required /></div>
         </div>
         {error && <div className="mt-3 rounded-[9px] bg-danger-bg px-3 py-2 text-[12px] font-medium text-danger-deep">{error}</div>}
         <div className="mt-5 flex justify-end gap-2">
