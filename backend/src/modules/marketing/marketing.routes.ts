@@ -236,6 +236,18 @@ commissionsRoutes.post('/:id/pay', requireAuth, requireRoles('keuangan'), async 
     await trx('commissions').where({ id: c.id }).update({
       status: 'paid', payment_journal_id: journal.id, paid_by: req.user?.id ?? null, paid_at: trx.fn.now(), updated_at: trx.fn.now()
     });
+    // Notifikasi in-portal untuk agen: komisi cair
+    let jamaahName = 'komisi manual';
+    if (c.registration_id) {
+      const jm = await trx('registrations as r').join('jamaah as j', 'j.id', 'r.jamaah_id')
+        .select('j.full_name').where('r.id', c.registration_id).first();
+      jamaahName = jm?.full_name ?? 'jamaah';
+    }
+    await trx('agent_notifications').insert({
+      agent_id: c.agent_id, type: 'commission_paid', title: 'Komisi cair',
+      body: `Komisi Rp ${Number(c.amount).toLocaleString('id-ID')} (${jamaahName}) telah dibayar ke Anda.`,
+      ref_type: 'commissions', ref_id: c.id
+    });
     return { commissionId: c.id, journalNo: journal.journal_no, amount: Number(c.amount) };
   });
   await audit(req, { action: 'commissions.pay', entity: 'commissions', entityId: result.commissionId, newValues: result });

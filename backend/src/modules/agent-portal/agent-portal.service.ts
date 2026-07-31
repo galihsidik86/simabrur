@@ -84,13 +84,27 @@ export const agentPortalService = {
     const comm = await db('commissions').where({ agent_id: claims.agentId })
       .select('status').sum({ amount: 'amount' }).count({ n: '*' }).groupBy('status');
     const sum = (st: string) => Number((comm.find((c: Record<string, any>) => c.status === st) || {}).amount ?? 0);
+    const [unread] = await db('agent_notifications').where({ agent_id: claims.agentId }).whereNull('read_at').count({ n: '*' });
     return {
       totalReferrals: Number(reg.total),
       activeReferrals: Number(active.n),
       commissionPending: sum('pending'),
       commissionApproved: sum('approved'), // disetujui, terutang (belum dibayar)
-      commissionPaid: sum('paid')
+      commissionPaid: sum('paid'),
+      unreadNotifications: Number(unread.n)
     };
+  },
+
+  async notifications(claims: AgentClaims) {
+    const rows = await db('agent_notifications').where({ agent_id: claims.agentId })
+      .orderBy('created_at', 'desc').limit(50)
+      .select('id', 'type', 'title', 'body', 'read_at', 'created_at');
+    return rows.map((n: Record<string, any>) => ({ id: n.id, type: n.type, title: n.title, body: n.body, readAt: n.read_at ?? null, createdAt: n.created_at }));
+  },
+
+  async markNotificationsRead(claims: AgentClaims) {
+    await db('agent_notifications').where({ agent_id: claims.agentId }).whereNull('read_at').update({ read_at: db.fn.now() });
+    return { ok: true };
   },
 
   /** Jamaah referral — data TERBATAS (tanpa NIK/dokumen): nama, paket, status, % bayar. */

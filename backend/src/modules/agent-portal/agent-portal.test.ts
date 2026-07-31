@@ -106,3 +106,38 @@ describe('Portal Agen — isolasi & PII', () => {
     expect(lead.source).toBe('portal-agen');
   });
 });
+
+describe('Portal Agen — notifikasi komisi cair', () => {
+  it('bayar komisi → notifikasi masuk portal agen; badge unread; tandai terbaca', async () => {
+    const keu = await staff('keuangan@safar.co.id');
+    const s = await activateAndLogin('BRKH-07', '081200000299');
+    const H = { Authorization: `Bearer ${s.token}` };
+    const agent = await db('agents').where({ code: 'BRKH-07' }).first();
+
+    // komisi pending milik BRKH-07 (punya registrasi) → aktifkan registrasi, setujui, bayar
+    const comm = await db('commissions').where({ agent_id: agent.id, status: 'pending' }).whereNotNull('registration_id').first();
+    await db('registrations').where({ id: comm.registration_id }).update({ status: 'active' });
+    await request(app).post(`/v1/commissions/${comm.id}/approve`).set('Authorization', `Bearer ${keu}`);
+    const pay = await request(app).post(`/v1/commissions/${comm.id}/pay`).set('Authorization', `Bearer ${keu}`).send({ bankAccountCode: '1-1200' });
+    expect(pay.status).toBe(200);
+
+    // agen melihat notifikasi + badge unread
+    const summary = await request(app).get('/v1/portal-agen/summary').set(H);
+    expect(summary.body.data.unreadNotifications).toBeGreaterThanOrEqual(1);
+    const notif = await request(app).get('/v1/portal-agen/notifications').set(H);
+    const cair = notif.body.data.find((n: { type: string }) => n.type === 'commission_paid');
+    expect(cair).toBeTruthy();
+    expect(cair.body).toContain('telah dibayar');
+    expect(cair.readAt).toBeNull();
+
+    // tandai terbaca → badge 0
+    await request(app).post('/v1/portal-agen/notifications/read').set(H);
+    const after = await request(app).get('/v1/portal-agen/summary').set(H);
+    expect(after.body.data.unreadNotifications).toBe(0);
+
+    // isolasi: agen lain tak melihat notifikasi ini
+    const other = await activateAndLogin('AMNH-12', '081200000212');
+    const otherNotif = await request(app).get('/v1/portal-agen/notifications').set({ Authorization: `Bearer ${other.token}` });
+    expect(otherNotif.body.data.find((n: { type: string }) => n.type === 'commission_paid')).toBeUndefined();
+  });
+});

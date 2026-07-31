@@ -1,6 +1,6 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import axios from 'axios';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fmtShort, fmtFull, fmtDate } from '../../utils/format';
 
 /* ===== API portal agen (token terpisah dari staf & portal jamaah) ===== */
@@ -23,7 +23,7 @@ const COMM_STATUS: Record<string, { label: string; color: string; bg: string }> 
   paid: { label: 'Dibayar', color: 'oklch(0.42 0.07 158)', bg: 'oklch(0.95 0.03 158)' }
 };
 
-type Tab = 'ringkasan' | 'jamaah' | 'komisi' | 'leads' | 'profil';
+type Tab = 'ringkasan' | 'jamaah' | 'komisi' | 'leads' | 'notif' | 'profil';
 
 export function AgenPortalPage() {
   const [authed, setAuthed] = useState(Boolean(sessionStorage.getItem('safar.agen')));
@@ -117,7 +117,8 @@ function ChangePassword({ forced, onDone, onLogout }: { forced?: boolean; onDone
 }
 
 interface Me { name: string; code: string; referralCode: string; commissionPct: number; phone: string | null; email: string | null }
-interface Summary { totalReferrals: number; activeReferrals: number; commissionPending: number; commissionApproved: number; commissionPaid: number }
+interface Summary { totalReferrals: number; activeReferrals: number; commissionPending: number; commissionApproved: number; commissionPaid: number; unreadNotifications: number }
+interface NotifRow { id: string; type: string; title: string; body: string; readAt: string | null; createdAt: string }
 interface JamaahRow { regNumber: string; jamaahName: string; packageName: string; departureDate: string; status: string; paymentPct: number }
 interface CommRow { baseAmount: number; pct: number; amount: number; status: string; jamaahName: string; regNumber: string | null; paidAt: string | null; createdAt: string }
 interface LeadRow { name: string; phone: string | null; source: string; status: string; createdAt: string }
@@ -125,6 +126,9 @@ interface LeadRow { name: string; phone: string | null; source: string; status: 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [tab, setTab] = useState<Tab>('ringkasan');
   const me = useQuery({ queryKey: ['agen-me'], queryFn: async () => (await agenApi.get('/me')).data.data as Me });
+  const { data: summary } = useQuery({ queryKey: ['agen-summary'], queryFn: async () => (await agenApi.get('/summary')).data.data as Summary });
+  const unread = summary?.unreadNotifications ?? 0;
+  const label = (t: Tab) => (t === 'jamaah' ? 'Jamaah Saya' : t === 'notif' ? 'Notifikasi' : t);
 
   return (
     <Shell>
@@ -137,11 +141,14 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       </div>
 
       <div className="mb-4 flex gap-1.5 overflow-x-auto">
-        {(['ringkasan', 'jamaah', 'komisi', 'leads', 'profil'] as Tab[]).map((t) => (
+        {(['ringkasan', 'jamaah', 'komisi', 'leads', 'notif', 'profil'] as Tab[]).map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className="cursor-pointer whitespace-nowrap rounded-pill px-3 py-1.5 text-[12px] font-semibold capitalize"
+            className="relative cursor-pointer whitespace-nowrap rounded-pill px-3 py-1.5 text-[12px] font-semibold capitalize"
             style={tab === t ? { background: 'oklch(0.5 0.09 165)', color: '#fff' } : { background: '#fffdf8', color: '#6f6858', border: '1px solid #e6ddca' }}>
-            {t === 'jamaah' ? 'Jamaah Saya' : t}
+            {label(t)}
+            {t === 'notif' && unread > 0 && (
+              <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-[oklch(0.55_0.15_28)] px-1 text-[9px] font-bold text-white">{unread}</span>
+            )}
           </button>
         ))}
       </div>
@@ -150,8 +157,41 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       {tab === 'jamaah' && <JamaahTab />}
       {tab === 'komisi' && <KomisiTab />}
       {tab === 'leads' && <LeadsTab />}
+      {tab === 'notif' && <NotifTab />}
       {tab === 'profil' && <ProfilTab me={me.data} />}
     </Shell>
+  );
+}
+
+function NotifTab() {
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ['agen-notif'], queryFn: async () => (await agenApi.get('/notifications')).data.data as NotifRow[] });
+  // Tandai semua notifikasi terbaca saat tab dibuka → badge hilang
+  useEffect(() => {
+    agenApi.post('/notifications/read').then(() => qc.invalidateQueries({ queryKey: ['agen-summary'] })).catch(() => {});
+  }, [qc]);
+  if (!data) return <div className="text-[12px] text-[#8c8371]">Memuat…</div>;
+  if (data.length === 0) return <Card><div className="text-[12px] text-[#8c8371]">Belum ada notifikasi.</div></Card>;
+  return (
+    <div className="flex flex-col gap-2.5">
+      {data.map((n) => (
+        <Card key={n.id}>
+          <div className="flex items-start gap-2.5">
+            <div className="mt-0.5 grid h-7 w-7 flex-none place-items-center rounded-full" style={{ background: n.type === 'commission_paid' ? 'oklch(0.95 0.03 158)' : '#eee9dc' }}>
+              {n.type === 'commission_paid' ? '💰' : '🔔'}
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[12.5px] font-semibold text-[#26221b]">{n.title}</span>
+                {!n.readAt && <span className="h-1.5 w-1.5 rounded-full bg-[oklch(0.55_0.15_28)]" />}
+              </div>
+              <div className="text-[11.5px] text-[#6f6858]">{n.body}</div>
+              <div className="mt-0.5 text-[9.5px] text-[#a89e88]">{fmtDate(String(n.createdAt).slice(0, 10))}</div>
+            </div>
+          </div>
+        </Card>
+      ))}
+    </div>
   );
 }
 
