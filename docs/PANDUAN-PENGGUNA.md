@@ -223,7 +223,8 @@ Agen/mitra referral punya portal sendiri di **`/portal-agen`** (mobile-first, te
 |---|---|---|---|
 | 1 | **Aktifkan Portal** untuk agen → sistem terbitkan **password awal** (nomor HP jadi username). Password tampil **sekali** untuk diserahkan ke agen. Tombol **Reset Password** menerbitkan ulang | Marketing | `/marketing` → kolom **Portal** pada tabel agen |
 | 2 | Agen login di `/portal-agen` (HP + password), **wajib ganti password** saat login pertama | Agen | `/portal-agen` |
-| 3 | Agen memantau: **Ringkasan** (KPI komisi didapat/terutang/pending) · **Jamaah Saya** (referralnya: nama, paket, status, % bayar) · **Komisi** (pending/disetujui/dibayar) · **Leads** · **Profil** | Agen | `/portal-agen` |
+| 3 | Agen memantau: **Ringkasan** (KPI komisi didapat/terutang/pending) · **Jamaah Saya** (referralnya: nama, paket, status, % bayar) · **Komisi** (pending/disetujui/dibayar) · **Leads** · **Notifikasi** · **Profil** | Agen | `/portal-agen` |
+| 3a | **Notifikasi komisi cair**: saat Keuangan **membayar** komisi agen, notifikasi otomatis muncul di portal agen (tab Notifikasi + badge merah "belum dibaca"). Membuka tab menandainya terbaca | otomatis / Agen | `/portal-agen` → Notifikasi |
 | 4 | Agen menambah **prospek/lead** (nama + HP) → masuk ke daftar leads Marketing untuk ditindaklanjuti | Agen / Marketing | `/portal-agen` → tab Leads · `/marketing` |
 
 **Isolasi & privasi**: agen **hanya** melihat data miliknya (dipaksa server dari identitas token, bukan dari input). Data jamaah yang tampil **terbatas** — nama, paket, status, dan % pembayaran; **tanpa NIK, paspor, atau dokumen**. Token portal agen terpisah dan **tidak berlaku** untuk endpoint staf maupun portal jamaah.
