@@ -212,3 +212,20 @@ Menjelang dan selama keberangkatan, Safar terhubung dengan **aplikasi mobile Mab
 | 5 | Selama di tanah suci: pantau **tab Lapangan** — status tiap anggota (aman/perlu perhatian, ihram, jarak miqat, umur sinyal lokasi) + **banner SOS live** dengan tombol Lihat Lokasi / WhatsApp / Telepon (refresh otomatis 30 dtk) | Operasional, Pimpinan | `/operasional` → Lapangan (live Mabrur) |
 
 **Pembagian tanggung jawab data**: Safar = sumber data induk (jamaah, rombongan, jadwal); Mabrur = sumber data lapangan (lokasi, ihram, SOS, counter ibadah). SOS ditangani pertama oleh **muthawwif di aplikasi Mabrur**; tab Lapangan Safar adalah lapis pemantauan kantor.
+
+---
+
+## 8. Portal Agen — Self-service Mitra
+
+Agen/mitra referral punya portal sendiri di **`/portal-agen`** (mobile-first, terpisah dari sistem staf & portal jamaah) untuk memantau kinerjanya tanpa menghubungi kantor.
+
+| # | Langkah | Siapa | Di mana |
+|---|---|---|---|
+| 1 | **Aktifkan Portal** untuk agen → sistem terbitkan **password awal** (nomor HP jadi username). Password tampil **sekali** untuk diserahkan ke agen. Tombol **Reset Password** menerbitkan ulang | Marketing | `/marketing` → kolom **Portal** pada tabel agen |
+| 2 | Agen login di `/portal-agen` (HP + password), **wajib ganti password** saat login pertama | Agen | `/portal-agen` |
+| 3 | Agen memantau: **Ringkasan** (KPI komisi didapat/terutang/pending) · **Jamaah Saya** (referralnya: nama, paket, status, % bayar) · **Komisi** (pending/disetujui/dibayar) · **Leads** · **Profil** | Agen | `/portal-agen` |
+| 4 | Agen menambah **prospek/lead** (nama + HP) → masuk ke daftar leads Marketing untuk ditindaklanjuti | Agen / Marketing | `/portal-agen` → tab Leads · `/marketing` |
+
+**Isolasi & privasi**: agen **hanya** melihat data miliknya (dipaksa server dari identitas token, bukan dari input). Data jamaah yang tampil **terbatas** — nama, paket, status, dan % pembayaran; **tanpa NIK, paspor, atau dokumen**. Token portal agen terpisah dan **tidak berlaku** untuk endpoint staf maupun portal jamaah.
+
+**Persetujuan/pembayaran komisi tetap di Keuangan** — portal agen hanya *melihat* status komisinya, tidak menyetujui/menerima pembayaran dari sana.

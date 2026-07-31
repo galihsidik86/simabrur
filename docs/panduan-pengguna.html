@@ -346,6 +346,20 @@
   </table></div>
   <div class="note"><b>Pembagian data</b>: Safar = sumber data induk (jamaah, rombongan, jadwal) · Mabrur = sumber data lapangan (lokasi, ihram, SOS, counter ibadah). SOS ditangani pertama oleh muthawwif di aplikasi Mabrur; tab Lapangan Safar adalah lapis pemantauan kantor.</div>
 
+  <!-- ====== 8. Portal Agen ====== -->
+  <h2>8 · Portal Agen — Self-service Mitra</h2>
+  <p class="sub">Agen/mitra referral punya portal sendiri di <span class="mono">/portal-agen</span> (mobile, terpisah dari sistem staf &amp; portal jamaah) untuk memantau kinerjanya tanpa menghubungi kantor.</p>
+  <div class="card"><table>
+    <thead><tr><th style="width:28px">#</th><th>Langkah</th><th style="width:120px">Siapa</th><th style="width:160px">Di mana</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><b>Aktifkan Portal</b> untuk agen → sistem terbitkan <b>password awal</b> (No. HP = username), tampil <b>sekali</b>. Tombol <b>Reset Password</b> menerbitkan ulang</td><td><span class="chip c-mkt">Marketing</span></td><td><span class="mono">/marketing</span> → kolom Portal</td></tr>
+      <tr><td>2</td><td>Agen login (HP + password), <b>wajib ganti password</b> saat login pertama</td><td><span class="chip c-mkt">Agen</span></td><td><span class="mono">/portal-agen</span></td></tr>
+      <tr><td>3</td><td>Pantau: <b>Ringkasan</b> (KPI komisi didapat/terutang/pending) · <b>Jamaah Saya</b> (nama, paket, status, % bayar) · <b>Komisi</b> · <b>Leads</b> · <b>Profil</b></td><td><span class="chip c-mkt">Agen</span></td><td><span class="mono">/portal-agen</span></td></tr>
+      <tr><td>4</td><td>Tambah <b>prospek/lead</b> → masuk daftar leads Marketing</td><td><span class="chip c-mkt">Agen</span></td><td><span class="mono">/portal-agen</span> → Leads</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note"><b>Isolasi &amp; privasi</b>: agen hanya melihat data miliknya (dipaksa server dari token). Data jamaah <b>terbatas</b> — nama, paket, status, % bayar; <b>tanpa NIK/paspor/dokumen</b>. Token portal agen tak berlaku untuk endpoint staf/portal jamaah. Persetujuan &amp; pembayaran komisi tetap di Keuangan — agen hanya <i>melihat</i> status komisinya.</div>
+
   <footer>Panduan Pengguna Safar · PT Safar Barokah Wisata · dokumen internal — versi Markdown: docs/PANDUAN-PENGGUNA.md</footer>
 </div>
 </body>
