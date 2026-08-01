@@ -129,6 +129,10 @@ describe('Portal Agen — notifikasi komisi cair', () => {
     expect(cair).toBeTruthy();
     expect(cair.body).toContain('telah dibayar');
     expect(cair.readAt).toBeNull();
+    // beberapa jenis notifikasi hadir: disetujui (dari approve barusan) + referral (dari seed)
+    const types = new Set(notif.body.data.map((n: { type: string }) => n.type));
+    expect(types.has('commission_approved')).toBe(true);
+    expect(types.has('referral_registered')).toBe(true);
 
     // tandai terbaca → badge 0
     await request(app).post('/v1/portal-agen/notifications/read').set(H);

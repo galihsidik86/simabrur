@@ -25,6 +25,13 @@ const COMM_STATUS: Record<string, { label: string; color: string; bg: string }> 
 
 type Tab = 'ringkasan' | 'jamaah' | 'komisi' | 'leads' | 'notif' | 'profil';
 
+const NOTIF_ICON: Record<string, { icon: string; bg: string }> = {
+  commission_paid: { icon: '💰', bg: 'oklch(0.95 0.03 158)' },
+  commission_approved: { icon: '✅', bg: 'oklch(0.95 0.03 245)' },
+  referral_registered: { icon: '🧑', bg: 'oklch(0.96 0.04 78)' },
+  registration_active: { icon: '📄', bg: 'oklch(0.95 0.03 158)' }
+};
+
 export function AgenPortalPage() {
   const [authed, setAuthed] = useState(Boolean(sessionStorage.getItem('safar.agen')));
   const [mustChange, setMustChange] = useState(false);
@@ -177,8 +184,8 @@ function NotifTab() {
       {data.map((n) => (
         <Card key={n.id}>
           <div className="flex items-start gap-2.5">
-            <div className="mt-0.5 grid h-7 w-7 flex-none place-items-center rounded-full" style={{ background: n.type === 'commission_paid' ? 'oklch(0.95 0.03 158)' : '#eee9dc' }}>
-              {n.type === 'commission_paid' ? '💰' : '🔔'}
+            <div className="mt-0.5 grid h-7 w-7 flex-none place-items-center rounded-full" style={{ background: NOTIF_ICON[n.type]?.bg ?? '#eee9dc' }}>
+              {NOTIF_ICON[n.type]?.icon ?? '🔔'}
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">

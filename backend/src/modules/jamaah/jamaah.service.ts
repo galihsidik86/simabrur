@@ -8,6 +8,7 @@ import { jamaahRepository } from './jamaah.repository.js';
 import { isPassportValid, needsMahram, passportValidUntilLimit, regNumberKey, ageAt } from './jamaah.rules.js';
 import { REQUIRED_DOC_TYPES, type createRegistrationSchema, type updateJamaahSchema } from './jamaah.validation.js';
 import { issueInvoice } from '../payments/payments.service.js';
+import { notifyAgent } from '../agent-portal/notify.js';
 
 type CreateRegistrationInput = z.infer<typeof createRegistrationSchema>;
 type UpdateJamaahInput = z.infer<typeof updateJamaahSchema>;
@@ -220,6 +221,11 @@ export const jamaahService = {
             pct: agent.commission_pct,
             amount: Math.round((base * Number(agent.commission_pct)) / 100)
           });
+          await notifyAgent(trx, {
+            agentId: agent.id, type: 'referral_registered', title: 'Jamaah referral baru',
+            body: `${jamaahRow.full_name} mendaftar via kode referral Anda (${regNumber}).`,
+            refType: 'registrations', refId: registration.id
+          });
         } else {
           // Kode referral disebut tapi tak cocok agen aktif → jejak audit agar bisa ditindaklanjuti
           await audit(req, {
@@ -292,9 +298,21 @@ export const jamaahService = {
         .where({ jamaah_id: doc.jamaah_id, status: 'verified' })
         .whereNot('doc_type', 'NKH');
       if (verified.length >= REQUIRED_DOC_TYPES.length) {
-        await db('registrations')
+        const activated = await db('registrations')
           .where({ jamaah_id: doc.jamaah_id, status: 'pending_documents' })
-          .update({ status: 'active', updated_at: db.fn.now() });
+          .update({ status: 'active', updated_at: db.fn.now() })
+          .returning('*');
+        // Notifikasi ke agen referral: dokumen jamaahnya lengkap
+        const jm = await db('jamaah').where({ id: doc.jamaah_id }).first();
+        for (const r of activated) {
+          if (r.agent_id) {
+            await notifyAgent(db, {
+              agentId: r.agent_id, type: 'registration_active', title: 'Dokumen jamaah lengkap',
+              body: `${jm?.full_name ?? 'Jamaah'} (${r.reg_number}) dokumennya lengkap — registrasi aktif.`,
+              refType: 'registrations', refId: r.id
+            });
+          }
+        }
       }
     }
     await audit(req, {

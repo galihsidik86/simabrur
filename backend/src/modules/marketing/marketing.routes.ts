@@ -8,6 +8,7 @@ import { audit } from '../../middleware/audit.js';
 import bcrypt from 'bcryptjs';
 import { postJournal, commissionLines, reverseJournal } from '../accounting/journal.engine.js';
 import { generateInitialPassword } from '../agent-portal/agent-portal.service.js';
+import { notifyAgent } from '../agent-portal/notify.js';
 
 const MKT = ['marketing', 'pimpinan', 'keuangan'] as const;
 
@@ -206,6 +207,16 @@ commissionsRoutes.post('/:id/approve', requireAuth, requireRoles('keuangan'), as
       reversal_journal_id: null,
       updated_at: trx.fn.now()
     });
+    let jamaahName = 'komisi manual';
+    if (c.registration_id) {
+      const jm = await trx('registrations as r').join('jamaah as j', 'j.id', 'r.jamaah_id').select('j.full_name').where('r.id', c.registration_id).first();
+      jamaahName = jm?.full_name ?? 'jamaah';
+    }
+    await notifyAgent(trx, {
+      agentId: c.agent_id, type: 'commission_approved', title: 'Komisi disetujui',
+      body: `Komisi Rp ${Number(c.amount).toLocaleString('id-ID')} (${jamaahName}) disetujui, menunggu pembayaran.`,
+      refType: 'commissions', refId: c.id
+    });
     return { commissionId: c.id, journalNo: journal.journal_no, amount: Number(c.amount) };
   });
   await audit(req, { action: 'commissions.approve', entity: 'commissions', entityId: result.commissionId, newValues: result });
@@ -237,16 +248,16 @@ commissionsRoutes.post('/:id/pay', requireAuth, requireRoles('keuangan'), async 
       status: 'paid', payment_journal_id: journal.id, paid_by: req.user?.id ?? null, paid_at: trx.fn.now(), updated_at: trx.fn.now()
     });
     // Notifikasi in-portal untuk agen: komisi cair
-    let jamaahName = 'komisi manual';
+    let paidJamaahName = 'komisi manual';
     if (c.registration_id) {
       const jm = await trx('registrations as r').join('jamaah as j', 'j.id', 'r.jamaah_id')
         .select('j.full_name').where('r.id', c.registration_id).first();
-      jamaahName = jm?.full_name ?? 'jamaah';
+      paidJamaahName = jm?.full_name ?? 'jamaah';
     }
-    await trx('agent_notifications').insert({
-      agent_id: c.agent_id, type: 'commission_paid', title: 'Komisi cair',
-      body: `Komisi Rp ${Number(c.amount).toLocaleString('id-ID')} (${jamaahName}) telah dibayar ke Anda.`,
-      ref_type: 'commissions', ref_id: c.id
+    await notifyAgent(trx, {
+      agentId: c.agent_id, type: 'commission_paid', title: 'Komisi cair',
+      body: `Komisi Rp ${Number(c.amount).toLocaleString('id-ID')} (${paidJamaahName}) telah dibayar ke Anda.`,
+      refType: 'commissions', refId: c.id
     });
     return { commissionId: c.id, journalNo: journal.journal_no, amount: Number(c.amount) };
   });
