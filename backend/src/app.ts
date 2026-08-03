@@ -155,11 +155,20 @@ export function createApp() {
     // Aset ber-hash (assets/index-XXXX.js) aman di-cache lama; index.html TIDAK BOLEH
     // di-cache — browser/proxy yang memegang index lama akan menjalankan bundle lama
     // hingga 1 jam setelah deploy ("fitur baru tidak muncul")
-    const noStoreIndex = (res: express.Response, filePath: string) => {
+    const staticHeaders = (res: express.Response, filePath: string) => {
+      // index.html tak boleh di-cache; service worker & manifest harus selalu revalidasi
+      // (kalau immutable 30d, SW/PWA tak pernah update). Aset ber-hash lain aman lama.
       if (filePath.endsWith('index.html')) res.setHeader('Cache-Control', 'no-store');
+      else if (filePath.endsWith('sw.js') || filePath.endsWith('.webmanifest')) res.setHeader('Cache-Control', 'no-cache');
     };
+    // Digital Asset Links untuk TWA (Play Store). Dilayani eksplisit agar tak ditelan SPA fallback.
+    app.get('/.well-known/assetlinks.json', (_req, res) => {
+      const p = path.join(PUBLIC_DIR, '.well-known', 'assetlinks.json');
+      if (fs.existsSync(p)) { res.setHeader('Content-Type', 'application/json'); res.sendFile(p); }
+      else res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'assetlinks belum dikonfigurasi' } });
+    });
     app.use(
-      express.static(PUBLIC_DIR, { maxAge: '30d', immutable: true, index: 'index.html', setHeaders: noStoreIndex })
+      express.static(PUBLIC_DIR, { maxAge: '30d', immutable: true, index: 'index.html', dotfiles: 'allow', setHeaders: staticHeaders })
     );
     app.use((req, res, next) => {
       if (req.method !== 'GET' || req.path.startsWith('/v1') || req.path.startsWith('/uploads')) return next();

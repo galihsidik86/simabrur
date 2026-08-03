@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import axios from 'axios';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fmtShort, fmtFull, fmtDate } from '../../utils/format';
+import { useInstallPrompt, setManifestForRoute } from '../../pwa';
 
 /* ===== API portal agen (token terpisah dari staf & portal jamaah) ===== */
 const agenApi = axios.create({ baseURL: '/v1/portal-agen' });
@@ -35,6 +36,7 @@ const NOTIF_ICON: Record<string, { icon: string; bg: string }> = {
 export function AgenPortalPage() {
   const [authed, setAuthed] = useState(Boolean(sessionStorage.getItem('safar.agen')));
   const [mustChange, setMustChange] = useState(false);
+  useEffect(() => setManifestForRoute('/portal-agen'), []);
 
   if (!authed) return <LoginScreen onLogin={(mc) => { setMustChange(mc); setAuthed(true); }} />;
   if (mustChange) return <ChangePassword forced onDone={() => setMustChange(false)} onLogout={() => { sessionStorage.removeItem('safar.agen'); setAuthed(false); }} />;
@@ -46,6 +48,19 @@ function Shell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-[#efe8da]">
       <div className="mx-auto max-w-[480px] px-4 py-6">{children}</div>
     </div>
+  );
+}
+
+function InstallButton({ variant = 'full' }: { variant?: 'full' | 'compact' }) {
+  const { canInstall, install } = useInstallPrompt();
+  if (!canInstall) return null;
+  if (variant === 'compact') {
+    return <button onClick={install} className="cursor-pointer rounded-[8px] border border-[#e6ddca] bg-white px-3 py-1.5 text-[11px] font-semibold text-[oklch(0.5_0.09_165)]">⤓ Pasang</button>;
+  }
+  return (
+    <button onClick={install} className="mt-3 w-full cursor-pointer rounded-[9px] border border-[oklch(0.5_0.09_165)] bg-white px-4 py-2 text-[12.5px] font-semibold text-[oklch(0.5_0.09_165)]">
+      ⤓ Pasang aplikasi di layar utama
+    </button>
   );
 }
 
@@ -87,6 +102,7 @@ function LoginScreen({ onLogin }: { onLogin: (mustChange: boolean) => void }) {
           </button>
         </form>
         <div className="mt-4 text-[10.5px] text-[#9a917d]">Belum punya akses? Hubungi tim Marketing Safar untuk mengaktifkan portal agen Anda.</div>
+        <InstallButton />
       </div>
     </Shell>
   );
@@ -144,7 +160,10 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           <div className="font-display text-[18px] text-[#26221b] leading-tight">{me.data?.name ?? 'Portal Agen'}</div>
           <div className="text-[11px] text-[#6f6858]">Kode referral: <b className="font-mono">{me.data?.referralCode ?? '—'}</b> · komisi {me.data?.commissionPct ?? '—'}%</div>
         </div>
-        <button onClick={onLogout} className="cursor-pointer rounded-[8px] border border-[#e6ddca] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#6f6858]">Keluar</button>
+        <div className="flex items-center gap-2">
+          <InstallButton variant="compact" />
+          <button onClick={onLogout} className="cursor-pointer rounded-[8px] border border-[#e6ddca] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#6f6858]">Keluar</button>
+        </div>
       </div>
 
       <div className="mb-4 flex gap-1.5 overflow-x-auto">

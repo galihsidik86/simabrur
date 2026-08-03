@@ -222,7 +222,7 @@ Agen/mitra referral punya portal sendiri di **`/portal-agen`** (mobile-first, te
 | # | Langkah | Siapa | Di mana |
 |---|---|---|---|
 | 1 | **Aktifkan Portal** untuk agen → sistem terbitkan **password awal** (nomor HP jadi username). Password tampil **sekali** untuk diserahkan ke agen. Tombol **Reset Password** menerbitkan ulang | Marketing | `/marketing` → kolom **Portal** pada tabel agen |
-| 2 | Agen login di `/portal-agen` (HP + password), **wajib ganti password** saat login pertama | Agen | `/portal-agen` |
+| 2 | Agen login di `/portal-agen` (HP + password), **wajib ganti password** saat login pertama. Bisa **"Pasang aplikasi"** ke layar utama HP (PWA — jalan seperti aplikasi, dapat masuk Play Store lewat TWA) | Agen | `/portal-agen` |
 | 3 | Agen memantau: **Ringkasan** (KPI komisi didapat/terutang/pending) · **Jamaah Saya** (referralnya: nama, paket, status, % bayar) · **Komisi** (pending/disetujui/dibayar) · **Leads** · **Notifikasi** · **Profil** | Agen | `/portal-agen` |
 | 3a | **Notifikasi otomatis** di tab Notifikasi (badge merah "belum dibaca"; buka tab → tertandai terbaca): **jamaah baru** dari referral (saat mendaftar) · **dokumen lengkap** (registrasi jamaah referral jadi aktif) · **komisi disetujui** (menunggu bayar) · **komisi cair** (dibayar) | otomatis / Agen | `/portal-agen` → Notifikasi |
 | 4 | Agen menambah **prospek/lead** (nama + HP) → masuk ke daftar leads Marketing untuk ditindaklanjuti | Agen / Marketing | `/portal-agen` → tab Leads · `/marketing` |

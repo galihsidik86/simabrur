@@ -1,0 +1,20 @@
+{
+  "id": "/portal",
+  "name": "Safar — Portal Jamaah",
+  "short_name": "Safar Jamaah",
+  "description": "Portal jamaah Safar: status keberangkatan, pembayaran, dokumen, dan itinerary.",
+  "start_url": "/portal",
+  "scope": "/portal",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#efe8da",
+  "theme_color": "#16211b",
+  "lang": "id",
+  "dir": "ltr",
+  "categories": ["travel", "productivity"],
+  "icons": [
+    { "src": "/icons/pwa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/pwa-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

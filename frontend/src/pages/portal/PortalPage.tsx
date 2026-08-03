@@ -1,9 +1,10 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { fmtShort, fmtFull, fmtDate } from '../../utils/format';
 import { BackButton } from '../../components/BackButton';
+import { useInstallPrompt, setManifestForRoute } from '../../pwa';
 
 /* ===== API portal (token terpisah dari staf) ===== */
 const portalApi = axios.create({ baseURL: '/v1/portal' });
@@ -47,7 +48,18 @@ const ROOM: Record<string, string> = { quad: 'Quad', triple: 'Triple', double: '
 
 export function PortalPage() {
   const [authed, setAuthed] = useState(Boolean(sessionStorage.getItem('safar.portal')));
+  useEffect(() => setManifestForRoute('/portal'), []);
   return authed ? <PortalApp onLogout={() => { sessionStorage.removeItem('safar.portal'); setAuthed(false); }} /> : <PortalLogin onLogin={() => setAuthed(true)} />;
+}
+
+function PortalInstallButton() {
+  const { canInstall, install } = useInstallPrompt();
+  if (!canInstall) return null;
+  return (
+    <button type="button" onClick={install} className="mt-3 w-full cursor-pointer rounded-[10px] border border-primary bg-white py-2.5 text-[12.5px] font-semibold text-primary">
+      ⤓ Pasang aplikasi di layar utama
+    </button>
+  );
 }
 
 /* ===== Login ===== */
@@ -100,6 +112,7 @@ function PortalLogin({ onLogin }: { onLogin: () => void }) {
         <div className="mt-4 text-center text-[11px] text-muted-3">
           Nomor registrasi ada di invoice / kwitansi Anda. <Link to="/daftar" className="font-semibold text-primary">Belum terdaftar?</Link>
         </div>
+        <PortalInstallButton />
       </form>
     </div>
   );
