@@ -5,7 +5,7 @@ punya listing sendiri. Batas karakter Play ditulis di tiap bagian.
 
 > Domain resmi: **https://safar.sosmartpro.com**
 > Email kontak developer: **cs@safar.co.id** _(ganti bila kantor memakai email lain)_
-> Kebijakan privasi (wajib): **https://safar.sosmartpro.com/kebijakan-privasi** — draf teksnya ada di bagian akhir dokumen ini; halaman ini HARUS online sebelum submit.
+> Kebijakan privasi (wajib): **https://safar.sosmartpro.com/kebijakan-privasi** — ✅ SUDAH ONLINE (halaman resmi, siap dipakai sebagai URL kebijakan privasi di Play).
 
 ---
 
@@ -119,9 +119,9 @@ Play tidak menerima listing tanpa aset berikut. Ukuran & format tepat:
 
 | Aset | Ukuran | Format | Catatan |
 |---|---|---|---|
-| **Ikon aplikasi** | 512 × 512 px | PNG 32‑bit | Sudah ada: `frontend/public/icons/pwa-512.png` — pakai ini |
-| **Grafik unggulan** (feature graphic) | 1024 × 500 px | PNG/JPG | WAJIB. Belum ada — perlu dibuat (logo "S" emas di atas latar hijau `#16211b`) |
-| **Screenshot ponsel** | min 2, maks 8; sisi 320–3840 px, rasio ≤ 2:1 | PNG/JPG | Ambil dari portal berjalan (lihat cara di bawah) |
+| **Ikon aplikasi** | 512 × 512 px | PNG 32‑bit | ✅ Sudah ada: `frontend/public/icons/pwa-512.png` — pakai ini |
+| **Grafik unggulan** (feature graphic) | 1024 × 500 px | PNG | ✅ SUDAH DIBUAT — Jamaah: `twa/play-assets/feature-graphic-jamaah-1024x500.png` · Agen: `twa/play-assets/feature-graphic-agen-1024x500.png` |
+| **Screenshot ponsel** | min 2, maks 8; sisi 320–3840 px, rasio ≤ 2:1 | PNG/JPG | ⏳ Belum — ambil dari portal berjalan (lihat cara di bawah) |
 | Screenshot tablet 7"/10" | opsional | | Boleh dilewati untuk rilis awal |
 
 **Cara ambil screenshot cepat (tanpa HP):**
