@@ -4,7 +4,10 @@
     "target": {
       "namespace": "android_app",
       "package_name": "id.co.safar.jamaah",
-      "sha256_cert_fingerprints": ["REPLACE_WITH_PLAY_APP_SIGNING_SHA256_JAMAAH"]
+      "sha256_cert_fingerprints": [
+        "EF:BD:6F:6B:4C:C6:4E:94:24:4B:45:1B:27:CE:DF:B2:B2:4C:C5:5B:6B:DC:F0:4D:EE:4D:EF:BA:96:E8:86:B1",
+        "REPLACE_WITH_PLAY_APP_SIGNING_SHA256_JAMAAH"
+      ]
     }
   },
   {
@@ -12,7 +15,10 @@
     "target": {
       "namespace": "android_app",
       "package_name": "id.co.safar.agen",
-      "sha256_cert_fingerprints": ["REPLACE_WITH_PLAY_APP_SIGNING_SHA256_AGEN"]
+      "sha256_cert_fingerprints": [
+        "EF:BD:6F:6B:4C:C6:4E:94:24:4B:45:1B:27:CE:DF:B2:B2:4C:C5:5B:6B:DC:F0:4D:EE:4D:EF:BA:96:E8:86:B1",
+        "REPLACE_WITH_PLAY_APP_SIGNING_SHA256_AGEN"
+      ]
     }
   }
 ]

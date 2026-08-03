@@ -1,20 +1,29 @@
-# Proyek Android hasil generate Bubblewrap — dibuat ulang dari twa-manifest.json
-*/android/
-*/.gradle/
+# Proyek Android hasil generate Bubblewrap — dibuat ulang dari twa-manifest.json.
+# Bubblewrap meng-generate FLAT di dalam tiap folder portal (bukan di subfolder android/),
+# jadi kita abaikan seluruh berkas proyek Gradle-nya. Yang di-commit HANYA twa-manifest.json.
+*/app/
+*/gradle/
 */build/
+*/.gradle/
+*/build.gradle
+*/settings.gradle
+*/gradle.properties
+*/gradlew
+*/gradlew.bat
+*/manifest-checksum.txt
+*/store_icon.png
+*/splash*.png
+*/hs_err_pid*.log
 
 # Output build
 */*.apk
 */*.aab
+*/*.idsig
 
 # KUNCI PENANDATANGANAN — RAHASIA, JANGAN PERNAH DI-COMMIT
 */*.keystore
 */*.jks
 */android.keystore
-
-# Ikon yang di-download/generate Bubblewrap
-*/store_icon.png
-*/splash*.png
 
 # Cadangan
 */twa-manifest.json.bak
