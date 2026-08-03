@@ -164,8 +164,13 @@ export function createApp() {
     // Digital Asset Links untuk TWA (Play Store). Dilayani eksplisit agar tak ditelan SPA fallback.
     app.get('/.well-known/assetlinks.json', (_req, res) => {
       const p = path.join(PUBLIC_DIR, '.well-known', 'assetlinks.json');
-      if (fs.existsSync(p)) { res.setHeader('Content-Type', 'application/json'); res.sendFile(p); }
-      else res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'assetlinks belum dikonfigurasi' } });
+      if (fs.existsSync(p)) {
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.send(fs.readFileSync(p, 'utf8'));
+      } else {
+        res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'assetlinks belum dikonfigurasi' } });
+      }
     });
     app.use(
       express.static(PUBLIC_DIR, { maxAge: '30d', immutable: true, index: 'index.html', dotfiles: 'allow', setHeaders: staticHeaders })

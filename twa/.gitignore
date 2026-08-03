@@ -1,0 +1,20 @@
+# Proyek Android hasil generate Bubblewrap — dibuat ulang dari twa-manifest.json
+*/android/
+*/.gradle/
+*/build/
+
+# Output build
+*/*.apk
+*/*.aab
+
+# KUNCI PENANDATANGANAN — RAHASIA, JANGAN PERNAH DI-COMMIT
+*/*.keystore
+*/*.jks
+*/android.keystore
+
+# Ikon yang di-download/generate Bubblewrap
+*/store_icon.png
+*/splash*.png
+
+# Cadangan
+*/twa-manifest.json.bak
