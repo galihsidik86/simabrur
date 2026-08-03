@@ -121,7 +121,7 @@ Play tidak menerima listing tanpa aset berikut. Ukuran & format tepat:
 |---|---|---|---|
 | **Ikon aplikasi** | 512 × 512 px | PNG 32‑bit | ✅ Sudah ada: `frontend/public/icons/pwa-512.png` — pakai ini |
 | **Grafik unggulan** (feature graphic) | 1024 × 500 px | PNG | ✅ SUDAH DIBUAT — Jamaah: `twa/play-assets/feature-graphic-jamaah-1024x500.png` · Agen: `twa/play-assets/feature-graphic-agen-1024x500.png` |
-| **Screenshot ponsel** | min 2, maks 8; sisi 320–3840 px, rasio ≤ 2:1 | PNG/JPG | ⏳ Belum — ambil dari portal berjalan (lihat cara di bawah) |
+| **Screenshot ponsel** | min 2, maks 8; sisi 320–3840 px, rasio ≤ 2:1 | PNG | ✅ SUDAH DIBUAT — 4 per app di `twa/play-assets/screenshots/` (824×1600, rasio 1,94:1, data demo fiktif) |
 | Screenshot tablet 7"/10" | opsional | | Boleh dilewati untuk rilis awal |
 
 **Cara ambil screenshot cepat (tanpa HP):**
