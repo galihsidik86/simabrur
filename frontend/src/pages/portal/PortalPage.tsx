@@ -4,7 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { fmtShort, fmtFull, fmtDate } from '../../utils/format';
 import { BackButton } from '../../components/BackButton';
+import { AuthImage, downloadViaClient } from '../../components/AuthImage';
 import { useInstallPrompt, setManifestForRoute } from '../../pwa';
+
+interface GalleryPhoto { id: string; caption: string | null; createdAt: string }
 
 /* ===== API portal (token terpisah dari staf) ===== */
 const portalApi = axios.create({ baseURL: '/v1/portal' });
@@ -442,6 +445,88 @@ function TabPerjalanan({ d }: { d: PortalData }) {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Galeri foto rombongan */}
+      <TabGaleri groupName={d.trip.groupName} />
+    </div>
+  );
+}
+
+/* ===== Galeri foto rombongan (dalam tab Perjalanan) ===== */
+function TabGaleri({ groupName }: { groupName: string | null }) {
+  const [lightbox, setLightbox] = useState<GalleryPhoto | null>(null);
+  const [zipping, setZipping] = useState(false);
+  const { data: photos, isLoading } = useQuery({
+    queryKey: ['portal-gallery'],
+    queryFn: async () => (await portalApi.get('/gallery')).data.data as GalleryPhoto[]
+  });
+
+  async function downloadAll() {
+    setZipping(true);
+    try {
+      await downloadViaClient(portalApi, '/gallery.zip', 'galeri-rombongan.zip');
+    } finally {
+      setZipping(false);
+    }
+  }
+
+  return (
+    <div className="rounded-[14px] border border-line bg-card p-4 shadow-card">
+      <div className="mb-2.5 flex items-center justify-between">
+        <div className="text-[12.5px] font-bold">Galeri Foto Rombongan</div>
+        {photos && photos.length > 0 && (
+          <button onClick={downloadAll} disabled={zipping}
+            className="cursor-pointer rounded-[8px] bg-primary px-2.5 py-1 text-[10.5px] font-semibold text-white disabled:opacity-60">
+            {zipping ? 'Menyiapkan…' : `⤓ Unduh Semua (${photos.length})`}
+          </button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="py-6 text-center text-[11.5px] text-muted-3">Memuat galeri…</div>
+      ) : !photos || photos.length === 0 ? (
+        <div className="rounded-[10px] bg-panel py-7 text-center text-[11.5px] text-muted-3">
+          Belum ada foto untuk rombongan {groupName ?? 'Anda'}.<br />Foto akan muncul di sini setelah dibagikan petugas.
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-1.5">
+          {photos.map((p) => (
+            <button key={p.id} onClick={() => setLightbox(p)} className="relative aspect-square cursor-pointer overflow-hidden rounded-[8px]">
+              <AuthImage client={portalApi} src={`/gallery/${p.id}/file`} alt={p.caption ?? 'Foto rombongan'}
+                className="h-full w-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {lightbox && <GaleriLightbox photo={lightbox} onClose={() => setLightbox(null)} />}
+    </div>
+  );
+}
+
+function GaleriLightbox({ photo, onClose }: { photo: GalleryPhoto; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  async function save() {
+    setBusy(true);
+    try {
+      const ext = 'jpg';
+      await downloadViaClient(portalApi, `/gallery/${photo.id}/file`, `${(photo.caption || 'foto-rombongan').replace(/[^\w-]+/g, '-')}.${ext}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/85 p-4" onClick={onClose}>
+      <AuthImage client={portalApi} src={`/gallery/${photo.id}/file`} alt={photo.caption ?? 'Foto rombongan'}
+        className="max-h-[70vh] max-w-full rounded-[12px] object-contain" style={{ background: 'transparent' }} />
+      {photo.caption && <div className="mt-3 max-w-full text-center text-[12px] text-white/90">{photo.caption}</div>}
+      <div className="mt-4 flex gap-2" onClick={(e) => e.stopPropagation()}>
+        <button onClick={save} disabled={busy}
+          className="cursor-pointer rounded-[10px] bg-white px-4 py-2 text-[12.5px] font-semibold text-ink-strong disabled:opacity-60">
+          {busy ? 'Mengunduh…' : '⤓ Unduh Foto'}
+        </button>
+        <button onClick={onClose} className="cursor-pointer rounded-[10px] border border-white/40 px-4 py-2 text-[12.5px] font-semibold text-white">Tutup</button>
       </div>
     </div>
   );

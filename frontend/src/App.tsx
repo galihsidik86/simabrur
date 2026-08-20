@@ -25,6 +25,7 @@ import { PortalPage } from './pages/portal/PortalPage';
 import { AgenPortalPage } from './pages/portal/AgenPortalPage';
 import { AdminPage } from './pages/AdminPage';
 import { MarketingPage } from './pages/MarketingPage';
+import { KebijakanPrivasi } from './pages/KebijakanPrivasi';
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } });
 
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="/daftar" element={<DaftarWizard />} />
             <Route path="/portal" element={<PortalPage />} />
             <Route path="/portal-agen" element={<AgenPortalPage />} />
+            <Route path="/kebijakan-privasi" element={<KebijakanPrivasi />} />
             <Route element={<RequireAuth />}>
               {/* Dokumen A4 printable — di luar AppShell */}
               <Route path="/dokumen/invoice/:id" element={<InvoiceDoc />} />
