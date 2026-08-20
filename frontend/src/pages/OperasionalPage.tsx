@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useAuth } from '../store/auth';
 import { fmtDate } from '../utils/format';
+import { AuthImage, downloadViaClient } from '../components/AuthImage';
 
 interface Departure { id: string; departure_date: string; package_name: string }
 interface ManifestRow {
@@ -37,6 +38,7 @@ export function OperasionalPage() {
   const [depId, setDepId] = useState<string>('');
   const [edit, setEdit] = useState<ManifestRow | null>(null);
   const [showGroups, setShowGroups] = useState(false);
+  const [showGallery, setShowGallery] = useState(false);
   const [view, setView] = useState<'manifest' | 'lapangan'>('manifest');
 
   const { data: departures } = useQuery({
@@ -83,6 +85,10 @@ export function OperasionalPage() {
             return <span key={i}>{i > 0 && ' · '}{v ? <>{k}: <b>{v}</b></> : part}</span>;
           })}
         </span>
+        <button onClick={() => setShowGallery(true)}
+          className="cursor-pointer rounded-[9px] border border-line-2 bg-white px-3.5 py-2 text-[12px] font-semibold text-muted hover:bg-panel">
+          Galeri Foto
+        </button>
         {canEdit && (
           <button onClick={() => setShowGroups(true)}
             className="cursor-pointer rounded-[9px] bg-primary px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-primary-deep">
@@ -174,6 +180,117 @@ export function OperasionalPage() {
 
       {edit && <EditOpsModal row={edit} departureId={selected} groups={m?.groups ?? []} onClose={() => setEdit(null)} />}
       {showGroups && m && <RombonganModal departureId={selected} groups={m.groups} onClose={() => setShowGroups(false)} />}
+      {showGallery && selected && (
+        <GaleriModal departureId={selected} title={m?.departure.packageName ?? ''} canEdit={Boolean(canEdit)} onClose={() => setShowGallery(false)} />
+      )}
+    </div>
+  );
+}
+
+/* ===== Modal galeri foto per keberangkatan ===== */
+interface GalleryPhoto { id: string; caption: string | null; fileSize: number; createdAt: string }
+
+function GaleriModal({ departureId, title, canEdit, onClose }: { departureId: string; title: string; canEdit: boolean; onClose: () => void }) {
+  const qc = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState('');
+  const [zipping, setZipping] = useState(false);
+  const [preview, setPreview] = useState<GalleryPhoto | null>(null);
+
+  const { data: photos, isLoading } = useQuery({
+    queryKey: ['gallery', departureId],
+    queryFn: async () => (await api.get(`/departures/${departureId}/gallery`)).data.data as GalleryPhoto[]
+  });
+  const refresh = () => qc.invalidateQueries({ queryKey: ['gallery', departureId] });
+  const onErr = (e: unknown) =>
+    setError((e as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Operasi gagal');
+
+  const upload = useMutation({
+    mutationFn: async (files: FileList) => {
+      const fd = new FormData();
+      Array.from(files).forEach((f) => fd.append('files', f));
+      await api.post(`/departures/${departureId}/gallery`, fd);
+    },
+    onSuccess: () => { setError(''); refresh(); },
+    onError: onErr
+  });
+  const remove = useMutation({
+    mutationFn: async (id: string) => api.delete(`/gallery/${id}`),
+    onSuccess: () => { setPreview(null); refresh(); },
+    onError: onErr
+  });
+
+  async function downloadAll() {
+    setZipping(true);
+    try {
+      await downloadViaClient(api, `/departures/${departureId}/gallery/zip`, 'galeri-rombongan.zip');
+    } catch (e) { onErr(e); } finally { setZipping(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="max-h-[88vh] w-[720px] max-w-full overflow-y-auto rounded-[15px] bg-card p-6 shadow-float">
+        <div className="flex items-center gap-3">
+          <div>
+            <div className="font-display text-[19px] text-ink-strong">Galeri Foto Rombongan</div>
+            <div className="mt-0.5 text-[11.5px] text-muted-3">{title} · foto yang diunggah dapat diunduh jamaah pada keberangkatan ini.</div>
+          </div>
+          <div className="ml-auto flex gap-2">
+            {photos && photos.length > 0 && (
+              <button onClick={downloadAll} disabled={zipping}
+                className="cursor-pointer rounded-[9px] border border-line-2 bg-white px-3 py-2 text-[12px] font-semibold text-muted hover:bg-panel disabled:opacity-60">
+                {zipping ? 'Menyiapkan…' : '⤓ Unduh Semua'}
+              </button>
+            )}
+            {canEdit && (
+              <>
+                <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp" multiple className="hidden"
+                  onChange={(e) => { if (e.target.files?.length) upload.mutate(e.target.files); e.target.value = ''; }} />
+                <button onClick={() => fileRef.current?.click()} disabled={upload.isPending}
+                  className="cursor-pointer rounded-[9px] bg-primary px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-primary-deep disabled:opacity-60">
+                  {upload.isPending ? 'Mengunggah…' : '+ Unggah Foto'}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {error && <div className="mt-3 rounded-[9px] bg-danger-bg px-3 py-2 text-[12px] font-medium text-danger-deep">{error}</div>}
+
+        {isLoading ? (
+          <div className="py-10 text-center text-[12.5px] text-muted-2">Memuat galeri…</div>
+        ) : !photos || photos.length === 0 ? (
+          <div className="mt-4 rounded-[11px] border border-dashed border-line-2 py-12 text-center text-[12.5px] text-muted-3">
+            Belum ada foto. {canEdit ? 'Klik “+ Unggah Foto” untuk menambah (JPG/PNG/WEBP, maks 12 MB/foto).' : ''}
+          </div>
+        ) : (
+          <div className="mt-4 grid grid-cols-4 gap-2">
+            {photos.map((p) => (
+              <div key={p.id} className="group relative aspect-square overflow-hidden rounded-[10px] border border-line-3">
+                <AuthImage client={api} src={`/gallery/${p.id}/file`} alt={p.caption ?? 'Foto'} className="h-full w-full cursor-pointer object-cover"
+                  onClick={() => setPreview(p)} />
+                {canEdit && (
+                  <button onClick={() => remove.mutate(p.id)}
+                    className="absolute right-1 top-1 hidden h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-black/60 text-[12px] text-white group-hover:flex">
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {preview && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-6" onClick={() => setPreview(null)}>
+            <AuthImage client={api} src={`/gallery/${preview.id}/file`} alt={preview.caption ?? 'Foto'}
+              className="max-h-[80vh] max-w-full rounded-[12px] object-contain" style={{ background: 'transparent' }} />
+          </div>
+        )}
+
+        <div className="mt-5 flex justify-end">
+          <button onClick={onClose} className="cursor-pointer rounded-[9px] border border-line-2 bg-white px-4 py-2 text-[12.5px] font-semibold text-muted">Tutup</button>
+        </div>
+      </div>
     </div>
   );
 }

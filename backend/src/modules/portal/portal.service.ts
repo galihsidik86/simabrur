@@ -185,5 +185,12 @@ export const portalService = {
     if (!owned) throw errors.notFound('Kwitansi tidak ditemukan');
     const { paymentsService } = await import('../payments/payments.service.js');
     return paymentsService.receiptDocument(receiptId);
+  },
+
+  /** Departure_id keberangkatan token (untuk scoping galeri ke rombongan sendiri). */
+  async departureIdFor(claims: PortalClaims): Promise<string> {
+    const reg = await db('registrations').where({ id: claims.registrationId }).first();
+    if (!reg) throw errors.notFound('Registrasi tidak ditemukan');
+    return String(reg.departure_id);
   }
 };

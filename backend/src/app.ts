@@ -23,6 +23,7 @@ import { auditLogsRoutes, rolesRoutes, usersRoutes } from './modules/admin/admin
 import { agentsRoutes, commissionsRoutes, leadsRoutes } from './modules/marketing/marketing.routes.js';
 import { mabrurRoutes } from './modules/mabrur/mabrur.routes.js';
 import { searchRoutes } from './modules/search/search.routes.js';
+import { departureGalleryRoutes, galleryRoutes } from './modules/gallery/gallery.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -96,6 +97,18 @@ export function createApp() {
         message: { success: false, error: { code: 'RATE_LIMITED', message: 'Terlalu banyak unggahan dari alamat ini — coba lagi nanti' } }
       })
     );
+    // Upload foto galeri (staf) — batasi kuota disk; GET (lihat/unduh) tak dibatasi
+    app.use(
+      '/v1/departures/:id/gallery',
+      rateLimit({
+        windowMs: 15 * 60 * 1000,
+        limit: 60,
+        standardHeaders: true,
+        legacyHeaders: false,
+        skip: (req) => req.method === 'GET',
+        message: { success: false, error: { code: 'RATE_LIMITED', message: 'Terlalu banyak unggahan galeri — coba lagi nanti' } }
+      })
+    );
   }
   // Dokumen jamaah (PII) TIDAK disajikan statis — hanya lewat
   // GET /v1/documents/:id/file yang ber-otentikasi + RBAC.
@@ -124,6 +137,8 @@ export function createApp() {
   app.use('/v1/receipts', receiptsRoutes);
   app.use('/v1/bank-accounts', bankAccountsRoutes);
   app.get('/v1/departures/:id/manifest', ...manifestHandler);
+  app.use('/v1/departures/:id/gallery', departureGalleryRoutes);
+  app.use('/v1/gallery', galleryRoutes);
   app.patch('/v1/registrations/:id/assignment', ...assignmentHandler);
   app.use('/v1/groups', opsGroupsRoutes);
   app.use('/v1/visas', visasRoutes);
