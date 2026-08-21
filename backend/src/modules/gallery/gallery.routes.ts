@@ -32,8 +32,9 @@ const storage = multer.diskStorage({
   },
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
+    const prefix = file.fieldname === 'thumbnails' ? 'thumb-' : '';
     // Nama acak → tak bisa dienumerasi dari luar
-    cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`);
+    cb(null, `${prefix}${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`);
   }
 });
 
@@ -48,12 +49,18 @@ const upload = multer({
 });
 
 /** Endpoint per-keberangkatan (dipasang di /v1/departures/:id/gallery, mergeParams). */
+const uploadFields = upload.fields([
+  { name: 'files', maxCount: 30 },
+  { name: 'thumbnails', maxCount: 30 }
+]);
+
 export const departureGalleryRoutes = Router({ mergeParams: true });
 departureGalleryRoutes.get('/', requireAuth, requireRoles('operasional', 'marketing', 'keuangan', 'pimpinan'), galleryController.list);
 departureGalleryRoutes.get('/zip', requireAuth, requireRoles('operasional', 'marketing', 'keuangan', 'pimpinan'), galleryController.zip);
-departureGalleryRoutes.post('/', requireAuth, requireRoles('operasional'), upload.array('files', 30), galleryController.upload);
+departureGalleryRoutes.post('/', requireAuth, requireRoles('operasional'), uploadFields, galleryController.upload);
 
 /** Endpoint per-foto (dipasang di /v1/gallery). */
 export const galleryRoutes = Router();
 galleryRoutes.get('/:photoId/file', requireAuth, requireRoles('operasional', 'marketing', 'keuangan', 'pimpinan'), galleryController.file);
+galleryRoutes.patch('/:photoId', requireAuth, requireRoles('operasional'), galleryController.updateCaption);
 galleryRoutes.delete('/:photoId', requireAuth, requireRoles('operasional'), galleryController.remove);

@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { useAuth } from '../store/auth';
 import { fmtDate } from '../utils/format';
 import { AuthImage, downloadViaClient } from '../components/AuthImage';
+import { makeThumbnail } from '../utils/image';
 
 interface Departure { id: string; departure_date: string; package_name: string }
 interface ManifestRow {
@@ -188,7 +189,8 @@ export function OperasionalPage() {
 }
 
 /* ===== Modal galeri foto per keberangkatan ===== */
-interface GalleryPhoto { id: string; caption: string | null; fileSize: number; createdAt: string }
+interface GalleryPhoto { id: string; caption: string | null; hasThumb: boolean; fileSize: number; createdAt: string }
+interface PendingPhoto { file: File; caption: string; url: string }
 
 function GaleriModal({ departureId, title, canEdit, onClose }: { departureId: string; title: string; canEdit: boolean; onClose: () => void }) {
   const qc = useQueryClient();
@@ -196,6 +198,7 @@ function GaleriModal({ departureId, title, canEdit, onClose }: { departureId: st
   const [error, setError] = useState('');
   const [zipping, setZipping] = useState(false);
   const [preview, setPreview] = useState<GalleryPhoto | null>(null);
+  const [pending, setPending] = useState<PendingPhoto[]>([]);
 
   const { data: photos, isLoading } = useQuery({
     queryKey: ['gallery', departureId],
@@ -205,18 +208,41 @@ function GaleriModal({ departureId, title, canEdit, onClose }: { departureId: st
   const onErr = (e: unknown) =>
     setError((e as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Operasi gagal');
 
+  function pickFiles(list: FileList) {
+    setError('');
+    setPending((prev) => [...prev, ...Array.from(list).map((file) => ({ file, caption: '', url: URL.createObjectURL(file) }))]);
+  }
+  function clearPending() {
+    pending.forEach((p) => URL.revokeObjectURL(p.url));
+    setPending([]);
+  }
+
   const upload = useMutation({
-    mutationFn: async (files: FileList) => {
+    mutationFn: async (items: PendingPhoto[]) => {
       const fd = new FormData();
-      Array.from(files).forEach((f) => fd.append('files', f));
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        fd.append('files', it.file);
+        // Thumbnail sejajar per indeks: bila pembuatan gagal, pakai file asli
+        // agar jumlah thumbnails == files (server memasangkan berdasarkan urutan).
+        const thumb = await makeThumbnail(it.file);
+        if (thumb) fd.append('thumbnails', thumb, `thumb-${i}.jpg`);
+        else fd.append('thumbnails', it.file, it.file.name);
+        fd.append('captions', it.caption);
+      }
       await api.post(`/departures/${departureId}/gallery`, fd);
     },
-    onSuccess: () => { setError(''); refresh(); },
+    onSuccess: () => { clearPending(); refresh(); },
     onError: onErr
   });
   const remove = useMutation({
     mutationFn: async (id: string) => api.delete(`/gallery/${id}`),
     onSuccess: () => { setPreview(null); refresh(); },
+    onError: onErr
+  });
+  const saveCaption = useMutation({
+    mutationFn: async ({ id, caption }: { id: string; caption: string }) => api.patch(`/gallery/${id}`, { caption }),
+    onSuccess: () => { setError(''); refresh(); },
     onError: onErr
   });
 
@@ -227,6 +253,8 @@ function GaleriModal({ departureId, title, canEdit, onClose }: { departureId: st
     } catch (e) { onErr(e); } finally { setZipping(false); }
   }
 
+  const staging = pending.length > 0;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="max-h-[88vh] w-[720px] max-w-full overflow-y-auto rounded-[15px] bg-card p-6 shadow-float">
@@ -236,19 +264,19 @@ function GaleriModal({ departureId, title, canEdit, onClose }: { departureId: st
             <div className="mt-0.5 text-[11.5px] text-muted-3">{title} · foto yang diunggah dapat diunduh jamaah pada keberangkatan ini.</div>
           </div>
           <div className="ml-auto flex gap-2">
-            {photos && photos.length > 0 && (
+            {photos && photos.length > 0 && !staging && (
               <button onClick={downloadAll} disabled={zipping}
                 className="cursor-pointer rounded-[9px] border border-line-2 bg-white px-3 py-2 text-[12px] font-semibold text-muted hover:bg-panel disabled:opacity-60">
                 {zipping ? 'Menyiapkan…' : '⤓ Unduh Semua'}
               </button>
             )}
-            {canEdit && (
+            {canEdit && !staging && (
               <>
                 <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp" multiple className="hidden"
-                  onChange={(e) => { if (e.target.files?.length) upload.mutate(e.target.files); e.target.value = ''; }} />
-                <button onClick={() => fileRef.current?.click()} disabled={upload.isPending}
-                  className="cursor-pointer rounded-[9px] bg-primary px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-primary-deep disabled:opacity-60">
-                  {upload.isPending ? 'Mengunggah…' : '+ Unggah Foto'}
+                  onChange={(e) => { if (e.target.files?.length) pickFiles(e.target.files); e.target.value = ''; }} />
+                <button onClick={() => fileRef.current?.click()}
+                  className="cursor-pointer rounded-[9px] bg-primary px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-primary-deep">
+                  + Unggah Foto
                 </button>
               </>
             )}
@@ -257,40 +285,96 @@ function GaleriModal({ departureId, title, canEdit, onClose }: { departureId: st
 
         {error && <div className="mt-3 rounded-[9px] bg-danger-bg px-3 py-2 text-[12px] font-medium text-danger-deep">{error}</div>}
 
-        {isLoading ? (
+        {/* Tahap unggah: pratinjau + caption per foto sebelum dikirim */}
+        {staging ? (
+          <div className="mt-4">
+            <div className="mb-2 text-[12.5px] font-semibold text-ink">Beri judul/keterangan (opsional), lalu unggah</div>
+            <div className="flex flex-col gap-2">
+              {pending.map((p, i) => (
+                <div key={p.url} className="flex items-center gap-3 rounded-[10px] border border-line-3 bg-panel p-2">
+                  <img src={p.url} alt="pratinjau" className="h-14 w-14 flex-none rounded-[7px] object-cover" />
+                  <input autoFocus={i === 0} className="fld !py-2 flex-1 !text-[12.5px]" placeholder="mis. Depan Ka'bah / Ziarah Masjid Nabawi"
+                    value={p.caption} maxLength={200}
+                    onChange={(e) => setPending((prev) => prev.map((x, j) => (j === i ? { ...x, caption: e.target.value } : x)))} />
+                  <button onClick={() => setPending((prev) => { URL.revokeObjectURL(p.url); return prev.filter((_, j) => j !== i); })}
+                    className="flex-none cursor-pointer rounded-[7px] border border-line-2 bg-white px-2 py-1.5 text-[11px] font-semibold text-muted hover:bg-panel">Hapus</button>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <button onClick={() => fileRef.current?.click()}
+                className="cursor-pointer rounded-[9px] border border-line-2 bg-white px-3 py-2 text-[12px] font-semibold text-muted hover:bg-panel">+ Tambah lagi</button>
+              <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp" multiple className="hidden"
+                onChange={(e) => { if (e.target.files?.length) pickFiles(e.target.files); e.target.value = ''; }} />
+              <div className="ml-auto flex gap-2">
+                <button onClick={clearPending} disabled={upload.isPending}
+                  className="cursor-pointer rounded-[9px] border border-line-2 bg-white px-4 py-2 text-[12.5px] font-semibold text-muted disabled:opacity-60">Batal</button>
+                <button onClick={() => upload.mutate(pending)} disabled={upload.isPending}
+                  className="cursor-pointer rounded-[9px] bg-primary px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-primary-deep disabled:opacity-60">
+                  {upload.isPending ? 'Mengunggah…' : `Unggah ${pending.length} foto`}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : isLoading ? (
           <div className="py-10 text-center text-[12.5px] text-muted-2">Memuat galeri…</div>
         ) : !photos || photos.length === 0 ? (
           <div className="mt-4 rounded-[11px] border border-dashed border-line-2 py-12 text-center text-[12.5px] text-muted-3">
             Belum ada foto. {canEdit ? 'Klik “+ Unggah Foto” untuk menambah (JPG/PNG/WEBP, maks 12 MB/foto).' : ''}
           </div>
         ) : (
-          <div className="mt-4 grid grid-cols-4 gap-2">
+          <div className="mt-4 grid grid-cols-4 gap-3">
             {photos.map((p) => (
-              <div key={p.id} className="group relative aspect-square overflow-hidden rounded-[10px] border border-line-3">
-                <AuthImage client={api} src={`/gallery/${p.id}/file`} alt={p.caption ?? 'Foto'} className="h-full w-full cursor-pointer object-cover"
-                  onClick={() => setPreview(p)} />
-                {canEdit && (
-                  <button onClick={() => remove.mutate(p.id)}
-                    className="absolute right-1 top-1 hidden h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-black/60 text-[12px] text-white group-hover:flex">
-                    ×
-                  </button>
-                )}
+              <div key={p.id} className="flex flex-col gap-1">
+                <div className="group relative aspect-square overflow-hidden rounded-[10px] border border-line-3">
+                  <AuthImage client={api} src={`/gallery/${p.id}/file?variant=thumb`} alt={p.caption ?? 'Foto'} className="h-full w-full cursor-pointer object-cover"
+                    onClick={() => setPreview(p)} />
+                  {canEdit && (
+                    <button onClick={() => remove.mutate(p.id)}
+                      className="absolute right-1 top-1 hidden h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-black/60 text-[12px] text-white group-hover:flex">
+                      ×
+                    </button>
+                  )}
+                </div>
+                {canEdit
+                  ? <CaptionEditor value={p.caption} onSave={(caption) => saveCaption.mutate({ id: p.id, caption })} saving={saveCaption.isPending} />
+                  : p.caption && <div className="truncate px-0.5 text-[11px] text-muted-2" title={p.caption}>{p.caption}</div>}
               </div>
             ))}
           </div>
         )}
 
         {preview && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-6" onClick={() => setPreview(null)}>
+          <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black/85 p-6" onClick={() => setPreview(null)}>
             <AuthImage client={api} src={`/gallery/${preview.id}/file`} alt={preview.caption ?? 'Foto'}
-              className="max-h-[80vh] max-w-full rounded-[12px] object-contain" style={{ background: 'transparent' }} />
+              className="max-h-[78vh] max-w-full rounded-[12px] object-contain" style={{ background: 'transparent' }} />
+            {preview.caption && <div className="mt-3 text-[12.5px] text-white/90">{preview.caption}</div>}
           </div>
         )}
 
-        <div className="mt-5 flex justify-end">
-          <button onClick={onClose} className="cursor-pointer rounded-[9px] border border-line-2 bg-white px-4 py-2 text-[12.5px] font-semibold text-muted">Tutup</button>
-        </div>
+        {!staging && (
+          <div className="mt-5 flex justify-end">
+            <button onClick={onClose} className="cursor-pointer rounded-[9px] border border-line-2 bg-white px-4 py-2 text-[12.5px] font-semibold text-muted">Tutup</button>
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+/* Editor caption inline pada tiap tile (simpan saat berubah). */
+function CaptionEditor({ value, onSave, saving }: { value: string | null; onSave: (caption: string) => void; saving: boolean }) {
+  const [text, setText] = useState(value ?? '');
+  const dirty = text.trim() !== (value ?? '').trim();
+  return (
+    <div className="flex items-center gap-1">
+      <input className="fld !w-full !px-2 !py-1 !text-[11px]" placeholder="beri judul…" value={text} maxLength={200}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter' && dirty) onSave(text.trim()); }} />
+      {dirty && (
+        <button onClick={() => onSave(text.trim())} disabled={saving}
+          className="flex-none cursor-pointer rounded-[6px] bg-primary px-2 py-1 text-[10px] font-bold text-white disabled:opacity-60">✓</button>
+      )}
     </div>
   );
 }
