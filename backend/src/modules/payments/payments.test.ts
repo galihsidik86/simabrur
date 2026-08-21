@@ -234,3 +234,46 @@ describe('pengaman pembayaran (audit fixes)', () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe('guard: pembayaran pending ganda tidak boleh over-credit 2-1100', () => {
+  it('dua pembayaran pending penuh lolos createPayment, verifikasi kedua ditolak (409)', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const dep = await db('departures as d')
+      .join('packages as p', 'p.id', 'd.package_id')
+      .where('p.code', 'UMR-PLUS-AQ')
+      .select('d.id')
+      .first();
+    // Registrasi baru → invoice terdedikasi (lunas)
+    const reg = await request(app).post('/v1/registrations').send({
+      departureId: dep.id, roomType: 'quad', paymentScheme: 'lunas', source: 'web',
+      jamaah: {
+        nik: '9911000000000009', fullName: 'UJI DOBEL PENDING', gender: 'L', birthPlace: 'Bogor',
+        birthDate: '1981-02-02', phone: '081255550009', address: 'Jl. Uji No. 9, Bogor',
+        emergencyContactName: 'Keluarga', emergencyContactPhone: '081277770009',
+        passportNo: 'X7654329', passportExpiry: '2030-06-01'
+      }
+    });
+    expect(reg.status).toBe(201);
+    const inv = await db('invoices').where({ id: reg.body.data.invoiceId }).first();
+    const total = Number(inv.total_amount);
+    const body = { invoiceId: inv.id, bankAccountCode: '1-1200', amount: total, method: 'transfer' };
+
+    // Dua pembayaran penuh sama-sama lolos saat pending (verified masih 0)
+    const p1 = await request(app).post('/v1/payments').set('Authorization', `Bearer ${keu}`).send(body);
+    const p2 = await request(app).post('/v1/payments').set('Authorization', `Bearer ${keu}`).send(body);
+    expect(p1.status).toBe(201);
+    expect(p2.status).toBe(201);
+
+    // Verifikasi pertama OK; kedua ditolak oleh guard kumulatif → tidak dobel-kredit 2-1100
+    const v1 = await request(app).patch(`/v1/payments/${p1.body.data.id}/verify`).set('Authorization', `Bearer ${keu}`);
+    expect(v1.status).toBe(200);
+    const v2 = await request(app).patch(`/v1/payments/${p2.body.data.id}/verify`).set('Authorization', `Bearer ${keu}`);
+    expect(v2.status).toBe(409);
+
+    // Hanya satu jurnal penerimaan terposting utk invoice ini
+    const receipts = await db('receipts as rc')
+      .join('payments as pm', 'pm.id', 'rc.payment_id')
+      .where('pm.invoice_id', inv.id);
+    expect(receipts).toHaveLength(1);
+  });
+});

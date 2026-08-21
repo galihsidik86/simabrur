@@ -150,6 +150,9 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [tab, setTab] = useState<Tab>('ringkasan');
   const me = useQuery({ queryKey: ['agen-me'], queryFn: async () => (await agenApi.get('/me')).data.data as Me });
   const { data: summary } = useQuery({ queryKey: ['agen-summary'], queryFn: async () => (await agenApi.get('/summary')).data.data as Summary });
+  // Token agen tak punya refresh; bila /me error (mis. sesi kedaluwarsa/401), keluar
+  // ke layar login alih-alih membiarkan tab macet di "Memuat…" selamanya.
+  useEffect(() => { if (me.isError) onLogout(); }, [me.isError, onLogout]);
   const unread = summary?.unreadNotifications ?? 0;
   const label = (t: Tab) => (t === 'jamaah' ? 'Jamaah Saya' : t === 'notif' ? 'Notifikasi' : t);
 

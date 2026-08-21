@@ -40,7 +40,9 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 12 * 1024 * 1024, files: 30 }, // maks 12 MB/foto, 30 foto/permintaan
+  // `files` menghitung SEMUA part lintas field (busboy global), sedangkan tiap foto
+  // mengirim 2 part (files + thumbnails). 60 → plafon nyata 30 foto/permintaan.
+  limits: { fileSize: 12 * 1024 * 1024, files: 60 }, // maks 12 MB/foto, 30 foto/permintaan
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (!ALLOWED_EXT.has(ext)) return cb(errors.badRequest('Format foto harus JPG/PNG/WEBP'));

@@ -129,7 +129,10 @@ function PortalApp({ onLogout }: { onLogout: () => void }) {
     queryKey: ['portal-me'],
     queryFn: async () => (await portalApi.get('/me')).data.data as PortalData
   });
-  if (isError) { onLogout(); return null; }
+  // Logout via effect — memanggil setState induk (onLogout) di badan render memicu
+  // warning "Cannot update a component while rendering a different component".
+  useEffect(() => { if (isError) onLogout(); }, [isError, onLogout]);
+  if (isError) return null;
   if (!d) return <div className="flex min-h-screen items-center justify-center text-[13px] text-muted-2">Memuat portal…</div>;
 
   const dark = tab === 'beranda';
@@ -457,15 +460,18 @@ function TabPerjalanan({ d }: { d: PortalData }) {
 function TabGaleri({ groupName }: { groupName: string | null }) {
   const [lightbox, setLightbox] = useState<GalleryPhoto | null>(null);
   const [zipping, setZipping] = useState(false);
+  const [dlError, setDlError] = useState('');
   const { data: photos, isLoading } = useQuery({
     queryKey: ['portal-gallery'],
     queryFn: async () => (await portalApi.get('/gallery')).data.data as GalleryPhoto[]
   });
 
   async function downloadAll() {
-    setZipping(true);
+    setZipping(true); setDlError('');
     try {
       await downloadViaClient(portalApi, '/gallery.zip', 'galeri-rombongan.zip');
+    } catch {
+      setDlError('Gagal mengunduh. Coba lagi.');
     } finally {
       setZipping(false);
     }
@@ -482,6 +488,7 @@ function TabGaleri({ groupName }: { groupName: string | null }) {
           </button>
         )}
       </div>
+      {dlError && <div className="mb-2 rounded-[8px] bg-danger-bg px-3 py-1.5 text-[11px] font-medium text-danger-deep">{dlError}</div>}
 
       {isLoading ? (
         <div className="py-6 text-center text-[11.5px] text-muted-3">Memuat galeri…</div>
@@ -507,11 +514,14 @@ function TabGaleri({ groupName }: { groupName: string | null }) {
 
 function GaleriLightbox({ photo, onClose }: { photo: GalleryPhoto; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
   async function save() {
-    setBusy(true);
+    setBusy(true); setErr('');
     try {
       const ext = 'jpg';
       await downloadViaClient(portalApi, `/gallery/${photo.id}/file`, `${(photo.caption || 'foto-rombongan').replace(/[^\w-]+/g, '-')}.${ext}`);
+    } catch {
+      setErr('Gagal mengunduh foto.');
     } finally {
       setBusy(false);
     }
@@ -521,6 +531,7 @@ function GaleriLightbox({ photo, onClose }: { photo: GalleryPhoto; onClose: () =
       <AuthImage client={portalApi} src={`/gallery/${photo.id}/file`} alt={photo.caption ?? 'Foto rombongan'}
         className="max-h-[70vh] max-w-full rounded-[12px] object-contain" style={{ background: 'transparent' }} />
       {photo.caption && <div className="mt-3 max-w-full text-center text-[12px] text-white/90">{photo.caption}</div>}
+      {err && <div className="mt-2 rounded-[8px] bg-danger-bg px-3 py-1.5 text-[11px] font-medium text-danger-deep">{err}</div>}
       <div className="mt-4 flex gap-2" onClick={(e) => e.stopPropagation()}>
         <button onClick={save} disabled={busy}
           className="cursor-pointer rounded-[10px] bg-white px-4 py-2 text-[12.5px] font-semibold text-ink-strong disabled:opacity-60">

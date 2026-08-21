@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useAuth } from '../store/auth';
@@ -216,6 +216,11 @@ function GaleriModal({ departureId, title, canEdit, onClose }: { departureId: st
     pending.forEach((p) => URL.revokeObjectURL(p.url));
     setPending([]);
   }
+  // Revoke object URL foto ter-staging saat modal ditutup mid-staging (klik backdrop
+  // meng-unmount tanpa memanggil clearPending) agar blob tidak bocor sampai reload.
+  const pendingRef = useRef<PendingPhoto[]>([]);
+  useEffect(() => { pendingRef.current = pending; }, [pending]);
+  useEffect(() => () => { pendingRef.current.forEach((p) => URL.revokeObjectURL(p.url)); }, []);
 
   const upload = useMutation({
     mutationFn: async (items: PendingPhoto[]) => {

@@ -158,7 +158,18 @@ export const paymentsService = {
       if (payment.status === 'verified') throw errors.conflict('Pembayaran sudah diverifikasi');
       // Kunci baris invoice → serialisasi verifikasi paralel pada invoice yang sama,
       // agar recalcInvoiceStatus melihat state ter-commit (cegah status macet 'partial').
-      await trx('invoices').where({ id: payment.invoice_id }).forUpdate().first();
+      const invoice = await trx('invoices').where({ id: payment.invoice_id }).forUpdate().first();
+      if (!invoice) throw errors.notFound('Invoice tidak ditemukan');
+      // Cek ulang kumulatif: batas kelebihan hanya diperiksa saat createPayment
+      // (terhadap total VERIFIED saat itu), sehingga dua pembayaran pending penuh bisa
+      // lolos lalu sama-sama diverifikasi → 2-1100 ter-kredit ganda. Di sini, dengan
+      // baris invoice terkunci, tolak bila verified + pembayaran ini melebihi tagihan.
+      const alreadyVerified = Number(await paidSoFar(trx, payment.invoice_id));
+      if (alreadyVerified + Number(payment.amount) > Number(invoice.total_amount) + 0.001) {
+        throw errors.conflict(
+          `Verifikasi ditolak: total pembayaran terverifikasi (Rp ${(alreadyVerified + Number(payment.amount)).toLocaleString('id-ID')}) akan melebihi tagihan invoice (Rp ${Number(invoice.total_amount).toLocaleString('id-ID')}) — kemungkinan pembayaran pending ganda.`
+        );
+      }
 
       await trx('payments').where({ id: paymentId }).update({
         status: 'verified',
