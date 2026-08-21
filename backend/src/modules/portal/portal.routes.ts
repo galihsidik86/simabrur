@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ok, errors } from '../../utils/http.js';
 import { portalService, verifyPortalToken, type PortalClaims } from './portal.service.js';
 import { galleryService } from '../gallery/gallery.service.js';
-import { sendPhotoFile, zipEntriesFor, streamZip } from '../gallery/gallery.controller.js';
+import { sendPhotoFile, pickUrl, zipEntriesFor, streamZip } from '../gallery/gallery.controller.js';
 
 declare module 'express-serve-static-core' {
   interface Request {
@@ -53,7 +53,7 @@ portalRoutes.get('/gallery', requirePortal, async (req, res) => {
 portalRoutes.get('/gallery/:photoId/file', requirePortal, async (req, res) => {
   const departureId = await portalService.departureIdFor(req.portal!);
   const photo = await galleryService.getPhoto(String(req.params.photoId), departureId);
-  sendPhotoFile(res, String(photo.file_url));
+  sendPhotoFile(res, pickUrl(photo, req.query.variant));
 });
 
 // Unduh semua foto rombongan sebagai satu ZIP.

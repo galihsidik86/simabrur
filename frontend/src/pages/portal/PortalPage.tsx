@@ -493,7 +493,7 @@ function TabGaleri({ groupName }: { groupName: string | null }) {
         <div className="grid grid-cols-3 gap-1.5">
           {photos.map((p) => (
             <button key={p.id} onClick={() => setLightbox(p)} className="relative aspect-square cursor-pointer overflow-hidden rounded-[8px]">
-              <AuthImage client={portalApi} src={`/gallery/${p.id}/file`} alt={p.caption ?? 'Foto rombongan'}
+              <AuthImage client={portalApi} src={`/gallery/${p.id}/file?variant=thumb`} alt={p.caption ?? 'Foto rombongan'}
                 className="h-full w-full object-cover" />
             </button>
           ))}

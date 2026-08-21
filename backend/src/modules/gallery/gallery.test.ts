@@ -25,6 +25,7 @@ async function portalToken(regNumber: string, nik: string) {
 
 // Isi tak penting — fileFilter hanya cek ekstensi; zip cukup baca byte apa pun.
 const IMG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0xff, 0xd9]);
+const THUMB = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 42, 0xff, 0xd9]);
 
 // Parser biner supertest agar body ZIP terbaca sebagai Buffer.
 function binaryParser(res: request.Response, cb: (err: Error | null, body: Buffer) => void) {
@@ -108,6 +109,41 @@ describe('Galeri foto rombongan', () => {
     // Tanda tangan arsip ZIP + akhiran End Of Central Directory
     expect(res.body.subarray(0, 2).toString('latin1')).toBe('PK');
     expect(res.body.subarray(-22, -18).toString('hex')).toBe('504b0506');
+  });
+
+  it('unggah dengan thumbnail + caption; sajikan varian thumb; edit caption', async () => {
+    const ops = await staffToken('ops@safar.co.id');
+    const up = await request(app)
+      .post(`/v1/departures/${depReguler}/gallery`)
+      .set('Authorization', `Bearer ${ops}`)
+      .field('captions', 'Kota Madinah')
+      .attach('files', IMG, 'kota.jpg')
+      .attach('thumbnails', THUMB, 'thumb-0.jpg');
+    expect(up.status).toBe(201);
+    const photo = up.body.data[0];
+    expect(photo.caption).toBe('Kota Madinah');
+    expect(photo.hasThumb).toBe(true);
+
+    // varian thumb tersaji (dan berbeda ukuran dari foto penuh)
+    const thumb = await request(app).get(`/v1/gallery/${photo.id}/file?variant=thumb`).set('Authorization', `Bearer ${ops}`).buffer(true).parse(binaryParser);
+    expect(thumb.status).toBe(200);
+    expect(thumb.body.length).toBe(THUMB.length);
+    const full = await request(app).get(`/v1/gallery/${photo.id}/file`).set('Authorization', `Bearer ${ops}`).buffer(true).parse(binaryParser);
+    expect(full.body.length).toBe(IMG.length);
+
+    // list mencerminkan hasThumb + caption
+    const list = await request(app).get(`/v1/departures/${depReguler}/gallery`).set('Authorization', `Bearer ${ops}`);
+    expect(list.body.data[0]).toMatchObject({ caption: 'Kota Madinah', hasThumb: true });
+
+    // edit caption
+    const patch = await request(app).patch(`/v1/gallery/${photo.id}`).set('Authorization', `Bearer ${ops}`).send({ caption: 'Madinah Al-Munawwarah' });
+    expect(patch.status).toBe(200);
+    expect(patch.body.data.caption).toBe('Madinah Al-Munawwarah');
+
+    // RBAC: marketing tak boleh edit caption
+    const mkt = await staffToken('marketing@safar.co.id');
+    const denied = await request(app).patch(`/v1/gallery/${photo.id}`).set('Authorization', `Bearer ${mkt}`).send({ caption: 'x' });
+    expect(denied.status).toBe(403);
   });
 
   it('operasional menghapus satu foto', async () => {

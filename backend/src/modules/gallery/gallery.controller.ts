@@ -9,6 +9,12 @@ const CONTENT_TYPE: Record<string, string> = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp'
 };
 
+/** Pilih URL sesuai varian: `thumb` → thumbnail bila ada, selain itu foto penuh. */
+export function pickUrl(photo: { file_url: string; thumb_url?: string | null }, variant?: unknown): string {
+  if (variant === 'thumb' && photo.thumb_url) return String(photo.thumb_url);
+  return String(photo.file_url);
+}
+
 /** Sajikan byte foto dengan header aman. Dipakai endpoint staf & portal (setelah cek kepemilikan). */
 export function sendPhotoFile(res: Response, fileUrl: string) {
   const abs = resolveUploadPath(fileUrl);
@@ -36,10 +42,13 @@ export const galleryController = {
 
   async upload(req: Request, res: Response) {
     const departureId = String(req.params.id);
-    const files = (req.files as Express.Multer.File[] | undefined) ?? [];
+    const grouped = (req.files as Record<string, Express.Multer.File[]> | undefined) ?? {};
+    const files = grouped.files ?? [];
+    const thumbs = grouped.thumbnails ?? []; // sejajar per indeks (klien mengirim searah)
     const captions = req.body.captions; // opsional: string atau array sejajar files
     const photos = files.map((f, i) => ({
       fileUrl: `/uploads/gallery/${departureId}/${f.filename}`,
+      thumbUrl: thumbs[i] ? `/uploads/gallery/${departureId}/${thumbs[i].filename}` : null,
       contentType: f.mimetype,
       fileSize: f.size,
       caption: (Array.isArray(captions) ? captions[i] : i === 0 ? captions : undefined) || null
@@ -47,14 +56,19 @@ export const galleryController = {
     ok(res, await galleryService.addPhotos(req, departureId, photos), undefined, 201);
   },
 
+  async updateCaption(req: Request, res: Response) {
+    const caption = typeof req.body.caption === 'string' ? req.body.caption.trim().slice(0, 200) || null : null;
+    ok(res, await galleryService.updateCaption(req, String(req.params.photoId), caption));
+  },
+
   async remove(req: Request, res: Response) {
     ok(res, await galleryService.remove(req, String(req.params.photoId)));
   },
 
-  /** Serve satu foto untuk staf (butuh auth staf di route). */
+  /** Serve satu foto untuk staf (butuh auth staf di route). `?variant=thumb` → thumbnail. */
   async file(req: Request, res: Response) {
     const photo = await galleryService.getPhoto(String(req.params.photoId));
-    sendPhotoFile(res, String(photo.file_url));
+    sendPhotoFile(res, pickUrl(photo, req.query.variant));
   },
 
   /** Unduh semua foto satu keberangkatan sebagai ZIP (staf). */
