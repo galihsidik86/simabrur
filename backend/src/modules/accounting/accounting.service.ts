@@ -379,14 +379,19 @@ export const accountingService = {
       // (2) tidak boleh membuat liabilitas Uang Muka Jamaah (2-1100) jadi negatif —
       // reclass men-Dr 2-1100 sebesar amount; hanya boleh sebesar saldo liabilitas
       // yang benar-benar ada (dana jamaah yang sudah diterima).
+      // Saldo dihitung PER COST CENTER keberangkatan ini (join ke journals): tiap
+      // keberangkatan adalah cost center tersendiri, sehingga pendapatan satu
+      // keberangkatan tidak boleh diakui memakai uang muka keberangkatan lain (PSAK 72).
       const [{ liab }] = await trx('journal_lines as jl')
         .join('accounts as a', 'a.id', 'jl.account_id')
+        .join('journals as j', 'j.id', 'jl.journal_id')
         .where('a.code', '2-1100')
+        .andWhere('j.cost_center_id', cc.id)
         .select(trx.raw('COALESCE(SUM(jl.credit - jl.debit), 0) AS liab'));
       const liability2100 = Number(liab ?? 0);
       if (input.amount > liability2100) {
         throw errors.badRequest(
-          `Pendapatan yang diakui (Rp ${input.amount.toLocaleString('id-ID')}) melebihi saldo Uang Muka Jamaah 2-1100 (Rp ${liability2100.toLocaleString('id-ID')}) — dana jamaah belum cukup diterima`
+          `Pendapatan yang diakui (Rp ${input.amount.toLocaleString('id-ID')}) melebihi saldo Uang Muka Jamaah 2-1100 keberangkatan ini (Rp ${liability2100.toLocaleString('id-ID')}) — dana jamaah belum cukup diterima`
         );
       }
 

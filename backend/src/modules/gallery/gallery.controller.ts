@@ -15,13 +15,25 @@ export function pickUrl(photo: { file_url: string; thumb_url?: string | null }, 
   return String(photo.file_url);
 }
 
-/** Sajikan byte foto dengan header aman. Dipakai endpoint staf & portal (setelah cek kepemilikan). */
+/** Sajikan byte foto dengan header aman. Dipakai endpoint staf & portal (setelah cek kepemilikan).
+ *  `no-store` konsisten dgn kebijakan /v1 (cache dinamis hosting pernah menyajikan respons
+ *  ber-otentikasi lintas token) — jangan izinkan byte foto ber-scope di-cache proxy bersama. */
 export function sendPhotoFile(res: Response, fileUrl: string) {
   const abs = resolveUploadPath(fileUrl);
-  res.setHeader('Cache-Control', 'private, max-age=3600');
+  res.setHeader('Cache-Control', 'private, no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Type', CONTENT_TYPE[path.extname(abs).toLowerCase()] ?? 'application/octet-stream');
-  res.sendFile(abs);
+  // resolveUploadPath sudah memastikan file ada; callback menangani race (terhapus
+  // di antara cek & kirim) → 404, bukan 500 INTERNAL generik.
+  res.sendFile(abs, (err) => {
+    if (err && !res.headersSent) {
+      const code = (err as NodeJS.ErrnoException).code;
+      res.status(code === 'ENOENT' ? 404 : 500).json({
+        success: false,
+        error: { code: code === 'ENOENT' ? 'NOT_FOUND' : 'INTERNAL', message: 'Berkas foto tidak dapat disajikan' }
+      });
+    }
+  });
 }
 
 /** Rakit entri ZIP dari daftar foto sebuah keberangkatan (nama unik & aman). */

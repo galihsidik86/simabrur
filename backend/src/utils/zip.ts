@@ -39,6 +39,13 @@ export function safeEntryName(name: string): string {
   return name.replace(/[\\/]+/g, '-').replace(/[\x00-\x1f<>:"|?*]/g, '').trim() || 'file';
 }
 
+/** Tulis satu buffer ke response dengan menghormati backpressure (tunggu `drain`
+ *  bila buffer socket penuh) — agar arsip besar tidak menumpuk seluruhnya di memori. */
+function write(res: Response, buf: Buffer): Promise<void> {
+  if (res.write(buf)) return Promise.resolve();
+  return new Promise((resolve) => res.once('drain', resolve));
+}
+
 export async function streamZip(res: Response, entries: ZipEntry[], downloadName: string): Promise<void> {
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename="${downloadName.replace(/"/g, '')}"`);
@@ -68,9 +75,9 @@ export async function streamZip(res: Response, entries: ZipEntry[], downloadName
     local.writeUInt32LE(size, 22);
     local.writeUInt16LE(nameBuf.length, 26);
     local.writeUInt16LE(0, 28); // extra length
-    res.write(local);
-    res.write(nameBuf);
-    res.write(data);
+    await write(res, local);
+    await write(res, nameBuf);
+    await write(res, data);
 
     const cd = Buffer.alloc(46);
     cd.writeUInt32LE(0x02014b50, 0);
@@ -96,7 +103,7 @@ export async function streamZip(res: Response, entries: ZipEntry[], downloadName
   }
 
   const centralBuf = Buffer.concat(central);
-  res.write(centralBuf);
+  await write(res, centralBuf);
 
   const eocd = Buffer.alloc(22);
   eocd.writeUInt32LE(0x06054b50, 0);
@@ -107,6 +114,6 @@ export async function streamZip(res: Response, entries: ZipEntry[], downloadName
   eocd.writeUInt32LE(centralBuf.length, 12);
   eocd.writeUInt32LE(offset, 16);
   eocd.writeUInt16LE(0, 20); // comment length
-  res.write(eocd);
+  await write(res, eocd);
   res.end();
 }
