@@ -25,7 +25,8 @@ checklistsRoutes.patch('/:id', requireAuth, requireRoles('operasional'), operati
 
 export const reportsRoutes = Router();
 reportsRoutes.get('/document-compliance', requireAuth, requireRoles('operasional', 'pimpinan', 'keuangan'), operationsController.documentCompliance);
-reportsRoutes.get('/readiness', requireAuth, requireRoles('operasional', 'pimpinan'), operationsController.readiness);
+// NEW-FE-03: NAV sidebar (AppShell) memberi keuangan akses /laporan-operasional — selaraskan.
+reportsRoutes.get('/readiness', requireAuth, requireRoles('operasional', 'pimpinan', 'keuangan'), operationsController.readiness);
 reportsRoutes.get('/export', requireAuth, requireRoles('operasional', 'pimpinan', 'keuangan'), operationsController.exportReport);
 
 /** GET /departures/:id/manifest — dipasang pada router departures. */

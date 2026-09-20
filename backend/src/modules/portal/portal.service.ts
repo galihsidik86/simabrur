@@ -4,6 +4,7 @@ import { db } from '../../config/db.js';
 import { env } from '../../config/env.js';
 import { errors } from '../../utils/http.js';
 import { audit } from '../../middleware/audit.js';
+import { todayWib } from '../../utils/date.js';
 
 export interface PortalClaims {
   kind: 'portal';
@@ -30,13 +31,38 @@ const DOC_NAMES: Record<string, string> = {
 export const portalService = {
   /** Login portal: nomor registrasi + NIK (identitas yang dipegang jamaah). */
   async login(req: Request, regNumber: string, nik: string) {
+    const regNum = regNumber.trim().toUpperCase();
     const reg = await db('registrations as r')
       .join('jamaah as j', 'j.id', 'r.jamaah_id')
-      .select('r.id as registration_id', 'r.reg_number', 'j.id as jamaah_id', 'j.nik', 'j.full_name')
-      .where('r.reg_number', regNumber.trim().toUpperCase())
+      .select(
+        'r.id as registration_id', 'r.reg_number', 'r.identity_confirmation_required', 'r.status',
+        'j.id as jamaah_id', 'j.nik', 'j.full_name'
+      )
+      .where('r.reg_number', regNum)
       .first();
     if (!reg || reg.nik !== nik.trim()) {
+      // SEC-01: audit percobaan gagal (dulu hanya login sukses yang tercatat).
+      await audit(req, {
+        action: 'portal.login_failed',
+        entity: 'registrations',
+        entityId: reg?.registration_id ?? undefined,
+        newValues: { regNumber: regNum }
+      });
       throw errors.unauthorized('Nomor registrasi atau NIK tidak cocok');
+    }
+    // Langkah 9 (kontrak butir 6): registrasi yang dibatalkan tidak lagi bisa login portal.
+    if (reg.status === 'cancelled') {
+      await audit(req, { action: 'portal.login_blocked_cancelled', entity: 'registrations', entityId: reg.registration_id });
+      throw errors.forbidden('Pendaftaran ini telah dibatalkan. Hubungi CS untuk informasi refund.');
+    }
+    // NEW-BE-01 (putaran 2): registrasi hasil reuse NIK via wizard publik ditahan
+    // sampai petugas mengonfirmasi identitas — dicek SETELAH regNumber+NIK cocok,
+    // agar tidak membocorkan status tahan sebelum identitas benar-benar terverifikasi.
+    if (reg.identity_confirmation_required) {
+      await audit(req, { action: 'portal.login_blocked_identity', entity: 'registrations', entityId: reg.registration_id });
+      throw errors.forbidden(
+        'Pendaftaran ini menunggu konfirmasi identitas oleh petugas. Silakan masuk dengan nomor registrasi sebelumnya atau hubungi CS.'
+      );
     }
     const claims: PortalClaims = { kind: 'portal', jamaahId: reg.jamaah_id, registrationId: reg.registration_id, regNumber: reg.reg_number };
     const token = jwt.sign(claims, env.jwt.accessSecret, { expiresIn: '12h' });
@@ -100,7 +126,7 @@ export const portalService = {
     const nextDue = schedules.find((s) => s.status === 'unpaid');
     const actions: { type: string; title: string; detail: string; level: 'red' | 'amber'; target: string }[] = [];
     if (nextDue) {
-      const overdue = nextDue.due_date < today.toISOString().slice(0, 10);
+      const overdue = nextDue.due_date < todayWib();
       actions.push({
         type: 'payment',
         title: `${nextDue.label} ${overdue ? 'jatuh tempo' : 'menunggu pembayaran'}`,

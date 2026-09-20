@@ -11,6 +11,18 @@ invoicesRoutes.get('/:id/payments', requireAuth, requireRoles('keuangan', 'pimpi
 export const paymentsRoutes = Router();
 paymentsRoutes.post('/', requireAuth, requireRoles('keuangan'), paymentsController.createPayment);
 paymentsRoutes.patch('/:id/verify', requireAuth, requireRoles('keuangan'), paymentsController.verifyPayment);
+paymentsRoutes.patch('/:id/reject', requireAuth, requireRoles('keuangan'), paymentsController.rejectPayment);
+
+export const refundsRoutes = Router();
+refundsRoutes.get('/', requireAuth, requireRoles('keuangan', 'pimpinan'), paymentsController.listRefunds);
+refundsRoutes.post('/:id/pay', requireAuth, requireRoles('keuangan'), paymentsController.payRefund);
+// A (putaran 3): kwitansi refund — keuangan, pimpinan, operasional, marketing (admin lolos otomatis).
+refundsRoutes.get(
+  '/:id/receipt',
+  requireAuth,
+  requireRoles('keuangan', 'pimpinan', 'operasional', 'marketing'),
+  paymentsController.refundReceipt
+);
 
 export const receivablesRoutes = Router();
 receivablesRoutes.get('/', requireAuth, requireRoles('keuangan', 'pimpinan', 'marketing'), paymentsController.receivables);

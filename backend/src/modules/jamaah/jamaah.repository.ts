@@ -1,17 +1,18 @@
 import { db } from '../../config/db.js';
+import { escapeLike } from '../../utils/like.js';
 
 export const jamaahRepository = {
   /** Daftar jamaah utk tabel admin: registrasi + paket + agregat dokumen. */
-  async list(opts: { tab: string; q?: string; page: number; limit: number }) {
+  async list(opts: { tab: string; q?: string; status?: string; identityPending?: boolean; page: number; limit: number }) {
     const base = db('registrations as r')
       .join('jamaah as j', 'j.id', 'r.jamaah_id')
       .join('departures as d', 'd.id', 'r.departure_id')
       .join('packages as p', 'p.id', 'd.package_id')
       .modify((qb) => {
         if (opts.q) {
-          qb.where((w) =>
-            w.whereILike('j.full_name', `%${opts.q}%`).orWhereILike('r.reg_number', `%${opts.q}%`)
-          );
+          // DOM-07: escape wildcard ILIKE agar "_"/"%" tidak dicocokkan sebagai pola.
+          const like = `%${escapeLike(opts.q)}%`;
+          qb.where((w) => w.whereILike('j.full_name', like).orWhereILike('r.reg_number', like));
         }
         if (opts.tab === 'lunas') qb.where('r.payment_scheme', 'lunas');
         if (opts.tab === 'dokumen') {
@@ -21,6 +22,10 @@ export const jamaahRepository = {
               where dd.jamaah_id = j.id and dd.status = 'verified' and dd.doc_type <> 'NKH') < 5`
           );
         }
+        // G (putaran 3): filter status registrasi & menunggu konfirmasi identitas.
+        // Tanpa filter → tampilkan SEMUA status (termasuk cancelled), tak berubah.
+        if (opts.status) qb.where('r.status', opts.status);
+        if (opts.identityPending) qb.where('r.identity_confirmation_required', true);
       });
 
     const [{ count }] = await base.clone().count({ count: '*' });
@@ -36,6 +41,7 @@ export const jamaahRepository = {
         'r.id as registration_id',
         'r.reg_number',
         'r.status as registration_status',
+        'r.identity_confirmation_required',
         'r.payment_scheme',
         'r.room_type',
         'j.id as jamaah_id',
@@ -66,6 +72,9 @@ export const jamaahRepository = {
       .join('departures as d', 'd.id', 'r.departure_id')
       .join('packages as p', 'p.id', 'd.package_id')
       .leftJoin('groups as g', 'g.id', 'r.group_id')
+      // DOM-03: invoice.total_amount = sumber kebenaran (dibekukan saat terbit).
+      // Harga paket bisa berubah setelah registrasi; jangan hitung ulang dari harga terkini.
+      .leftJoin('invoices as i', 'i.registration_id', 'r.id')
       .select(
         'r.*',
         'p.name as package_name',
@@ -74,7 +83,8 @@ export const jamaahRepository = {
         'p.double_upcharge',
         'd.departure_date',
         'd.return_date',
-        'g.name as group_name'
+        'g.name as group_name',
+        'i.total_amount as invoice_total_amount'
       )
       .where('r.jamaah_id', jamaahId)
       .orderBy('d.departure_date', 'desc');

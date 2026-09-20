@@ -35,6 +35,8 @@ export const operationsService = {
         't.id as ticket_id', 't.pnr', 't.seat', 't.status as ticket_status'
       )
       .where('r.departure_id', departureId)
+      // Butir 6 kontrak pembatalan: registrasi cancelled dikecualikan dari manifest.
+      .whereNot('r.status', 'cancelled')
       .orderBy('j.full_name');
 
     const manifest = await db('manifests').where({ departure_id: departureId }).first();
@@ -44,6 +46,8 @@ export const operationsService = {
       .count({ n: '*' })
       .where('departure_id', departureId)
       .whereNotNull('group_id')
+      // Penempatan grup/kamar: anggota yang dibatalkan tidak lagi menghuni kamar/grup.
+      .whereNot('status', 'cancelled')
       .groupBy('group_id');
     const countOf = (gid: string) => Number(memberCounts.find((m) => m.group_id === gid)?.n ?? 0);
 
@@ -206,6 +210,8 @@ export const operationsService = {
       .join('packages as p', 'p.id', 'd.package_id')
       .select('r.id as registration_id', 'j.id as jamaah_id', 'j.full_name', 'j.passport_expiry',
         'd.id as departure_id', 'd.departure_date', 'p.name as package_name')
+      // Butir 6 kontrak pembatalan: registrasi cancelled dikecualikan dari kepatuhan dokumen.
+      .whereNot('r.status', 'cancelled')
       .orderBy('d.departure_date');
     const docs = await db('documents');
 
@@ -292,7 +298,9 @@ export const operationsService = {
         .leftJoin('visas as v', 'v.registration_id', 'r.id')
         .leftJoin('tickets as t', 't.registration_id', 'r.id')
         .select('r.id', 'j.id as jamaah_id', 'i.total_amount', 'pp.paid', 'v.status as visa_status', 't.status as ticket_status')
-        .where('r.departure_id', dep.id);
+        .where('r.departure_id', dep.id)
+        // Butir 6 kontrak pembatalan: registrasi cancelled dikecualikan dari kesiapan keberangkatan.
+        .whereNot('r.status', 'cancelled');
       if (regs.length === 0) continue;
 
       const totalInv = regs.reduce((s, r) => s + Number(r.total_amount ?? 0), 0);

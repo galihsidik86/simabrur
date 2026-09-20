@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { api, setAccessToken, refreshSession } from '../api/client';
+import { useQueryClient } from '@tanstack/react-query';
+import { api, setAccessToken, refreshSession, logoutSession } from '../api/client';
 
 export interface User {
   id: string;
@@ -15,13 +16,15 @@ interface AuthState {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState>(null!);
 export const useAuth = () => useContext(AuthContext);
 
+/** Wajib dirender DI DALAM QueryClientProvider (App.tsx) — cache dibersihkan saat ganti sesi. */
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -37,26 +40,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (alive) setLoading(false);
       });
 
-    const onLogout = () => setUser(null);
+    // Sesi berakhir paksa (refresh gagal): buang cache agar data user ini tak
+    // tampil ke user berikutnya di tab yang sama (NEW-FE-01).
+    const onLogout = () => {
+      queryClient.clear();
+      setUser(null);
+    };
     window.addEventListener('safar:logout', onLogout);
     return () => {
       alive = false;
       window.removeEventListener('safar:logout', onLogout);
     };
-  }, []);
+  }, [queryClient]);
 
   async function login(email: string, password: string) {
     const { data } = await api.post('/auth/login', { email, password });
     localStorage.setItem('safar.refresh', data.data.refreshToken);
     setAccessToken(data.data.accessToken);
+    queryClient.clear();
     setUser(data.data.user);
   }
 
-  function logout() {
-    const refreshToken = localStorage.getItem('safar.refresh');
-    if (refreshToken) api.post('/auth/logout', { refreshToken }).catch(() => {});
-    localStorage.removeItem('safar.refresh');
-    setAccessToken(null);
+  async function logout() {
+    await logoutSession();
+    queryClient.clear();
     setUser(null);
   }
 

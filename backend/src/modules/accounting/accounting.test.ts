@@ -3,7 +3,10 @@ import request from 'supertest';
 import { db } from '../../config/db.js';
 import { createApp } from '../../app.js';
 import { resetTestDb } from '../../test/db-setup.js';
-import { expenseLines, receiptLines, revenueRecognitionLines, hppRecognitionLines, commissionLines } from './journal.engine.js';
+import {
+  expenseLines, receiptLines, revenueRecognitionLines, hppRecognitionLines, commissionLines,
+  allocateVendorAdvance, hppRecognitionLinesAllocated
+} from './journal.engine.js';
 
 const app = createApp();
 
@@ -48,6 +51,65 @@ describe('template jurnal A–F (Chart of Accounts)', () => {
       { accountCode: '6-2000', debit: 900_000 },
       { accountCode: '2-1400', credit: 900_000 }
     ]);
+  });
+});
+
+describe('B (putaran 3): allocateVendorAdvance — alokasi pro-rata saldo 1-1400', () => {
+  it('total HPP ≤ saldo → semua komponen teralokasi penuh, excess 0', () => {
+    const alloc = allocateVendorAdvance([
+      { accountCode: '5-2000', amount: 10_000_000 },
+      { accountCode: '5-1000', amount: 9_000_000 }
+    ], 22_000_000);
+    expect(alloc[0]).toMatchObject({ allocated: 10_000_000, excess: 0 });
+    expect(alloc[1]).toMatchObject({ allocated: 9_000_000, excess: 0 });
+  });
+
+  it('total HPP > saldo, 2 komponen → pro-rata menurut nominal, sisa pembulatan ke komponen terakhir', () => {
+    // saldo 210 jt, komponen 150 jt & 100 jt (total 250 jt) → capped 210 jt
+    // alloc0 = round(210jt × 150jt/250jt) = 126 jt; alloc1 (terakhir) = 210jt − 126jt = 84jt
+    const alloc = allocateVendorAdvance([
+      { accountCode: '5-2000', amount: 150_000_000, vendorId: 'v1' },
+      { accountCode: '5-4000', amount: 100_000_000, vendorId: 'v2' }
+    ], 210_000_000);
+    expect(alloc[0]).toMatchObject({ allocated: 126_000_000, excess: 24_000_000 });
+    expect(alloc[1]).toMatchObject({ allocated: 84_000_000, excess: 16_000_000 });
+    expect(alloc[0].allocated + alloc[1].allocated).toBe(210_000_000);
+    expect(alloc[0].excess + alloc[1].excess).toBe(40_000_000);
+  });
+
+  it('saldo 0 → seluruh nominal jadi excess (hutang vendor), allocated 0', () => {
+    const alloc = allocateVendorAdvance([{ accountCode: '5-3000', amount: 18_000_000, vendorId: 'v1' }], 0);
+    expect(alloc[0]).toMatchObject({ allocated: 0, excess: 18_000_000 });
+  });
+
+  it('hppRecognitionLinesAllocated: tanpa excess = perilaku lama (satu baris Cr 1-1400 total)', () => {
+    const alloc = allocateVendorAdvance([{ accountCode: '5-2000', amount: 5_000_000 }], 5_000_000);
+    const lines = hppRecognitionLinesAllocated(alloc);
+    expect(lines).toEqual([
+      { accountCode: '5-2000', debit: 5_000_000 },
+      { accountCode: '1-1400', credit: 5_000_000 }
+    ]);
+  });
+
+  it('hppRecognitionLinesAllocated: dgn excess → Dr per komponen penuh · Cr 1-1400 alokasi · Cr 2-1300 per kelebihan; tetap balance', () => {
+    const alloc = allocateVendorAdvance([
+      { accountCode: '5-2000', amount: 150_000_000, vendorId: 'v1' },
+      { accountCode: '5-4000', amount: 100_000_000, vendorId: 'v2' }
+    ], 210_000_000);
+    const lines = hppRecognitionLinesAllocated(alloc);
+    const debit = lines.reduce((s, l) => s + (l.debit ?? 0), 0);
+    const credit = lines.reduce((s, l) => s + (l.credit ?? 0), 0);
+    expect(debit).toBe(credit);
+    expect(lines.find((l) => l.accountCode === '1-1400')).toMatchObject({ credit: 210_000_000 });
+    const excessLines = lines.filter((l) => l.accountCode === '2-1300');
+    expect(excessLines.reduce((s, l) => s + (l.credit ?? 0), 0)).toBe(40_000_000);
+  });
+
+  it('hppRecognitionLinesAllocated: saldo 0 → tanpa baris 1-1400 sama sekali (Cr hanya ke 2-1300)', () => {
+    const alloc = allocateVendorAdvance([{ accountCode: '5-3000', amount: 18_000_000, vendorId: 'v1' }], 0);
+    const lines = hppRecognitionLinesAllocated(alloc);
+    expect(lines.some((l) => l.accountCode === '1-1400')).toBe(false);
+    expect(lines.find((l) => l.accountCode === '2-1300')).toMatchObject({ credit: 18_000_000 });
   });
 });
 
@@ -209,6 +271,19 @@ describe('POST /v1/transactions/revenue-recognition (PSAK 72)', () => {
   it('reclass 2-1100 → 4-1000 + HPP, saldo liabilitas turun', async () => {
     const keu = await token('keuangan@safar.co.id');
     const cc = await db('cost_centers').where({ code: 'CC-UMR-REG-9' }).first();
+
+    // N-4: HPP mereklas Uang Muka Vendor 1-1400 (PLAN §4.2) — sejak guard AK-01,
+    // reklas tidak boleh melebihi DP vendor yang benar-benar tercatat di cost
+    // center ini. Seed hanya memberi DP vendor ke CC-UMR-PLUS-TR, jadi sediakan
+    // dulu DP 22 jt ke CC-UMR-REG-9 sebelum mengakui HPP-nya.
+    const dp = await request(app).post('/v1/transactions/expense').set('Authorization', `Bearer ${keu}`).send({
+      vendorName: 'Vendor Uji CC-REG-9',
+      costCenterId: cc.id,
+      sourceBankCode: '1-1200',
+      lines: [{ accountCode: '1-1400', amount: 22_000_000 }]
+    });
+    expect(dp.status).toBe(201);
+
     const before = (await request(app).get('/v1/accounts').set('Authorization', `Bearer ${keu}`)).body.data;
     const liabBefore = before.find((a: { code: string }) => a.code === '2-1100').balance;
 
@@ -230,6 +305,436 @@ describe('POST /v1/transactions/revenue-recognition (PSAK 72)', () => {
     expect(after.find((a: { code: string }) => a.code === '2-1100').balance).toBe(liabBefore - 30_000_000);
     expect(after.find((a: { code: string }) => a.code === '4-1000').balance).toBe(30_000_000);
     expect(after.find((a: { code: string }) => a.code === '5-2000').balance).toBeGreaterThanOrEqual(10_000_000);
+  });
+});
+
+describe('AK-01: HPP tidak boleh melebihi saldo Uang Muka Vendor 1-1400 per cost center', () => {
+  it('CC tanpa DP vendor (1-1400 = 0) menerima HPP 25 jt → 400, tidak ada jurnal tercatat', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const cc = await db('cost_centers').where({ code: 'CC-UMR-PLUS-AQ' }).first();
+    const journalsBefore = await db('journals').count<{ n: string }[]>('id as n').first();
+
+    const res = await request(app).post('/v1/transactions/revenue-recognition').set('Authorization', `Bearer ${keu}`).send({
+      costCenterId: cc.id,
+      revenueAccountCode: '4-1000',
+      amount: 5_000_000,
+      hpp: [{ accountCode: '5-2000', amount: 25_000_000 }]
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('1-1400');
+
+    const journalsAfter = await db('journals').count<{ n: string }[]>('id as n').first();
+    expect(Number(journalsAfter?.n)).toBe(Number(journalsBefore?.n)); // transaksi rollback utuh
+
+    const [{ adv }] = await db('journal_lines as jl')
+      .join('accounts as a', 'a.id', 'jl.account_id')
+      .join('journals as j', 'j.id', 'jl.journal_id')
+      .where('a.code', '1-1400').andWhere('j.cost_center_id', cc.id)
+      .select(db.raw('COALESCE(SUM(jl.debit - jl.credit), 0) AS adv'));
+    expect(Number(adv)).toBe(0); // tidak jadi negatif (bug AK-01 lama)
+  });
+
+  it('global 1-1400 cukup tapi CC ini nol tetap ditolak (guard global tidak cukup)', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    // CC-UMR-PLUS-TR (dari seed) punya DP vendor 210 jt — saldo GLOBAL 1-1400 sangat positif,
+    // tapi CC-HAJ-FURODA-27 yang dituju tidak punya DP sama sekali.
+    const ccTarget = await db('cost_centers').where({ code: 'CC-HAJ-FURODA-27' }).first();
+    const res = await request(app).post('/v1/transactions/revenue-recognition').set('Authorization', `Bearer ${keu}`).send({
+      costCenterId: ccTarget.id,
+      revenueAccountCode: '4-1000',
+      amount: 1_000_000,
+      hpp: [{ accountCode: '5-2000', amount: 1_000_000 }]
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('B (putaran 3): HPP > saldo 1-1400 → hutang vendor per komponen (integrasi)', () => {
+  it('2 komponen melebihi saldo → alokasi pro-rata, jurnal balance, 2-1300 = Σ kelebihan, vendor_bills per komponen, saldo 1-1400 CC = 0', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const cc = await db('cost_centers').where({ code: 'CC-UMR-PLUS-TR' }).first(); // saldo 1-1400 seed = 210 jt
+    const vendorHotel = await db('vendors').where({ name: 'Grand Al Massa Hotel' }).first();
+    const vendorAirline = await db('vendors').where({ name: 'Turkish Airlines' }).first();
+
+    const res = await request(app).post('/v1/transactions/revenue-recognition').set('Authorization', `Bearer ${keu}`).send({
+      costCenterId: cc.id,
+      revenueAccountCode: '4-1000',
+      amount: 50_000_000,
+      hpp: [
+        { accountCode: '5-2000', amount: 150_000_000, vendorId: vendorHotel.id },
+        { accountCode: '5-4000', amount: 100_000_000, vendorId: vendorAirline.id }
+      ]
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.data.hpp.totalDebit).toBe(res.body.data.hpp.totalCredit); // jurnal balance
+    expect(res.body.data.hpp.totalDebit).toBe(250_000_000);
+
+    const bills = res.body.data.vendorBills as { id: string; vendorId: string; accountCode: string; amount: number }[];
+    expect(bills).toHaveLength(2);
+    const billHotel = bills.find((b) => b.accountCode === '5-2000')!;
+    const billAirline = bills.find((b) => b.accountCode === '5-4000')!;
+    expect(billHotel).toMatchObject({ vendorId: vendorHotel.id, amount: 24_000_000 });
+    expect(billAirline).toMatchObject({ vendorId: vendorAirline.id, amount: 16_000_000 });
+
+    const rows = await db('vendor_bills').where({ cost_center_id: cc.id });
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.status === 'unpaid')).toBe(true);
+    expect(rows.reduce((s, r) => s + Number(r.amount), 0)).toBe(40_000_000);
+
+    const [{ adv }] = await db('journal_lines as jl')
+      .join('accounts as a', 'a.id', 'jl.account_id')
+      .join('journals as j', 'j.id', 'jl.journal_id')
+      .where('a.code', '1-1400').andWhere('j.cost_center_id', cc.id)
+      .select(db.raw('COALESCE(SUM(jl.debit - jl.credit), 0) AS adv'));
+    expect(Number(adv)).toBe(0); // saldo 1-1400 CC habis terpakai
+  });
+
+  it('saldo 1-1400 = 0 dgn vendorId → SELURUH HPP jadi hutang vendor (bukan ditolak)', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    // CC-HAJ-FURODA-27: saldo 1-1400 seed = 0 (belum ada DP vendor), liabilitas 2-1100
+    // seed = 245 jt (cukup utk pendapatan kecil di bawah).
+    const cc = await db('cost_centers').where({ code: 'CC-HAJ-FURODA-27' }).first();
+    const vendor = await db('vendors').where({ name: 'Katering Al Baik' }).first();
+
+    const res = await request(app).post('/v1/transactions/revenue-recognition').set('Authorization', `Bearer ${keu}`).send({
+      costCenterId: cc.id,
+      revenueAccountCode: '4-1000',
+      amount: 2_000_000,
+      hpp: [{ accountCode: '5-3000', amount: 18_000_000, vendorId: vendor.id }]
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.data.vendorBills).toEqual([
+      expect.objectContaining({ vendorId: vendor.id, accountCode: '5-3000', amount: 18_000_000 })
+    ]);
+    const lines = res.body.data.hpp.lines as { accountCode: string; debit: number; credit: number }[];
+    expect(lines.some((l) => l.accountCode === '1-1400')).toBe(false); // tanpa reklas 1-1400 sama sekali
+    expect(lines.find((l) => l.accountCode === '2-1300')).toMatchObject({ credit: 18_000_000 });
+  });
+
+  it('pelunasan tagihan vendor via Pembayaran Biaya (vendorBillId) → paid_amount naik, status paid saat lunas, jurnal Dr 2-1300', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    // CC-UMR-PLUS-AQ: saldo 1-1400 seed = 0, liabilitas 2-1100 seed = 6,7 jt (cukup utk
+    // pendapatan kecil di bawah) — belum dipakai skenario lain di describe ini.
+    const cc = await db('cost_centers').where({ code: 'CC-UMR-PLUS-AQ' }).first();
+    const vendor = await db('vendors').where({ name: 'Kedutaan — Visa Agent' }).first();
+
+    const rev = await request(app).post('/v1/transactions/revenue-recognition').set('Authorization', `Bearer ${keu}`).send({
+      costCenterId: cc.id, revenueAccountCode: '4-1000', amount: 1_000_000,
+      hpp: [{ accountCode: '5-4000', amount: 10_000_000, vendorId: vendor.id }]
+    });
+    expect(rev.status).toBe(201);
+    const billId = rev.body.data.vendorBills[0].id as string;
+
+    // Pelunasan parsial 4 jt — belum lunas
+    const part = await request(app).post('/v1/transactions/expense').set('Authorization', `Bearer ${keu}`).send({
+      vendorId: vendor.id, sourceBankCode: '1-1200',
+      lines: [{ accountCode: '2-1300', amount: 4_000_000, vendorBillId: billId }]
+    });
+    expect(part.status).toBe(201);
+    expect(part.body.data.lines.find((l: { accountCode: string }) => l.accountCode === '2-1300')).toMatchObject({ debit: 4_000_000 });
+    let bill = await db('vendor_bills').where({ id: billId }).first();
+    expect(Number(bill.paid_amount)).toBe(4_000_000);
+    expect(bill.status).toBe('unpaid');
+
+    // Pelunasan sisa 6 jt — lunas
+    const rest = await request(app).post('/v1/transactions/expense').set('Authorization', `Bearer ${keu}`).send({
+      vendorId: vendor.id, sourceBankCode: '1-1200',
+      lines: [{ accountCode: '2-1300', amount: 6_000_000, vendorBillId: billId }]
+    });
+    expect(rest.status).toBe(201);
+    bill = await db('vendor_bills').where({ id: billId }).first();
+    expect(Number(bill.paid_amount)).toBe(10_000_000);
+    expect(bill.status).toBe('paid');
+
+    // Pelunasan lanjutan pada tagihan yang sudah lunas ditolak
+    const again = await request(app).post('/v1/transactions/expense').set('Authorization', `Bearer ${keu}`).send({
+      vendorId: vendor.id, sourceBankCode: '1-1200',
+      lines: [{ accountCode: '2-1300', amount: 1_000_000, vendorBillId: billId }]
+    });
+    expect(again.status).toBe(409);
+  });
+
+  // Skenario (3) brief (komponen berkelebihan TANPA vendorId → 400, tanpa jurnal,
+  // saldo 1-1400 tidak berubah) sudah dijamin oleh describe AK-01 di atas — tidak
+  // diulang di sini agar tidak kehabisan cost center bebas-revenue di file tes ini
+  // (setiap keberangkatan seed hanya bisa mengakui pendapatan SEKALI).
+});
+
+describe('GET /v1/cost-centers/:id/balances (putaran 3)', () => {
+  it('mengembalikan saldo 1-1400 & 2-1100 sesuai jurnal berjalan CC ini', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const cc = await db('cost_centers').where({ code: 'CC-UMR-PLUS-TR' }).first();
+    const res = await request(app).get(`/v1/cost-centers/${cc.id}/balances`).set('Authorization', `Bearer ${keu}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ costCenterId: cc.id });
+    expect(res.body.data.vendorAdvance1400).toBeGreaterThanOrEqual(0);
+    expect(res.body.data.liability2100).toBeGreaterThanOrEqual(0);
+  });
+});
+
+async function acctBalanceForCC(code: string, costCenterId: string): Promise<number> {
+  const [{ bal }] = await db('journal_lines as jl')
+    .join('accounts as a', 'a.id', 'jl.account_id')
+    .join('journals as j', 'j.id', 'jl.journal_id')
+    .where('a.code', code).andWhere('j.cost_center_id', costCenterId)
+    .select(db.raw('COALESCE(SUM(jl.debit - jl.credit), 0) AS bal'));
+  return Number(bal);
+}
+
+describe('PATCH /v1/vendor-bills/:id/void (tugas lanjutan putaran 3)', () => {
+  it('void tagihan unpaid (paid_amount=0) → 200, jurnal balik seimbang (Dr 2-1300 · Cr akun HPP), saldo 2-1300 turun & HPP turun sebesar nominal', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    // Tagihan dari skenario B "saldo 1-1400=0 dgn vendorId" (describe di atas): CC-HAJ-FURODA-27,
+    // vendor Katering Al Baik, akun 5-3000, 18 jt, masih unpaid & belum pernah disentuh pelunasan.
+    const bill = await db('vendor_bills as vb')
+      .join('vendors as v', 'v.id', 'vb.vendor_id')
+      .where('v.name', 'Katering Al Baik')
+      .select('vb.*')
+      .first();
+    expect(bill.status).toBe('unpaid');
+    expect(Number(bill.paid_amount)).toBe(0);
+
+    const cc2300Before = await acctBalanceForCC('2-1300', bill.cost_center_id);
+    const hppBefore = await acctBalanceForCC(bill.account_code, bill.cost_center_id);
+
+    const res = await request(app).patch(`/v1/vendor-bills/${bill.id}/void`).set('Authorization', `Bearer ${keu}`)
+      .send({ reason: 'Vendor katering dibatalkan, tidak jadi dipesan' });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ id: bill.id, status: 'void' });
+
+    const journal = await db('journals').where({ journal_no: res.body.data.journalNo }).first();
+    expect(journal.source).toBe('expense');
+    expect(journal.cost_center_id).toBe(bill.cost_center_id);
+    const lines = await db('journal_lines as l').join('accounts as a', 'a.id', 'l.account_id')
+      .select('a.code', 'l.debit', 'l.credit').where('l.journal_id', journal.id);
+    expect(lines.find((l) => l.code === '2-1300')).toMatchObject({ debit: String(Number(bill.amount).toFixed(2)) });
+    expect(lines.find((l) => l.code === bill.account_code)).toMatchObject({ credit: String(Number(bill.amount).toFixed(2)) });
+    const totalDebit = lines.reduce((s, l) => s + Number(l.debit), 0);
+    const totalCredit = lines.reduce((s, l) => s + Number(l.credit), 0);
+    expect(totalDebit).toBe(totalCredit); // jurnal balik seimbang
+
+    // Saldo 2-1300 (liabilitas, normal kredit) turun sebesar nominal → representasi
+    // debit-normal (jl.debit - jl.credit) NAIK sebesar amount (mendekati/menuju nol).
+    const cc2300After = await acctBalanceForCC('2-1300', bill.cost_center_id);
+    expect(cc2300After - cc2300Before).toBe(Number(bill.amount));
+    // HPP (5-xxxx, normal debit) turun sebesar nominal → representasi debit-normal TURUN.
+    const hppAfter = await acctBalanceForCC(bill.account_code, bill.cost_center_id);
+    expect(hppBefore - hppAfter).toBe(Number(bill.amount));
+
+    const updated = await db('vendor_bills').where({ id: bill.id }).first();
+    expect(updated.status).toBe('void');
+    expect(updated.void_reason).toBe('Vendor katering dibatalkan, tidak jadi dipesan');
+    expect(updated.voided_at).toBeTruthy();
+    expect(updated.reversal_journal_id).toBe(journal.id);
+  });
+
+  it('void tagihan yang sudah dibayar sebagian/lunas → 409 tanpa jurnal baru', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    // Tagihan dari skenario B "pelunasan via Pembayaran Biaya" (describe di atas):
+    // CC-UMR-PLUS-AQ, vendor Kedutaan — Visa Agent, 10 jt, sudah LUNAS (paid) di sana.
+    const bill = await db('vendor_bills as vb')
+      .join('vendors as v', 'v.id', 'vb.vendor_id')
+      .where('v.name', 'Kedutaan — Visa Agent')
+      .select('vb.*')
+      .first();
+    expect(bill.status).toBe('paid');
+    const journalsBefore = await db('journals').count<{ n: string }[]>('id as n').first();
+
+    const res = await request(app).patch(`/v1/vendor-bills/${bill.id}/void`).set('Authorization', `Bearer ${keu}`)
+      .send({ reason: 'Coba batalkan tagihan yang sudah lunas' });
+    expect(res.status).toBe(409);
+
+    const journalsAfter = await db('journals').count<{ n: string }[]>('id as n').first();
+    expect(Number(journalsAfter?.n)).toBe(Number(journalsBefore?.n));
+  });
+
+  it('void dua kali → 409 pada percobaan kedua', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const bill = await db('vendor_bills as vb')
+      .join('vendors as v', 'v.id', 'vb.vendor_id')
+      .where('v.name', 'Katering Al Baik')
+      .select('vb.*')
+      .first();
+    expect(bill.status).toBe('void'); // dibatalkan oleh tes pertama di describe ini
+
+    const res = await request(app).patch(`/v1/vendor-bills/${bill.id}/void`).set('Authorization', `Bearer ${keu}`)
+      .send({ reason: 'Coba batalkan lagi' });
+    expect(res.status).toBe(409);
+  });
+
+  it('role operasional/marketing ditolak 403', async () => {
+    const ops = await token('ops@safar.co.id');
+    const mkt = await token('marketing@safar.co.id');
+    const bill = await db('vendor_bills as vb')
+      .join('vendors as v', 'v.id', 'vb.vendor_id')
+      .where('v.name', 'Grand Al Massa Hotel')
+      .select('vb.*')
+      .first();
+    for (const t of [ops, mkt]) {
+      const res = await request(app).patch(`/v1/vendor-bills/${bill.id}/void`).set('Authorization', `Bearer ${t}`).send({ reason: 'Tidak berwenang' });
+      expect(res.status).toBe(403);
+    }
+    // Tidak tersentuh oleh percobaan RBAC di atas — tetap unpaid utk tes lain bila perlu.
+    const stillUnpaid = await db('vendor_bills').where({ id: bill.id }).first();
+    expect(stillUnpaid.status).toBe('unpaid');
+  });
+
+  it('lunasi tagihan yang sudah void (via vendorBillId di Pembayaran Biaya) → 409', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const bill = await db('vendor_bills as vb')
+      .join('vendors as v', 'v.id', 'vb.vendor_id')
+      .where('v.name', 'Katering Al Baik')
+      .select('vb.*')
+      .first();
+    expect(bill.status).toBe('void');
+
+    const res = await request(app).post('/v1/transactions/expense').set('Authorization', `Bearer ${keu}`).send({
+      sourceBankCode: '1-1200',
+      lines: [{ accountCode: '2-1300', amount: 1_000_000, vendorBillId: bill.id }]
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it('alasan < 5 karakter ditolak validasi (400)', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const bill = await db('vendor_bills as vb')
+      .join('vendors as v', 'v.id', 'vb.vendor_id')
+      .where('v.name', 'Turkish Airlines')
+      .select('vb.*')
+      .first();
+    const res = await request(app).patch(`/v1/vendor-bills/${bill.id}/void`).set('Authorization', `Bearer ${keu}`).send({ reason: 'ab' });
+    expect(res.status).toBe(400);
+  });
+
+  it('GET /v1/vendor-bills?status=void mengembalikan tagihan yang sudah dibatalkan', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const res = await request(app).get('/v1/vendor-bills').query({ status: 'void' }).set('Authorization', `Bearer ${keu}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBeGreaterThanOrEqual(1);
+    for (const row of res.body.data) expect(row.status).toBe('void');
+  });
+});
+
+describe('POST /v1/journals/:id/reverse (C, rekomendasi N-3)', () => {
+  it('balik jurnal manual → jurnal pembalik balance, saldo akun kembali, relasi reversalOfJournalNo/reversedByJournalNo tampil di GET /journals', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const before = (await request(app).get('/v1/accounts').set('Authorization', `Bearer ${keu}`)).body.data;
+    const bankBefore = before.find((a: { code: string }) => a.code === '1-1200').balance;
+
+    const created = await request(app).post('/v1/journals').set('Authorization', `Bearer ${keu}`).send({
+      date: '2026-09-16', description: 'Uji koreksi manual (akan dibalik)',
+      lines: [{ accountCode: '6-4000', debit: 500_000 }, { accountCode: '1-1200', credit: 500_000 }]
+    });
+    expect(created.status).toBe(201);
+    const journalId = created.body.data.id as string;
+
+    const reversed = await request(app).post(`/v1/journals/${journalId}/reverse`).set('Authorization', `Bearer ${keu}`)
+      .send({ reason: 'Salah input akun biaya' });
+    expect(reversed.status).toBe(201);
+    expect(reversed.body.data.totalDebit).toBe(reversed.body.data.totalCredit);
+    expect(reversed.body.data.reversalOfJournalNo).toBe(created.body.data.journal_no);
+
+    const after = (await request(app).get('/v1/accounts').set('Authorization', `Bearer ${keu}`)).body.data;
+    expect(after.find((a: { code: string }) => a.code === '1-1200').balance).toBe(bankBefore); // saldo kembali
+
+    const list = await request(app).get('/v1/journals').set('Authorization', `Bearer ${keu}`);
+    const srcEntry = list.body.data.entries.find((e: { journalNo: string }) => e.journalNo === created.body.data.journal_no);
+    const revEntry = list.body.data.entries.find((e: { journalNo: string }) => e.journalNo === reversed.body.data.journal_no);
+    expect(srcEntry.reversedByJournalNo).toBe(reversed.body.data.journal_no);
+    expect(revEntry.reversalOfJournalNo).toBe(created.body.data.journal_no);
+  });
+
+  it('balik dua kali → 409', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const created = await request(app).post('/v1/journals').set('Authorization', `Bearer ${keu}`).send({
+      date: '2026-09-16', description: 'Uji balik dua kali',
+      lines: [{ accountCode: '6-4000', debit: 200_000 }, { accountCode: '1-1200', credit: 200_000 }]
+    });
+    const journalId = created.body.data.id as string;
+    const first = await request(app).post(`/v1/journals/${journalId}/reverse`).set('Authorization', `Bearer ${keu}`).send({ reason: 'Koreksi pertama' });
+    expect(first.status).toBe(201);
+    const second = await request(app).post(`/v1/journals/${journalId}/reverse`).set('Authorization', `Bearer ${keu}`).send({ reason: 'Koreksi kedua' });
+    expect(second.status).toBe(409);
+  });
+
+  it('jurnal source payment/revenue/expense/commission/reconciliation ditolak (409) — hanya source manual', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const paymentJournal = await db('journals').where({ source: 'payment' }).first();
+    const res = await request(app).post(`/v1/journals/${paymentJournal.id}/reverse`).set('Authorization', `Bearer ${keu}`)
+      .send({ reason: 'Coba balik jurnal otomatis' });
+    expect(res.status).toBe(409);
+  });
+
+  it('role operasional/marketing ditolak 403', async () => {
+    const ops = await token('ops@safar.co.id');
+    const mkt = await token('marketing@safar.co.id');
+    const anyJournal = await db('journals').first();
+    for (const t of [ops, mkt]) {
+      const res = await request(app).post(`/v1/journals/${anyJournal.id}/reverse`).set('Authorization', `Bearer ${t}`).send({ reason: 'Tidak berwenang' });
+      expect(res.status).toBe(403);
+    }
+  });
+
+  it('alasan < 5 karakter ditolak validasi (400)', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const created = await request(app).post('/v1/journals').set('Authorization', `Bearer ${keu}`).send({
+      date: '2026-09-16', description: 'Uji alasan pendek',
+      lines: [{ accountCode: '6-4000', debit: 50_000 }, { accountCode: '1-1200', credit: 50_000 }]
+    });
+    const res = await request(app).post(`/v1/journals/${created.body.data.id}/reverse`).set('Authorization', `Bearer ${keu}`).send({ reason: 'ab' });
+    expect(res.status).toBe(400);
+  });
+
+  it('pembalikan yang membuat 2-1100 per CC negatif → 400 (guard N-3 tetap berlaku)', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    // MKT-KOMISI: cost center non-keberangkatan, TIDAK dipakai tes lain di file ini utk
+    // pengakuan pendapatan/saldo 2-1100 — aman dimanipulasi tanpa mengganggu tes lain
+    // yang bergantung pada saldo 2-1100 keberangkatan tertentu (mis. CC-UMR-VIP-12).
+    const cc = await db('cost_centers').where({ code: 'MKT-KOMISI' }).first();
+    // Jurnal manual: kredit 2-1100 (menaikkan saldo) — membaliknya akan MENDEBIT 2-1100
+    // sebesar itu, yang bisa membuat saldo CC ini negatif bila melebihi saldo berjalan.
+    const liabBefore = await liab2100(cc.id);
+    const created = await request(app).post('/v1/journals').set('Authorization', `Bearer ${keu}`).send({
+      date: '2026-09-16', description: 'Koreksi tambah 2-1100 (akan coba dibalik setelah dana keluar)',
+      costCenterId: cc.id,
+      lines: [{ accountCode: '1-1200', debit: 50_000 }, { accountCode: '2-1100', credit: 50_000 }]
+    });
+    expect(created.status).toBe(201);
+    // Kuras saldo 2-1100 CC ini hingga tersisa 10.000 (jurnal manual lain, dalam batas
+    // saldo) — membalik jurnal `created` (Dr 2-1100 50.000) dari sisa 10.000 akan
+    // mendorong saldo jadi negatif (-40.000), sehingga guard N-3 harus menolaknya.
+    const drainAmount = liabBefore + 40_000;
+    const drain = await request(app).post('/v1/journals').set('Authorization', `Bearer ${keu}`).send({
+      date: '2026-09-16', description: 'Kuras saldo 2-1100 CC menyisakan 10.000',
+      costCenterId: cc.id,
+      lines: [{ accountCode: '2-1100', debit: drainAmount }, { accountCode: '1-1200', credit: drainAmount }]
+    });
+    expect(drain.status).toBe(201);
+    const res = await request(app).post(`/v1/journals/${created.body.data.id}/reverse`).set('Authorization', `Bearer ${keu}`)
+      .send({ reason: 'Coba balik walau akan negatif' });
+    expect(res.status).toBe(400);
+  });
+
+  // Tugas lanjutan putaran 3 (pertanyaan no. 4 handoff 15): UNIQUE INDEX parsial
+  // pada journals.reversal_of_journal_id sebagai pertahanan tambahan thd race.
+  it('dua permintaan balik BERSAMAAN pada jurnal yang sama → hanya SATU jurnal pembalik tercatat; yang kalah 409 (bukan 500)', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const created = await request(app).post('/v1/journals').set('Authorization', `Bearer ${keu}`).send({
+      date: '2026-09-16', description: 'Uji balik konkuren',
+      lines: [{ accountCode: '6-4000', debit: 300_000 }, { accountCode: '1-1200', credit: 300_000 }]
+    });
+    expect(created.status).toBe(201);
+    const journalId = created.body.data.id as string;
+
+    const [a, b] = await Promise.all([
+      request(app).post(`/v1/journals/${journalId}/reverse`).set('Authorization', `Bearer ${keu}`).send({ reason: 'Balik konkuren A' }),
+      request(app).post(`/v1/journals/${journalId}/reverse`).set('Authorization', `Bearer ${keu}`).send({ reason: 'Balik konkuren B' })
+    ]);
+    const statuses = [a.status, b.status].sort();
+    expect(statuses).toEqual([201, 409]);
+
+    const reversals = await db('journals').where({ reversal_of_journal_id: journalId });
+    expect(reversals).toHaveLength(1);
   });
 });
 
@@ -434,5 +939,92 @@ describe('pengaman akuntansi (audit fixes)', () => {
     // 100+100 debit vs 201 credit → tidak balance → ditolak (bukan tersimpan pincang)
     expect(res.status).toBe(400);
     expect(res.body.error.message).toMatch(/tidak balance/i);
+  });
+});
+
+async function liab2100(costCenterId: string): Promise<number> {
+  const [{ liab }] = await db('journal_lines as jl')
+    .join('accounts as a', 'a.id', 'jl.account_id')
+    .join('journals as j', 'j.id', 'jl.journal_id')
+    .where('a.code', '2-1100').andWhere('j.cost_center_id', costCenterId)
+    .select(db.raw('COALESCE(SUM(jl.credit - jl.debit), 0) AS liab'));
+  return Number(liab);
+}
+
+describe('N-3: 2-1100 Uang Muka Jamaah per cost center tidak boleh negatif (jurnal manual)', () => {
+  it('jurnal manual Dr 2-1100 melebihi saldo CC → 400, saldo tidak berubah (bekas bug refund AK-04)', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const cc = await db('cost_centers').where({ code: 'CC-UMR-VIP-12' }).first();
+    const liabBefore = await liab2100(cc.id);
+    const over = liabBefore + 1_000_000;
+
+    const res = await request(app).post('/v1/journals').set('Authorization', `Bearer ${keu}`).send({
+      date: '2026-09-15', description: 'Refund jamaah batal (manual, uji N-3)', costCenterId: cc.id,
+      lines: [{ accountCode: '2-1100', debit: over }, { accountCode: '1-1200', credit: over }]
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('2-1100');
+    expect(await liab2100(cc.id)).toBe(liabBefore); // tidak jadi negatif (N-3 lama)
+  });
+
+  it('jurnal manual menyentuh 2-1100 tanpa costCenterId ditolak (tidak bisa diverifikasi per-CC)', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const res = await request(app).post('/v1/journals').set('Authorization', `Bearer ${keu}`).send({
+      date: '2026-09-15', description: 'Jurnal manual 2-1100 tanpa cost center',
+      lines: [{ accountCode: '2-1100', debit: 100_000 }, { accountCode: '1-1200', credit: 100_000 }]
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/cost center/i);
+  });
+
+  it('koreksi manual dalam batas saldo CC tetap lolos (jalur sah tidak diblokir)', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const cc = await db('cost_centers').where({ code: 'CC-UMR-PLUS-TR' }).first();
+    const liabBefore = await liab2100(cc.id);
+    expect(liabBefore).toBeGreaterThan(1_000_000); // prasyarat: CC ini punya saldo besar dari seed
+
+    const res = await request(app).post('/v1/journals').set('Authorization', `Bearer ${keu}`).send({
+      date: '2026-09-15', description: 'Koreksi kecil 2-1100 (uji N-3, dalam batas saldo)', costCenterId: cc.id,
+      lines: [{ accountCode: '2-1100', debit: 100_000 }, { accountCode: '1-1200', credit: 100_000 }]
+    });
+    expect(res.status).toBe(201);
+    expect(await liab2100(cc.id)).toBe(liabBefore - 100_000);
+  });
+
+  // R3SEC-01 (review putaran 3): guard N-3 membaca SUM tanpa mengunci cost center →
+  // di bawah READ COMMITTED dua transaksi konkuren sama-sama melihat saldo LAMA dan
+  // sama-sama lolos, sehingga 2-1100 per CC bisa jadi negatif. Perbaikan: postJournal
+  // mengunci baris cost_centers (forUpdate) SEBELUM menghitung saldo.
+  it('dua jurnal manual Dr 2-1100 BERSAMAAN pada CC sama → hanya satu lolos, saldo tidak pernah negatif', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const cc = await db('cost_centers').where({ code: 'MKT-KOMISI' }).first();
+    const before = await liab2100(cc.id);
+
+    // Naikkan saldo 100.000 supaya keadaan awal pasti diketahui.
+    const topUp = await request(app).post('/v1/journals').set('Authorization', `Bearer ${keu}`).send({
+      date: '2026-09-16', description: 'Top up 2-1100 utk uji konkurensi guard N-3', costCenterId: cc.id,
+      lines: [{ accountCode: '1-1200', debit: 100_000 }, { accountCode: '2-1100', credit: 100_000 }]
+    });
+    expect(topUp.status).toBe(201);
+    const avail = await liab2100(cc.id);
+    expect(avail).toBe(before + 100_000);
+
+    // Masing-masing menarik `avail - 40.000`: sendirian LOLOS (sisa 40.000),
+    // berdua MUSTAHIL (sisa -(avail - 80.000) < 0).
+    const each = avail - 40_000;
+    const [a, b] = await Promise.all([
+      request(app).post('/v1/journals').set('Authorization', `Bearer ${keu}`).send({
+        date: '2026-09-16', description: 'Tarik 2-1100 konkuren A', costCenterId: cc.id,
+        lines: [{ accountCode: '2-1100', debit: each }, { accountCode: '1-1200', credit: each }]
+      }),
+      request(app).post('/v1/journals').set('Authorization', `Bearer ${keu}`).send({
+        date: '2026-09-16', description: 'Tarik 2-1100 konkuren B', costCenterId: cc.id,
+        lines: [{ accountCode: '2-1100', debit: each }, { accountCode: '1-1200', credit: each }]
+      })
+    ]);
+    expect([a.status, b.status].sort()).toEqual([201, 400]);
+    const after = await liab2100(cc.id);
+    expect(after).toBe(40_000);
+    expect(after).toBeGreaterThanOrEqual(0);
   });
 });

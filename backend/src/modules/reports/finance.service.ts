@@ -1,4 +1,5 @@
 import { db } from '../../config/db.js';
+import { monthsAgoWib, todayWib, yearMonthWib } from '../../utils/date.js';
 
 /**
  * Laporan keuangan — seluruhnya diagregasi dari journal_lines (satu sumber
@@ -46,9 +47,9 @@ export interface ReportLine {
 export const financeReportsService = {
   /** Laporan Laba Rugi periode (default YTD). */
   async incomeStatement(from?: string, to?: string) {
-    const year = (to ?? new Date().toISOString().slice(0, 10)).slice(0, 4);
+    const year = (to ?? todayWib()).slice(0, 4);
     const f = from ?? `${year}-01-01`;
-    const t = to ?? new Date().toISOString().slice(0, 10);
+    const t = to ?? todayWib();
     const agg = await aggregate(f, t);
 
     const revenue = agg.filter((a) => a.class === 4);
@@ -91,7 +92,7 @@ export const financeReportsService = {
 
   /** Neraca per tanggal (kumulatif). Laba tahun berjalan dihitung dari kelas 4-7. */
   async balanceSheet(asOf?: string) {
-    const t = asOf ?? new Date().toISOString().slice(0, 10);
+    const t = asOf ?? todayWib();
     const agg = await aggregate(undefined, t);
 
     const current = agg.filter((a) => a.class === 1 && a.code < '1-2000');
@@ -163,6 +164,9 @@ export const financeReportsService = {
       .join('departures as d', 'd.id', 'r.departure_id')
       .select('d.package_id')
       .count({ n: '*' })
+      // Butir 6 kontrak pembatalan: jumlah jamaah per paket/cost center tidak
+      // menghitung registrasi yang sudah dibatalkan.
+      .whereNot('r.status', 'cancelled')
       .groupBy('d.package_id');
     const countMap = new Map(jamaahCounts.map((r) => [r.package_id, Number(r.n)]));
 
@@ -196,8 +200,8 @@ export const financeReportsService = {
 
   /** Data Dashboard Eksekutif (replika mockup, dihitung dari data nyata). */
   async dashboard() {
-    const today = new Date().toISOString().slice(0, 10);
-    const thisMonth = today.slice(0, 7);
+    const today = todayWib();
+    const thisMonth = yearMonthWib();
 
     // KPI: penerimaan kas bulan ini (jurnal payment) vs bulan lalu
     const monthly: any[] = await db('journal_lines as l')
@@ -220,12 +224,11 @@ export const financeReportsService = {
       .groupByRaw(`to_char(j.date, 'YYYY-MM')`);
     const revIn = new Map(revMonthly.map((m) => [m.month, Number(m.amount)]));
 
-    // 6 bulan terakhir untuk chart
+    // 6 bulan terakhir untuk chart — aritmetika tahun/bulan murni (WIB), tidak
+    // mencampur `Date.setMonth` lokal dengan `toISOString` UTC (bug lama, lihat AK-02).
     const months: string[] = [];
     for (let i = 5; i >= 0; i--) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - i);
-      months.push(d.toISOString().slice(0, 7));
+      months.push(monthsAgoWib(i));
     }
     const cashflow = months.map((m) => ({
       month: new Date(m + '-01').toLocaleDateString('id-ID', { month: 'short' }),
@@ -238,7 +241,13 @@ export const financeReportsService = {
     const omzetPrev = cashIn.get(prevMonth) ?? 0;
 
     const [{ nActive }] = await db('registrations').whereNot('status', 'cancelled').count({ nActive: '*' });
-    const [{ nNew }] = await db('registrations').whereRaw(`to_char(created_at, 'YYYY-MM') = ?`, [thisMonth]).count({ nNew: '*' });
+    // AK-02 (sisi SQL): created_at adalah timestamptz — to_char tanpa konversi
+    // eksplisit memakai TZ sesi Postgres (default UTC di container), bukan WIB.
+    // Konversi ke Asia/Jakarta dulu sebelum format bulan agar jendela 00:00–06:59
+    // WIB tidak terhitung sebagai "bulan lalu".
+    const [{ nNew }] = await db('registrations')
+      .whereRaw(`to_char(created_at AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM') = ?`, [thisMonth])
+      .count({ nNew: '*' });
 
     // Saldo bank_accounts sudah dalam IDR fungsional (journal engine mencatat IDR) — jumlahkan langsung
     const banks = await db('bank_accounts');

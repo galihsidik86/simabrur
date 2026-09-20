@@ -3,7 +3,7 @@ import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { requireAuth } from '../../middleware/auth.js';
+import { requireAuth, optionalAuth } from '../../middleware/auth.js';
 import { requireRoles } from '../../middleware/rbac.js';
 import { errors } from '../../utils/http.js';
 import { db } from '../../config/db.js';
@@ -60,13 +60,19 @@ export const jamaahRoutes = Router();
 jamaahRoutes.get('/', requireAuth, requireRoles('operasional', 'marketing', 'keuangan', 'pimpinan'), jamaahController.list);
 jamaahRoutes.get('/:id', requireAuth, requireRoles('operasional', 'marketing', 'keuangan', 'pimpinan'), jamaahController.detail);
 jamaahRoutes.patch('/:id', requireAuth, requireRoles('operasional'), jamaahController.updateProfile);
-// Unggah dokumen dapat diakses publik: dipakai wizard pendaftaran sebelum jamaah punya akun
-jamaahRoutes.post('/:id/documents', upload.single('file'), jamaahController.uploadDocument);
+// Unggah dokumen dapat diakses publik: dipakai wizard pendaftaran sebelum jamaah punya akun.
+// optionalAuth: bila pemanggil kebetulan staf ber-otentikasi, service boleh mengizinkan
+// penggantian dokumen verified (DOM-04/SEC-05) — jalur anonim tidak.
+jamaahRoutes.post('/:id/documents', optionalAuth, upload.single('file'), jamaahController.uploadDocument);
 
 export const registrationsRoutes = Router();
 registrationsRoutes.post('/', jamaahController.register); // publik (wizard)
 registrationsRoutes.get('/passport-check', jamaahController.passportCheck); // publik (wizard step 3)
 registrationsRoutes.get('/agent-check', jamaahController.agentCheck); // publik (wizard step bayar)
+// NEW-BE-01 (putaran 2): buka kembali login Portal Jamaah utk registrasi yang ditahan.
+registrationsRoutes.patch('/:id/confirm-identity', requireAuth, requireRoles('operasional'), jamaahController.confirmIdentity);
+// Langkah 9: pembatalan registrasi — operasional/admin (pemisahan tugas dgn refund keuangan).
+registrationsRoutes.post('/:id/cancel', requireAuth, requireRoles('operasional'), jamaahController.cancelRegistration);
 
 export const documentsRoutes = Router();
 documentsRoutes.patch('/:id/verify', requireAuth, requireRoles('operasional'), jamaahController.verifyDocument);

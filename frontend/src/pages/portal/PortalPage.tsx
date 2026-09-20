@@ -349,6 +349,7 @@ function TabDokumen({ d, onUploaded }: { d: PortalData; onUploaded: () => void }
       fd.append('file', file);
       await axios.post(`/v1/jamaah/${d.jamaahId}/documents`, fd);
     },
+    onMutate: () => setError(''),
     onSuccess: onUploaded,
     onError: (e: unknown) => setError((e as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Gagal mengunggah')
   });
@@ -372,7 +373,7 @@ function TabDokumen({ d, onUploaded }: { d: PortalData; onUploaded: () => void }
           const uploadable = doc.status === 'missing' || doc.status === 'rejected';
           return (
             <label key={doc.type}
-              className={`flex items-center gap-3 rounded-[12px] border border-line bg-card p-3 shadow-card ${uploadable ? 'cursor-pointer' : ''}`}>
+              className={`flex items-center gap-3 rounded-[12px] border border-line bg-card p-3 shadow-card ${uploadable && !upload.isPending ? 'cursor-pointer' : ''}`}>
               <span className="flex h-[30px] w-[38px] flex-none items-center justify-center rounded-[7px] text-[9px] font-bold"
                 style={doc.status === 'verified' ? { background: 'oklch(0.46 0.07 158)', color: '#fff' } : { background: '#f0eadc', color: '#8c8371' }}>
                 {doc.type}
@@ -383,8 +384,12 @@ function TabDokumen({ d, onUploaded }: { d: PortalData; onUploaded: () => void }
               </div>
               <span className="rounded-pill px-2 py-[3px] text-[9.5px] font-semibold" style={{ color: st.color, background: st.bg }}>{st.label}</span>
               {uploadable && (
-                <input type="file" accept=".jpg,.jpeg,.png,.pdf" className="hidden"
-                  onChange={(e) => e.target.files?.[0] && upload.mutate({ type: doc.type, file: e.target.files[0] })} />
+                <input type="file" accept=".jpg,.jpeg,.png,.pdf" className="hidden" disabled={upload.isPending}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = ''; // reset agar file yang sama bisa dipilih ulang setelah gagal
+                    if (file) upload.mutate({ type: doc.type, file });
+                  }} />
               )}
             </label>
           );

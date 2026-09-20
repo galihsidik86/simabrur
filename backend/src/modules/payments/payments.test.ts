@@ -1,10 +1,11 @@
-import { beforeAll, afterAll, describe, expect, it } from 'vitest';
+import { beforeAll, afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { db } from '../../config/db.js';
 import { createApp } from '../../app.js';
 import { resetTestDb } from '../../test/db-setup.js';
 import { terbilang } from '../../utils/terbilang.js';
 import { buildSchedules, receivableStatus, agingBucket, invoiceNumber, vaNumber } from './payments.rules.js';
+import { idempotencyConflicts, paymentsService } from './payments.service.js';
 
 const app = createApp();
 
@@ -14,6 +15,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await db.destroy();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 async function token(email: string) {
@@ -79,6 +84,29 @@ describe('penomoran invoice & VA', () => {
   it('INV menyematkan serial registrasi; VA pola 8801', () => {
     expect(invoiceNumber('UMR-2026-0418', '2026-06-10')).toBe('INV/2026/06/0418');
     expect(vaNumber('UMR-2026-0418')).toBe('8801 0418 0000 0418');
+  });
+});
+
+// TS-02: existing bisa undefined setelah ON CONFLICT DO NOTHING (defensif); dan
+// perbandingan replay invoice/nominal/termin harus persis, tak boleh longgar.
+describe('idempotencyConflicts (TS-02)', () => {
+  const existing = { invoice_id: 'inv-1', amount: '1000000', schedule_id: null };
+  const input = { invoiceId: 'inv-1', amount: 1_000_000, scheduleId: null, bankAccountCode: '1-1200', method: 'transfer' as const };
+
+  it('replay identik (invoice/nominal/termin sama) → bukan conflict', () => {
+    expect(idempotencyConflicts(existing, input)).toBe(false);
+  });
+  it('invoice berbeda → conflict', () => {
+    expect(idempotencyConflicts(existing, { ...input, invoiceId: 'inv-2' })).toBe(true);
+  });
+  it('nominal berbeda → conflict', () => {
+    expect(idempotencyConflicts(existing, { ...input, amount: 500_000 })).toBe(true);
+  });
+  it('termin berbeda → conflict', () => {
+    expect(idempotencyConflicts(existing, { ...input, scheduleId: 'sch-1' })).toBe(true);
+  });
+  it('existing undefined (row tak ditemukan saat re-fetch) → dianggap conflict, tidak crash', () => {
+    expect(idempotencyConflicts(undefined, input)).toBe(true);
   });
 });
 
@@ -275,5 +303,217 @@ describe('guard: pembayaran pending ganda tidak boleh over-credit 2-1100', () =>
       .join('payments as pm', 'pm.id', 'rc.payment_id')
       .where('pm.invoice_id', inv.id);
     expect(receipts).toHaveLength(1);
+  });
+});
+
+describe('FE-01: Idempotency-Key tidak boleh dipakai ulang utk pembayaran BERBEDA', () => {
+  it('replay payload sama → 200 payment lama; key sama + amount/termin beda → 409, baris payments tidak bertambah', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const dep = await db('departures as d')
+      .join('packages as p', 'p.id', 'd.package_id')
+      .where('p.code', 'UMR-PLUS-AQ')
+      .select('d.id')
+      .first();
+    const reg = await request(app).post('/v1/registrations').send({
+      departureId: dep.id, roomType: 'quad', paymentScheme: 'lunas', source: 'web',
+      jamaah: {
+        nik: '9922000000000009', fullName: 'UJI FE-01 IDEMPOTENCY', gender: 'L', birthPlace: 'Bekasi',
+        birthDate: '1979-03-03', phone: '081200009999', address: 'Jl. Uji FE-01',
+        emergencyContactName: 'Keluarga', emergencyContactPhone: '081300009999',
+        passportNo: 'FE01A001', passportExpiry: '2030-01-01'
+      }
+    });
+    expect(reg.status).toBe(201);
+    const invId = reg.body.data.invoiceId as string;
+    const sch = await db('payment_schedules').where({ registration_id: reg.body.data.registrationId }).first();
+    const key = `uji-fe01-${invId}`;
+    const body = { invoiceId: invId, bankAccountCode: '1-1200', amount: 1_000_000, method: 'transfer' };
+
+    const first = await request(app).post('/v1/payments').set('Authorization', `Bearer ${keu}`).set('Idempotency-Key', key).send(body);
+    expect(first.status).toBe(201);
+    const countBefore = await db('payments').count<{ n: string }[]>('id as n').first();
+
+    // Replay dengan payload PERSIS SAMA → perilaku tetap (200, payment lama) — tidak berubah
+    const replaySame = await request(app).post('/v1/payments').set('Authorization', `Bearer ${keu}`).set('Idempotency-Key', key).send(body);
+    expect(replaySame.status).toBe(200);
+    expect(replaySame.body.data.id).toBe(first.body.data.id);
+
+    // Key sama, nominal BEDA → 409 (dulu: replay diam-diam mengembalikan payment Termin 1,
+    // pembayaran ke-2 hilang tanpa error — FE-01)
+    const conflictAmount = await request(app).post('/v1/payments').set('Authorization', `Bearer ${keu}`).set('Idempotency-Key', key)
+      .send({ ...body, amount: 2_000_000 });
+    expect(conflictAmount.status).toBe(409);
+    expect(conflictAmount.body.error.message).toMatch(/Idempotency-Key sudah dipakai untuk pembayaran lain/i);
+
+    // Key sama, scheduleId BEDA → 409
+    const conflictSchedule = await request(app).post('/v1/payments').set('Authorization', `Bearer ${keu}`).set('Idempotency-Key', key)
+      .send({ ...body, scheduleId: sch.id });
+    expect(conflictSchedule.status).toBe(409);
+
+    const countAfter = await db('payments').count<{ n: string }[]>('id as n').first();
+    expect(Number(countAfter?.n)).toBe(Number(countBefore?.n)); // 409 tidak menambah baris payments
+  });
+});
+
+describe('N-2: rincian item dokumen invoice memakai harga BEKU, bukan harga paket terkini', () => {
+  it('ubah basePrice/tripleUpcharge paket setelah invoice terbit → rincian dokumen tidak berubah, Σ item = total_amount', async () => {
+    const adm = await token('admin@safar.co.id');
+    const mkt = await token('marketing@safar.co.id');
+    const keu = await token('keuangan@safar.co.id');
+
+    const pkgRes = await request(app).post('/v1/packages').set('Authorization', `Bearer ${adm}`).send({
+      code: 'VERIF-N2', name: 'Paket Uji N-2', type: 'umrah', category: 'reguler', durationDays: 9,
+      basePrice: 20_000_000, departure: { departureDate: '2026-11-20', quota: 10 }
+    });
+    expect(pkgRes.status).toBe(201);
+    const pkgId = pkgRes.body.data.id ?? (await db('packages').where({ code: 'VERIF-N2' }).first()).id;
+    const dep = await db('departures as d').join('packages as p', 'p.id', 'd.package_id').where('p.code', 'VERIF-N2').select('d.id').first();
+
+    const reg = await request(app).post('/v1/registrations').send({
+      departureId: dep.id, roomType: 'triple', paymentScheme: 'lunas',
+      jamaah: {
+        nik: '9922000000000010', fullName: 'UJI N-2 RINCIAN INVOICE', gender: 'L', birthPlace: 'Depok',
+        birthDate: '1985-05-05', phone: '081200002222', address: 'Jl. Uji N-2',
+        emergencyContactName: 'Keluarga', emergencyContactPhone: '081300002222',
+        passportNo: 'N2000001', passportExpiry: '2030-01-01'
+      }
+    });
+    expect(reg.status).toBe(201);
+    const invId = reg.body.data.invoiceId as string;
+
+    const before = await request(app).get(`/v1/invoices/${invId}/document`).set('Authorization', `Bearer ${keu}`);
+    expect(before.status).toBe(200);
+    expect(before.body.data.items[0].price).toBe(20_000_000); // base_price beku
+    expect(before.body.data.items[1].price).toBe(3_500_000); // tripleUpcharge default beku
+    expect(before.body.data.subtotal).toBe(23_500_000);
+
+    const upd = await request(app).put(`/v1/packages/${pkgId}`).set('Authorization', `Bearer ${mkt}`)
+      .send({ basePrice: 30_000_000, tripleUpcharge: 9_000_000 });
+    expect(upd.status).toBe(200);
+
+    const after = await request(app).get(`/v1/invoices/${invId}/document`).set('Authorization', `Bearer ${keu}`);
+    expect(after.status).toBe(200);
+    expect(after.body.data.items[0].price).toBe(20_000_000); // TIDAK berubah (N-2 fix)
+    expect(after.body.data.items[1].price).toBe(3_500_000); // TIDAK berubah (N-2 fix)
+    expect(after.body.data.subtotal).toBe(23_500_000);
+
+    const itemSum = after.body.data.items.reduce((s: number, it: { price: number; qty: number }) => s + it.price * it.qty, 0);
+    const invRow = await db('invoices').where({ id: invId }).first();
+    expect(itemSum).toBe(Number(invRow.total_amount)); // Σ item = total_amount
+  });
+
+  it('golden thread (baris invoice LAMA, backfill migrasi): Σ item tetap = total_amount', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const inv = await db('invoices').where({ number: 'INV/2026/06/0418' }).first();
+    const res = await request(app).get(`/v1/invoices/${inv.id}/document`).set('Authorization', `Bearer ${keu}`);
+    expect(res.status).toBe(200);
+    const itemSum = res.body.data.items.reduce((s: number, it: { price: number; qty: number }) => s + it.price * it.qty, 0);
+    expect(itemSum).toBe(Number(inv.total_amount));
+  });
+});
+
+describe('AK-02: tanggal default kwitansi & jurnal memakai kalender WIB, bukan UTC', () => {
+  it('verifikasi jam 2027-01-01 02:00 WIB (= 2026-12-31 19:00 UTC) → kwitansi & jurnal 2027-01-01 / JV-2027', async () => {
+    // Fixture dibuat pada jam SUNGGUHAN (bukan bagian yang diuji) — hanya verifikasi
+    // pembayaran di bawah ini yang perlu jam dipalsukan.
+    const dep = await db('departures as d')
+      .join('packages as p', 'p.id', 'd.package_id')
+      .where('p.code', 'UMR-REG-AT')
+      .select('d.id')
+      .first();
+    const reg = await request(app).post('/v1/registrations').send({
+      departureId: dep.id, roomType: 'quad', paymentScheme: 'dp',
+      jamaah: {
+        nik: '9922000000000012', fullName: 'UJI AK-02 VERIFIKASI', gender: 'L', birthPlace: 'Solo', birthDate: '1975-01-01',
+        phone: '081200001234', address: 'Jl. Uji AK-02 Verifikasi', emergencyContactName: 'Kel', emergencyContactPhone: '081300001234',
+        passportNo: 'AK02V001', passportExpiry: '2030-01-01'
+      }
+    });
+    expect(reg.status).toBe(201);
+    const invId = reg.body.data.invoiceId as string;
+    const sch = await db('payment_schedules')
+      .where({ registration_id: reg.body.data.registrationId, status: 'unpaid' })
+      .orderBy('term_no')
+      .first();
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2027-01-01T02:00:00+07:00'));
+    const keu = await token('keuangan@safar.co.id'); // login SETELAH jam dipalsukan
+    const created = await request(app).post('/v1/payments').set('Authorization', `Bearer ${keu}`)
+      .send({ invoiceId: invId, scheduleId: sch.id, bankAccountCode: '1-1200', amount: Number(sch.amount), method: 'va' });
+    expect(created.status).toBe(201);
+    const ver = await request(app).patch(`/v1/payments/${created.body.data.id}/verify`).set('Authorization', `Bearer ${keu}`);
+    expect(ver.status).toBe(200);
+    expect(ver.body.data.receipt.issued_date).toBe('2027-01-01');
+    expect(ver.body.data.receipt.number).toMatch(/^KWT\/2027\/01\//);
+    expect(ver.body.data.journal.journalNo).toMatch(/^JV-2027-/);
+    const journal = await db('journals').where({ id: ver.body.data.journal.id }).first();
+    expect(journal.date).toBe('2027-01-01');
+  });
+
+  it('registrasi publik jam 2026-10-01 03:00 WIB (= 2026-09-30 20:00 UTC) → invoice bertanggal 2026-10-01, INV/2026/10', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-01T03:00:00+07:00'));
+    const dep = await db('departures as d')
+      .join('packages as p', 'p.id', 'd.package_id')
+      .where('p.code', 'UMR-PLUS-AQ')
+      .select('d.id')
+      .first();
+    const res = await request(app).post('/v1/registrations').send({
+      departureId: dep.id, roomType: 'quad', paymentScheme: 'dp',
+      jamaah: {
+        nik: '9922000000000011', fullName: 'UJI AK-02 TANGGAL', gender: 'L', birthPlace: 'Bogor', birthDate: '1980-01-01',
+        phone: '081255556677', address: 'Jl. Uji AK-02', emergencyContactName: 'Kel', emergencyContactPhone: '081277778899',
+        passportNo: 'AK02B001', passportExpiry: '2030-06-01'
+      }
+    });
+    expect(res.status).toBe(201);
+    const inv = await db('invoices').where({ id: res.body.data.invoiceId }).first();
+    expect(inv.issued_date).toBe('2026-10-01');
+    expect(inv.number).toMatch(/^INV\/2026\/10\//);
+  });
+});
+
+describe('AK-02 (sisi SQL): KPI "terkumpul bulan ini" memakai kalender Asia/Jakarta, bukan TZ sesi Postgres', () => {
+  it('pembayaran WIB 2026-10-01 00:30 (= 2026-09-30 17:30 UTC, paid_at naif) ikut terhitung bulan Oktober', async () => {
+    const dep = await db('departures as d')
+      .join('packages as p', 'p.id', 'd.package_id')
+      .where('p.code', 'UMR-REG-AT')
+      .select('d.id')
+      .first();
+    const reg = await request(app).post('/v1/registrations').send({
+      departureId: dep.id, roomType: 'quad', paymentScheme: 'dp',
+      jamaah: {
+        nik: '9922000000000097', fullName: 'UJI AK-02 SQL KOLEKSI', gender: 'L', birthPlace: 'Bogor', birthDate: '1980-01-01',
+        phone: '081200009997', address: 'Jl. Uji AK-02 SQL Koleksi', emergencyContactName: 'Kel', emergencyContactPhone: '081300009997',
+        passportNo: 'AK02SQLK', passportExpiry: '2030-06-01'
+      }
+    });
+    expect(reg.status).toBe(201);
+    const sch = await db('payment_schedules')
+      .where({ registration_id: reg.body.data.registrationId, status: 'unpaid' })
+      .orderBy('term_no')
+      .first();
+    const keu = await token('keuangan@safar.co.id');
+    // paid_at eksplisit WIB 00:30 tgl 1 (kolom `timestamp` naif — disimpan sbg
+    // wall-clock UTC-nya, 2026-09-30 17:30, oleh Postgres saat parsing offset +07:00).
+    const created = await request(app).post('/v1/payments').set('Authorization', `Bearer ${keu}`)
+      .send({
+        invoiceId: reg.body.data.invoiceId, scheduleId: sch.id, bankAccountCode: '1-1200',
+        amount: Number(sch.amount), method: 'va', paidAt: '2026-10-01T00:30:00+07:00'
+      });
+    expect(created.status).toBe(201);
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-05T04:00:00Z')); // jelas Oktober di WIB maupun UTC
+    const before = (await paymentsService.receivables()).kpi.collectedThisMonth;
+    // Token BARU setelah jam dipalsukan — token lama bisa lewat `exp` JWT-nya
+    // karena jam sistem melompat maju (pola sama seperti tes AK-02 lain di atas).
+    const keuAfterFake = await token('keuangan@safar.co.id');
+    const verified = await request(app).patch(`/v1/payments/${created.body.data.id}/verify`).set('Authorization', `Bearer ${keuAfterFake}`);
+    expect(verified.status).toBe(200);
+    const after = (await paymentsService.receivables()).kpi.collectedThisMonth;
+    vi.useRealTimers();
+    expect(after).toBe(before + Number(sch.amount));
   });
 });

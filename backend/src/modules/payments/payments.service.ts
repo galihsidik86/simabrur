@@ -6,13 +6,16 @@ import { errors } from '../../utils/http.js';
 import { audit } from '../../middleware/audit.js';
 import { nextNumber } from '../../utils/numbering.js';
 import { terbilang } from '../../utils/terbilang.js';
+import { todayWib } from '../../utils/date.js';
+import { withTransaction } from '../../utils/tx.js';
 import { agingBucket, buildSchedules, receivableStatus, vaNumber } from './payments.rules.js';
-import type { createPaymentSchema, upsertBankAccountSchema } from './payments.validation.js';
+import type { createPaymentSchema, payRefundSchema, upsertBankAccountSchema } from './payments.validation.js';
 import { postJournal, receiptLines } from '../accounting/journal.engine.js';
 
 type CreatePaymentInput = z.infer<typeof createPaymentSchema>;
+type PayRefundInput = z.infer<typeof payRefundSchema>;
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayWib;
 
 /**
  * Terbitkan invoice + jadwal termin utk sebuah registrasi.
@@ -48,6 +51,10 @@ export async function issueInvoice(trx: Knex.Transaction, registrationId: string
       issued_date: issueDate,
       due_date: schedules[schedules.length - 1].dueDate,
       total_amount: total,
+      // N-2: bekukan komponen harga SAAT TERBIT — dokumen invoice harus tetap
+      // menampilkan rincian ini apa adanya walau harga paket direvisi kemudian.
+      base_price: Number(reg.base_price),
+      room_upcharge: upcharge,
       va_number: vaNumber(reg.reg_number)
     })
     .returning('*');
@@ -69,6 +76,27 @@ async function paidSoFar(trx: Knex.Transaction, invoiceId: string): Promise<numb
   return Number(paid ?? 0);
 }
 
+/**
+ * FE-01 (defense-in-depth): sebuah Idempotency-Key hanya boleh mewakili SATU
+ * pembayaran. Bila key yang sama dipakai ulang dengan invoice/nominal/termin
+ * BERBEDA, itu bukan retry jaringan yang sah — tolak, jangan replay diam-diam
+ * (replay diam-diam bisa menyembunyikan pembayaran ke-2 yang gagal tercatat,
+ * lihat handoff 05b FE-01).
+ */
+/**
+ * TS-02: `existing` bisa `undefined` (baris ON CONFLICT DO NOTHING seharusnya
+ * selalu ada saat dipanggil, tapi tipe query knex tetap `Row | undefined` —
+ * jangan asumsikan lewat non-null assertion). Tanpa baris nyata, dianggap
+ * "conflict" (bukan replay yang sah) agar pemanggil menolak dengan tegas.
+ */
+export function idempotencyConflicts(existing: Record<string, unknown> | undefined, input: CreatePaymentInput): boolean {
+  if (!existing) return true;
+  const sameInvoice = existing.invoice_id === input.invoiceId;
+  const sameAmount = Number(existing.amount) === input.amount;
+  const sameSchedule = (existing.schedule_id ?? null) === (input.scheduleId ?? null);
+  return !(sameInvoice && sameAmount && sameSchedule);
+}
+
 async function recalcInvoiceStatus(trx: Knex.Transaction, invoiceId: string) {
   const inv = await trx('invoices').where({ id: invoiceId }).first();
   const [{ paid }] = await trx('payments')
@@ -80,22 +108,76 @@ async function recalcInvoiceStatus(trx: Knex.Transaction, invoiceId: string) {
   return { paid: paidNum, status };
 }
 
+/** Query dasar RefundDto (kontrak langkah 9) — dipakai list/detail/by-registration. */
+function refundQuery(exec: Knex | Knex.Transaction) {
+  return exec('refunds as rf')
+    .join('registrations as r', 'r.id', 'rf.registration_id')
+    .join('jamaah as j', 'j.id', 'r.jamaah_id')
+    .join('departures as d', 'd.id', 'r.departure_id')
+    .join('packages as p', 'p.id', 'd.package_id')
+    .join('cost_centers as cc', 'cc.id', 'rf.cost_center_id')
+    .leftJoin('bank_accounts as ba', 'ba.id', 'rf.bank_account_id')
+    .leftJoin('journals as jr', 'jr.id', 'rf.journal_id')
+    .select(
+      'rf.id', 'rf.registration_id', 'r.reg_number', 'j.full_name as jamaah_name',
+      'p.name as package_name', 'd.departure_date', 'cc.code as cost_center_code',
+      'rf.paid_total', 'rf.deduction', 'rf.refund_amount', 'rf.deduction_reason',
+      'rf.status', 'r.cancel_reason', 'r.cancelled_at', 'rf.paid_at',
+      'ba.account_code as bank_account_code', 'jr.journal_no as journal_number',
+      'rf.receipt_number'
+    );
+}
+
+function mapRefundRow(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    registrationId: row.registration_id,
+    regNumber: row.reg_number,
+    jamaahName: row.jamaah_name,
+    packageName: row.package_name,
+    departureDate: row.departure_date,
+    costCenterCode: row.cost_center_code,
+    paidTotal: Number(row.paid_total),
+    deduction: Number(row.deduction),
+    refundAmount: Number(row.refund_amount),
+    deductionReason: row.deduction_reason ?? null,
+    status: row.status,
+    cancelReason: row.cancel_reason ?? null,
+    cancelledAt: row.cancelled_at ?? null,
+    paidAt: row.paid_at ?? null,
+    bankAccountCode: row.bank_account_code ?? null,
+    journalNumber: row.journal_number ?? null,
+    // A (putaran 3): nomor kwitansi refund KWR/YYYY/MM/NNNN, terbit saat dibayar.
+    receiptNumber: row.receipt_number ?? null
+  };
+}
+
+async function buildRefundDetail(exec: Knex | Knex.Transaction, id: string) {
+  const row = await refundQuery(exec).where('rf.id', id).first();
+  return row ? mapRefundRow(row) : null;
+}
+
 export const paymentsService = {
   async createInvoice(req: Request, registrationId: string) {
-    return db.transaction(async (trx) => {
+    return withTransaction(async (trx) => {
       const invoice = await issueInvoice(trx, registrationId);
       await audit(req, { action: 'invoices.create', entity: 'invoices', entityId: invoice.id, newValues: { registrationId } }, trx);
       return invoice;
-    });
+    }, { retries: 2 });
   },
 
   /** Catat pembayaran (pending). Idempotency-Key: kiriman ulang mengembalikan payment yang sama. */
   async createPayment(req: Request, input: CreatePaymentInput, idempotencyKey?: string) {
     if (idempotencyKey) {
       const existing = await db('payments').where({ idempotency_key: idempotencyKey }).first();
-      if (existing) return { payment: existing, idempotent: true };
+      if (existing) {
+        if (idempotencyConflicts(existing, input)) {
+          throw errors.conflict('Idempotency-Key sudah dipakai untuk pembayaran lain');
+        }
+        return { payment: existing, idempotent: true };
+      }
     }
-    return db.transaction(async (trx) => {
+    return withTransaction(async (trx) => {
       const invoice = await trx('invoices').where({ id: input.invoiceId }).first();
       if (!invoice) throw errors.notFound('Invoice tidak ditemukan');
       if (input.scheduleId) {
@@ -139,27 +221,56 @@ export const paymentsService = {
         .returning('*');
       if (!payment) {
         const existing = await trx('payments').where({ idempotency_key: idempotencyKey! }).first();
+        if (!existing) {
+          // TS-02: baris ON CONFLICT DO NOTHING seharusnya milik transaksi lain yang
+          // menang race ini — bila re-fetch tidak menemukannya (defensif, tak
+          // reachable dalam alur normal karena tidak ada DELETE pada payments),
+          // gagalkan dengan pesan jelas alih-alih meneruskan `undefined`.
+          throw errors.conflict('Idempotency-Key sudah dipakai, namun pembayaran terkait tidak ditemukan — ulangi dengan key baru');
+        }
+        if (idempotencyConflicts(existing, input)) {
+          throw errors.conflict('Idempotency-Key sudah dipakai untuk pembayaran lain');
+        }
         return { payment: existing, idempotent: true };
       }
       await audit(req, { action: 'payments.create', entity: 'payments', entityId: payment.id, newValues: input }, trx);
       return { payment, idempotent: false };
-    });
+    }, { retries: 2 });
   },
 
   /**
    * Verifikasi pembayaran (role keuangan): tandai termin lunas, hitung ulang status invoice,
    * terbitkan kwitansi bernomor + terbilang. (Posting jurnal otomatis menyusul Fase 5 —
    * jurnalnya: Dr Bank/Kas · Cr 2-1100 Uang Muka Jamaah.)
+   *
+   * TS-01/RV-01: urutan lock GLOBAL yang dipakai seluruh modul pada transaksi yang
+   * menyentuh lebih dari satu tabel berikut, agar tidak ada siklus → deadlock 40P01:
+   *   registrations → departures → invoices → payments → payment_schedules → commissions
+   * (lihat cancelRegistration di jamaah.service.ts, urutan yang sama persis). Di sini kita
+   * BUTUH invoice_id sebelum bisa mengunci invoices lebih dulu, jadi payment dibaca dulu
+   * TANPA lock hanya untuk itu — baris payment yang sesungguhnya dikunci & divalidasi
+   * SETELAH invoice terkunci, karena statusnya bisa saja sudah berubah (mis. ditolak
+   * otomatis oleh cancelRegistration) selagi kita menunggu lock invoice.
    */
   async verifyPayment(req: Request, paymentId: string) {
-    return db.transaction(async (trx) => {
+    return withTransaction(async (trx) => {
+      const paymentPeek = await trx('payments').where({ id: paymentId }).first();
+      if (!paymentPeek) throw errors.notFound('Pembayaran tidak ditemukan');
+
+      // Kunci invoices DULU (urutan global invoices → payments) — serialisasi juga
+      // verifikasi paralel pada invoice yang sama, agar recalcInvoiceStatus melihat
+      // state ter-commit (cegah status macet 'partial').
+      const invoice = await trx('invoices').where({ id: paymentPeek.invoice_id }).forUpdate().first();
+      if (!invoice) throw errors.notFound('Invoice tidak ditemukan');
+
+      // Kunci payment SETELAH invoice, lalu validasi ulang dari baris yang baru
+      // dikunci (bukan paymentPeek yang mungkin sudah stale).
       const payment = await trx('payments').where({ id: paymentId }).forUpdate().first();
       if (!payment) throw errors.notFound('Pembayaran tidak ditemukan');
       if (payment.status === 'verified') throw errors.conflict('Pembayaran sudah diverifikasi');
-      // Kunci baris invoice → serialisasi verifikasi paralel pada invoice yang sama,
-      // agar recalcInvoiceStatus melihat state ter-commit (cegah status macet 'partial').
-      const invoice = await trx('invoices').where({ id: payment.invoice_id }).forUpdate().first();
-      if (!invoice) throw errors.notFound('Invoice tidak ditemukan');
+      // Langkah 9: payment_status kini juga bisa 'rejected' (ditolak keuangan atau
+      // otomatis saat registrasi dibatalkan) — tidak boleh diverifikasi lagi.
+      if (payment.status === 'rejected') throw errors.conflict('Pembayaran ini sudah ditolak — tidak bisa diverifikasi');
       // Cek ulang kumulatif: batas kelebihan hanya diperiksa saat createPayment
       // (terhadap total VERIFIED saat itu), sehingga dua pembayaran pending penuh bisa
       // lolos lalu sama-sama diverifikasi → 2-1100 ter-kredit ganda. Di sini, dengan
@@ -234,7 +345,7 @@ export const paymentsService = {
         newValues: { status: 'verified', invoiceStatus: status, receipt: receipt.number, journalNo: journal.journal_no }
       }, trx);
       return { paymentId, invoiceStatus: status, receipt, journal: { journalNo: journal.journal_no, id: journal.id } };
-    });
+    }, { retries: 2 });
   },
 
   /** Kartu piutang + KPI (view Pembayaran mockup). */
@@ -244,6 +355,9 @@ export const paymentsService = {
       .join('jamaah as j', 'j.id', 'r.jamaah_id')
       .join('departures as d', 'd.id', 'r.departure_id')
       .join('packages as p', 'p.id', 'd.package_id')
+      // Butir 6 kontrak pembatalan: registrasi cancelled dikecualikan dari piutang/aging
+      // (sisa tagihannya sudah dibereskan lewat alur refund, bukan lagi tagihan aktif).
+      .whereNot('r.status', 'cancelled')
       .leftJoin(
         db('payments').select('invoice_id').sum('amount as paid').where('status', 'verified').groupBy('invoice_id').as('pp'),
         'pp.invoice_id',
@@ -296,9 +410,15 @@ export const paymentsService = {
       .count({ n: '*' })
       .first();
     const monthStart = t.slice(0, 7) + '-01';
+    // AK-02 (sisi SQL): paid_at adalah `timestamptz` (instan absolut, benar) —
+    // membandingkannya APA ADANYA terhadap monthStart (tanggal WIB) memakai TZ SESI
+    // Postgres (default UTC di container) utk menentukan wall-clock, bukan WIB. Salah
+    // di jendela 00:00–06:59 WIB (mis. pembayaran WIB 00:30 1 Sep = instan 31 Agu
+    // 17:30 UTC, lolos dari filter `>= '2026-09-01'` versi UTC). Konversi ke wall-clock
+    // Asia/Jakarta dulu (satu langkah — beda dgn kolom `timestamp` naif) sebelum dibandingkan.
     const collected = await db('payments')
       .where('status', 'verified')
-      .andWhere('paid_at', '>=', monthStart)
+      .andWhereRaw(`(paid_at AT TIME ZONE 'Asia/Jakarta') >= ?`, [monthStart])
       .sum({ total: 'amount' })
       .count({ n: '*' })
       .first();
@@ -339,7 +459,7 @@ export const paymentsService = {
       .select(
         'i.*', 'r.reg_number', 'r.room_type', 'r.room_number', 'r.payment_scheme',
         'j.full_name', 'j.address', 'j.phone',
-        'p.name as package_name', 'p.duration_days', 'p.base_price', 'p.triple_upcharge', 'p.double_upcharge',
+        'p.name as package_name', 'p.duration_days',
         'd.departure_date', 'g.name as group_name'
       )
       .where('i.id', invoiceId)
@@ -350,9 +470,12 @@ export const paymentsService = {
     const payments = await db('payments').where({ invoice_id: invoiceId, status: 'verified' }).orderBy('paid_at');
     const paid = payments.reduce((s, p) => s + Number(p.amount), 0);
 
-    const upcharge = inv.room_type === 'triple' ? Number(inv.triple_upcharge) : inv.room_type === 'double' ? Number(inv.double_upcharge) : 0;
+    // N-2: rincian item memakai komponen harga BEKU dari invoice (base_price/room_upcharge
+    // dicatat saat issueInvoice), bukan harga paket terkini — mencegah rincian dokumen
+    // berubah diam-diam saat marketing merevisi harga paket setelah invoice terbit.
+    const upcharge = Number(inv.room_upcharge ?? 0);
     const items = [
-      { description: `Paket ${inv.package_name}`, detail: `${inv.duration_days} hari · keberangkatan ${inv.departure_date}`, qty: 1, price: Number(inv.total_amount) - upcharge }
+      { description: `Paket ${inv.package_name}`, detail: `${inv.duration_days} hari · keberangkatan ${inv.departure_date}`, qty: 1, price: Number(inv.base_price ?? Number(inv.total_amount) - upcharge) }
     ];
     if (upcharge > 0) {
       const roomLabel = inv.room_type === 'triple' ? 'Triple (3 orang/kamar)' : 'Double (2 orang/kamar)';
@@ -420,8 +543,185 @@ export const paymentsService = {
     return rows.map((p) => ({
       id: p.id, amount: Number(p.amount), method: p.method, status: p.status, paidAt: p.paid_at,
       reference: p.reference, scheduleLabel: p.schedule_label, bank: p.bank_name,
-      receiptId: p.receipt_id, receiptNumber: p.receipt_number
+      receiptId: p.receipt_id, receiptNumber: p.receipt_number,
+      // Kontrak langkah 9 butir 5: status kini bisa 'rejected'; tampilkan alasannya.
+      rejectReason: p.reject_reason ?? null
     }));
+  },
+
+  /** Tolak pembayaran (role keuangan/admin) — hanya `pending` → `rejected`. Tanpa jurnal. */
+  async rejectPayment(req: Request, paymentId: string, reason: string) {
+    return withTransaction(async (trx) => {
+      const payment = await trx('payments').where({ id: paymentId }).forUpdate().first();
+      if (!payment) throw errors.notFound('Pembayaran tidak ditemukan');
+      if (payment.status !== 'pending') throw errors.conflict('Hanya pembayaran berstatus pending yang bisa ditolak');
+      const [updated] = await trx('payments')
+        .where({ id: paymentId })
+        .update({
+          status: 'rejected',
+          reject_reason: reason,
+          rejected_by: req.user?.id ?? null,
+          rejected_at: trx.fn.now(),
+          updated_at: trx.fn.now()
+        })
+        .returning('*');
+      await audit(req, {
+        action: 'payments.reject', entity: 'payments', entityId: paymentId,
+        oldValues: { status: 'pending' }, newValues: { status: 'rejected', reason }
+      }, trx);
+      return {
+        id: updated.id, invoiceId: updated.invoice_id, scheduleId: updated.schedule_id,
+        amount: Number(updated.amount), method: updated.method, status: updated.status,
+        paidAt: updated.paid_at, rejectReason: updated.reject_reason
+      };
+    }, { retries: 2 });
+  },
+
+  /** Detail refund by id (RefundDto), executable di dalam transaksi (`exec`). */
+  async refundDetail(exec: Knex | Knex.Transaction, id: string) {
+    return buildRefundDetail(exec, id);
+  },
+
+  /** Refund milik sebuah registrasi (dipakai GET /jamaah/:id). */
+  async refundByRegistration(registrationId: string) {
+    const row = await refundQuery(db).where('rf.registration_id', registrationId).first();
+    return row ? mapRefundRow(row) : null;
+  },
+
+  /** GET /v1/refunds?status=pending|paid — role keuangan/pimpinan/admin. */
+  async listRefunds(status?: 'pending' | 'paid') {
+    const rows = await refundQuery(db)
+      .modify((q) => { if (status) q.where('rf.status', status); })
+      .orderBy('r.reg_number');
+    return rows.map(mapRefundRow);
+  },
+
+  /**
+   * POST /v1/refunds/:id/pay — bayar refund pembatalan (role keuangan/admin).
+   * Jurnal (cost center keberangkatan): Dr 2-1100 paidTotal · Cr Bank (paidTotal −
+   * deduction) · Cr 4-9000 (deduction) — baris nol dihilangkan.
+   */
+  async payRefund(req: Request, refundId: string, input: PayRefundInput, idempotencyKey?: string) {
+    if (idempotencyKey) {
+      const existing = await db('refunds').where({ idempotency_key: idempotencyKey }).first();
+      if (existing) {
+        if (existing.id !== refundId) throw errors.conflict('Idempotency-Key sudah dipakai untuk refund lain');
+        return buildRefundDetail(db, existing.id);
+      }
+    }
+    return withTransaction(async (trx) => {
+      const refund = await trx('refunds').where({ id: refundId }).forUpdate().first();
+      if (!refund) throw errors.notFound('Refund tidak ditemukan');
+      if (refund.status === 'paid') throw errors.conflict('Refund ini sudah dibayar');
+
+      const paidTotal = Number(refund.paid_total);
+      const deduction = Math.round(input.deduction);
+      if (deduction > paidTotal + 0.001) {
+        throw errors.badRequest(
+          `Potongan (Rp ${deduction.toLocaleString('id-ID')}) melebihi total pembayaran terverifikasi (Rp ${paidTotal.toLocaleString('id-ID')})`
+        );
+      }
+      if (deduction > 0 && !input.deductionReason) {
+        throw errors.badRequest('Alasan potongan wajib diisi bila potongan lebih dari 0');
+      }
+      const bank = await trx('bank_accounts').where({ account_code: input.bankAccountCode }).first();
+      if (!bank) throw errors.badRequest(`Rekening ${input.bankAccountCode} tidak ditemukan`);
+      if (bank.currency !== 'IDR') throw errors.badRequest('Refund harus melalui rekening IDR');
+
+      const refundAmount = paidTotal - deduction;
+      const date = input.date ?? today();
+      const lines = [{ accountCode: '2-1100', debit: paidTotal }] as { accountCode: string; debit?: number; credit?: number }[];
+      if (refundAmount > 0) lines.push({ accountCode: input.bankAccountCode, credit: refundAmount });
+      if (deduction > 0) lines.push({ accountCode: '4-9000', credit: deduction });
+
+      const reg = await trx('registrations').where({ id: refund.registration_id }).first();
+      const journal = await postJournal(trx, {
+        date,
+        description: `Refund pembatalan — ${reg.reg_number}`,
+        source: 'refund',
+        refType: 'refunds',
+        refId: refund.id,
+        costCenterId: refund.cost_center_id,
+        createdBy: req.user?.id ?? null,
+        lines
+      });
+
+      // A (putaran 3): nomor kwitansi refund KWR/YYYY/MM/NNNN — bulan/tahun dari
+      // tanggal refund (WIB), pola sama dengan KWT/YYYY/MM kwitansi pembayaran.
+      const [ry, rm] = date.split('-');
+      const receiptNumber = await nextNumber(trx, `KWR/${ry}/${rm}`, 4, '/');
+
+      await trx('refunds')
+        .where({ id: refund.id })
+        .update({
+          deduction,
+          refund_amount: refundAmount,
+          deduction_reason: deduction > 0 ? (input.deductionReason ?? null) : null,
+          status: 'paid',
+          bank_account_id: bank.id,
+          journal_id: journal.id,
+          reference: input.reference ?? null,
+          idempotency_key: idempotencyKey ?? null,
+          receipt_number: receiptNumber,
+          receipt_issued_date: date,
+          paid_by: req.user?.id ?? null,
+          paid_at: trx.fn.now(),
+          updated_at: trx.fn.now()
+        });
+
+      await audit(req, {
+        action: 'refunds.pay', entity: 'refunds', entityId: refund.id,
+        newValues: { deduction, refundAmount, journalNo: journal.journal_no }
+      }, trx);
+      return buildRefundDetail(trx, refund.id);
+    }, { retries: 2 });
+  },
+
+  /**
+   * A (putaran 3) — GET /v1/refunds/:id/receipt: dokumen kwitansi refund (meniru
+   * bentuk `receiptDocument` kwitansi pembayaran). 404 bila refund tidak ada ATAU
+   * belum berstatus `paid` (kwitansi hanya ada setelah pembayaran refund terjadi).
+   */
+  async refundReceipt(refundId: string) {
+    const row = await db('refunds as rf')
+      .join('registrations as r', 'r.id', 'rf.registration_id')
+      .join('jamaah as j', 'j.id', 'r.jamaah_id')
+      .join('departures as d', 'd.id', 'r.departure_id')
+      .join('packages as p', 'p.id', 'd.package_id')
+      .leftJoin('bank_accounts as ba', 'ba.id', 'rf.bank_account_id')
+      .leftJoin('journals as jr', 'jr.id', 'rf.journal_id')
+      .leftJoin('users as u', 'u.id', 'rf.paid_by')
+      .select(
+        'rf.*', 'r.reg_number', 'j.full_name as jamaah_name',
+        'p.name as package_name', 'd.departure_date', 'r.cancel_reason', 'r.cancelled_at',
+        'ba.account_code as bank_code', 'ba.name as bank_name', 'ba.bank as bank_bank', 'ba.account_no as bank_account_no',
+        'jr.journal_no as journal_number', 'u.name as paid_by_name'
+      )
+      .where('rf.id', refundId)
+      .first();
+    if (!row || row.status !== 'paid') throw errors.notFound('Kwitansi refund tidak ditemukan / belum dibayar');
+    return {
+      refundId: row.id,
+      receiptNumber: row.receipt_number,
+      issuedDate: row.receipt_issued_date,
+      regNumber: row.reg_number,
+      jamaahName: row.jamaah_name,
+      packageName: row.package_name,
+      departureDate: row.departure_date,
+      cancelReason: row.cancel_reason ?? null,
+      cancelledAt: row.cancelled_at ?? null,
+      paidTotal: Number(row.paid_total),
+      deduction: Number(row.deduction),
+      deductionReason: row.deduction_reason ?? null,
+      refundAmount: Number(row.refund_amount),
+      amountInWords: terbilang(Number(row.refund_amount)),
+      bankAccount: row.bank_code
+        ? { code: row.bank_code, name: row.bank_name, bank: row.bank_bank, accountNo: row.bank_account_no }
+        : null,
+      reference: row.reference ?? null,
+      journalNumber: row.journal_number ?? null,
+      paidByName: row.paid_by_name ?? null
+    };
   },
 
   async bankAccounts() {

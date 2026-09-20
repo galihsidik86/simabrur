@@ -81,6 +81,23 @@ describe('POST /v1/auth/refresh (rotasi)', () => {
   });
 });
 
+describe('POST /v1/auth/logout (NEW-FE-02)', () => {
+  it('tanpa header Authorization (token sudah dihapus di klien) tetap 200 dan mencabut refresh token', async () => {
+    const { body } = await login('marketing@safar.co.id');
+    const res = await request(app).post('/v1/auth/logout').send({ refreshToken: body.data.refreshToken });
+    expect(res.status).toBe(200);
+    expect(res.body.data.loggedOut).toBe(true);
+
+    const refreshAfter = await request(app).post('/v1/auth/refresh').send({ refreshToken: body.data.refreshToken });
+    expect(refreshAfter.status).toBe(401);
+  });
+
+  it('idempoten & tidak membocorkan validitas token: token acak juga 200', async () => {
+    const res = await request(app).post('/v1/auth/logout').send({ refreshToken: 'token-acak-tidak-pernah-ada' });
+    expect(res.status).toBe(200);
+  });
+});
+
 describe('RBAC requireRoles', () => {
   function protectedApp(...roles: string[]) {
     const a = express();

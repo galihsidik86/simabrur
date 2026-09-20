@@ -2,21 +2,12 @@ import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { fmtFull, fmtDate } from '../../utils/format';
-import { DocShell, DocHeader } from './DocShell';
+import { DocShell, DocHeader, DotLine } from './DocShell';
 
 interface Doc {
   number: string; issuedDate: string; receivedFrom: string; amount: number;
   terbilang: string; description: string; method: string;
   summary: { total: number; paid: number; remaining: number };
-}
-
-function DotLine({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-baseline gap-3 text-[11.5px]">
-      <span className="w-[140px] flex-none text-muted-2">{label}</span>
-      <span className="flex-1 border-b border-dotted border-[#b6ac94] pb-1 font-medium">{children}</span>
-    </div>
-  );
 }
 
 export function KwitansiDoc() {

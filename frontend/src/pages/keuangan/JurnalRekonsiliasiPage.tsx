@@ -1,13 +1,19 @@
 import { useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../api/client';
-import { fmtShort, fmtFull, fmtDate } from '../../utils/format';
+import { api, apiErrorMessage } from '../../api/client';
+import { useAuth } from '../../store/auth';
+import { FINANCE_WRITE_ROLES, hasRole } from '../../routes/access';
+import { fmtShort, fmtFull, fmtDate, todayWib } from '../../utils/format';
 import { ACC_CLASS_COLOR } from './KeuanganPage';
 
 /* ===== Tipe ===== */
 interface JournalEntry {
   id: string; journalNo: string; date: string; description: string; source: string;
   costCenter: string | null; total: number;
+  /** C (putaran 3): jurnal ini adalah PEMBALIK dari jurnal bernomor ini. */
+  reversalOfJournalNo: string | null;
+  /** C (putaran 3): jurnal ini SUDAH dibalik oleh jurnal bernomor ini. */
+  reversedByJournalNo: string | null;
   lines: { accountCode: string; accountName: string; debit: number; credit: number; amountForeign: number | null }[];
 }
 interface JournalsData { entries: JournalEntry[]; kpi: { totalDebit: number; totalCredit: number; balanced: boolean; count: number } }
@@ -50,9 +56,43 @@ const SOURCE_BADGE: Record<string, { label: string; color: string; bg: string }>
   revenue: { label: 'Pendapatan', color: 'oklch(0.42 0.07 158)', bg: 'oklch(0.95 0.03 158)' },
   commission: { label: 'Komisi', color: 'oklch(0.45 0.1 322)', bg: 'oklch(0.96 0.03 322)' },
   manual: { label: 'Manual', color: 'oklch(0.4 0.02 265)', bg: '#eee9dc' },
-  reconciliation: { label: 'Rekonsiliasi', color: 'oklch(0.4 0.02 265)', bg: '#eee9dc' }
+  reconciliation: { label: 'Rekonsiliasi', color: 'oklch(0.4 0.02 265)', bg: '#eee9dc' },
+  // QA browser 2026-09-20: backend memposting jurnal pembayaran refund dengan
+  // source 'refund' (payments.service.ts:641, enum migrasi 0017). Kunci ini dulu
+  // TIDAK ADA di sini → begitu satu refund dibayar, seluruh halaman Jurnal Umum
+  // blank (TypeError membaca 'color', tanpa error boundary).
+  refund: { label: 'Refund', color: 'oklch(0.44 0.08 200)', bg: 'oklch(0.95 0.03 200)' }
 };
-const SRC_FILTERS = [['', 'Semua'], ['payment', 'Pembayaran'], ['expense', 'Biaya'], ['revenue', 'Pendapatan'], ['commission', 'Komisi'], ['manual', 'Manual']] as const;
+
+/** Cadangan bila backend menambah sumber jurnal baru sebelum UI menyusul —
+ *  tampilkan pill netral berlabel kode sumbernya, JANGAN merusak halaman. */
+const FALLBACK_BADGE = { label: '', color: 'oklch(0.4 0.02 265)', bg: '#eee9dc' };
+const SRC_FILTERS = [['', 'Semua'], ['payment', 'Pembayaran'], ['expense', 'Biaya'], ['revenue', 'Pendapatan'], ['commission', 'Komisi'], ['refund', 'Refund'], ['manual', 'Manual']] as const;
+
+const REVERSE_REASON_MIN = 5;
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+/** Query yang berubah setelah jurnal dibalik (saldo, buku besar, laporan). */
+const REVERSE_AFFECTED_QUERIES = [
+  'journals', 'ledger', 'accounts', 'accounting-summary', 'bank-accounts', 'reconciliation',
+  'income-statement', 'balance-sheet', 'profit-by-package', 'dashboard'
+] as const;
+
+/** Pimpinan read-only: aksi tulis jurnal/rekonsiliasi hanya untuk admin & keuangan (FE-03). */
+function useCanWriteFinance(): boolean {
+  const { user } = useAuth();
+  return hasRole(user?.role, FINANCE_WRITE_ROLES);
+}
+
+/** Mutasi rekonsiliasi: bersihkan error saat mulai, invalidasi sesi saat sukses (FE-05: hook bernama use…). */
+function useRekonMutation<T>(mutationFn: (v: T) => Promise<unknown>, queryKey: readonly unknown[], setErr: (m: string) => void) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onMutate: () => setErr(''),
+    onSuccess: () => qc.invalidateQueries({ queryKey }),
+    onError: (e) => setErr(apiErrorMessage(e, 'Terjadi kesalahan'))
+  });
+}
 
 export function JurnalRekonsiliasiPage() {
   const [tab, setTab] = useState<'jurnal' | 'rekon'>('jurnal');
@@ -76,9 +116,13 @@ export function JurnalRekonsiliasiPage() {
 
 /* ===== Sub-tab 1: Jurnal Umum ===== */
 function JurnalUmum() {
+  const qc = useQueryClient();
   const [source, setSource] = useState('');
   const [month, setMonth] = useState('');
   const [showManual, setShowManual] = useState(false);
+  const [reverseTarget, setReverseTarget] = useState<JournalEntry | null>(null);
+  const [notice, setNotice] = useState('');
+  const canWrite = useCanWriteFinance();
   const { data } = useQuery({
     queryKey: ['journals', source, month],
     queryFn: async () =>
@@ -98,11 +142,15 @@ function JurnalUmum() {
           </button>
         ))}
         <input type="month" className="fld !w-[160px] !py-1.5" value={month} onChange={(e) => setMonth(e.target.value)} />
-        <button onClick={() => setShowManual(true)}
-          className="ml-auto cursor-pointer rounded-[9px] bg-[oklch(0.46_0.07_158)] px-3.5 py-2 text-[12px] font-semibold text-white">
-          + Jurnal Manual
-        </button>
+        {canWrite && (
+          <button onClick={() => setShowManual(true)}
+            className="ml-auto cursor-pointer rounded-[9px] bg-[oklch(0.46_0.07_158)] px-3.5 py-2 text-[12px] font-semibold text-white">
+            + Jurnal Manual
+          </button>
+        )}
       </div>
+
+      {notice && <div role="status" className="mb-3 rounded-[9px] bg-success-bg px-3 py-2 text-[12px] font-medium text-success">{notice}</div>}
 
       {data && (
         <div className="mb-4 grid grid-cols-4 gap-4 max-md:grid-cols-2">
@@ -123,17 +171,34 @@ function JurnalUmum() {
 
       <div className="flex flex-col gap-3">
         {data?.entries.map((j) => {
-          const badge = SOURCE_BADGE[j.source];
+          const badge = SOURCE_BADGE[j.source] ?? { ...FALLBACK_BADGE, label: j.source };
+          const canReverse = canWrite && j.source === 'manual' && !j.reversedByJournalNo;
           return (
             <div key={j.id} className="rounded-card border border-line bg-card shadow-card">
-              <div className="flex items-center gap-3 border-b border-line-3 px-4 py-2.5">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line-3 px-4 py-2.5">
                 <span className="font-mono text-[11.5px] font-semibold">{j.journalNo}</span>
                 <span className="text-[11px] text-muted-3">{fmtDate(j.date)}</span>
                 <span className="text-[12.5px] font-medium">{j.description}</span>
                 {j.costCenter && <span className="font-mono text-[10px] text-muted-4">CC: {j.costCenter}</span>}
+                {j.reversedByJournalNo && (
+                  <span className="rounded-pill px-2.5 py-[3px] text-[10px] font-semibold" style={{ color: 'oklch(0.5 0.13 28)', background: 'oklch(0.96 0.04 30)' }}>
+                    Dibalik · {j.reversedByJournalNo}
+                  </span>
+                )}
+                {j.reversalOfJournalNo && (
+                  <span className="rounded-pill px-2.5 py-[3px] text-[10px] font-semibold" style={{ color: 'oklch(0.45 0.10 78)', background: 'oklch(0.95 0.04 82)' }}>
+                    Pembalik dari · {j.reversalOfJournalNo}
+                  </span>
+                )}
                 <span className="ml-auto rounded-pill px-2.5 py-[3px] text-[10px] font-semibold" style={{ color: badge.color, background: badge.bg }}>
                   {badge.label}
                 </span>
+                {canReverse && (
+                  <button onClick={() => { setNotice(''); setReverseTarget(j); }}
+                    className="cursor-pointer rounded-[7px] border border-[oklch(0.85_0.08_30)] bg-danger-bg px-2.5 py-1 text-[10.5px] font-semibold text-danger-deep">
+                    Balik jurnal
+                  </button>
+                )}
               </div>
               <table className="w-full border-collapse text-[11.5px]">
                 <tbody>
@@ -160,7 +225,81 @@ function JurnalUmum() {
         {data && data.entries.length === 0 && <div className="text-[12.5px] text-muted-2">Tidak ada jurnal pada filter ini.</div>}
       </div>
 
-      {showManual && <ManualJournalModal onClose={() => setShowManual(false)} />}
+      {canWrite && showManual && <ManualJournalModal onClose={() => setShowManual(false)} />}
+      {canWrite && reverseTarget && (
+        <ReverseJournalModal
+          journal={reverseTarget}
+          onClose={() => setReverseTarget(null)}
+          onDone={(journalNo) => {
+            setNotice(`Jurnal ${reverseTarget.journalNo} dibalik — jurnal pembalik ${journalNo}.`);
+            setReverseTarget(null);
+            REVERSE_AFFECTED_QUERIES.forEach((key) => qc.invalidateQueries({ queryKey: [key] }));
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ===== Modal balik jurnal manual (C — rekomendasi N-3) ===== */
+function ReverseJournalModal({ journal, onClose, onDone }: {
+  journal: JournalEntry; onClose: () => void; onDone: (journalNo: string) => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [date, setDate] = useState(todayWib);
+  const [error, setError] = useState('');
+  const trimmed = reason.trim();
+  const isValid = trimmed.length >= REVERSE_REASON_MIN && DATE_PATTERN.test(date);
+
+  const reverse = useMutation({
+    mutationFn: async () =>
+      (await api.post(`/journals/${journal.id}/reverse`, { reason: trimmed, date })).data.data as { journal_no: string; reversalOfJournalNo: string },
+    onMutate: () => setError(''),
+    onSuccess: (dto) => onDone(dto.journal_no),
+    onError: (e) => setError(apiErrorMessage(e, 'Gagal membalik jurnal'))
+  });
+  const close = () => { if (!reverse.isPending) onClose(); };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={close}>
+      <div role="dialog" aria-modal="true" aria-labelledby="reverse-journal-title" onClick={(e) => e.stopPropagation()}
+        className="w-[560px] max-w-full rounded-[15px] bg-card p-6 shadow-float">
+        <div id="reverse-journal-title" className="font-display text-[19px] text-ink-strong">Balik Jurnal Manual</div>
+        <div className="mt-0.5 text-[12px] text-muted-2">
+          <span className="font-mono">{journal.journalNo}</span> · {fmtDate(journal.date)} · {journal.description}
+        </div>
+
+        <div className="mt-4 rounded-[9px] bg-panel px-3.5 py-2.5 text-[11.5px] leading-relaxed text-muted">
+          Jurnal pembalik baru akan diposting dengan debit dan kredit yang ditukar (storno). Jurnal asal tetap tersimpan —
+          pembukuan tidak pernah dihapus. Hanya jurnal bersumber <b>manual</b> yang bisa dibalik lewat menu ini.
+        </div>
+
+        <div className="mt-4 grid grid-cols-[1fr_170px] gap-3">
+          <div>
+            <label className="lbl" htmlFor="reverse-reason">Alasan pembalikan</label>
+            <input id="reverse-reason" className="fld" value={reason} onChange={(e) => setReason(e.target.value)}
+              placeholder="Mis. salah akun, dobel input" disabled={reverse.isPending} />
+          </div>
+          <div>
+            <label className="lbl" htmlFor="reverse-date">Tanggal pembalikan</label>
+            <input id="reverse-date" type="date" className="fld" value={date} onChange={(e) => setDate(e.target.value)} disabled={reverse.isPending} />
+          </div>
+        </div>
+        <div className="mt-1 text-[10.5px] text-muted-3">Minimal {REVERSE_REASON_MIN} karakter · tercatat di audit log.</div>
+
+        {error && <div role="alert" className="mt-3 rounded-[9px] bg-danger-bg px-3 py-2 text-[12px] font-medium text-danger-deep">{error}</div>}
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={close} disabled={reverse.isPending}
+            className="cursor-pointer rounded-[9px] border border-line-2 bg-white px-4 py-2 text-[12.5px] font-semibold text-muted disabled:opacity-60">
+            Batal
+          </button>
+          <button onClick={() => isValid && reverse.mutate()} disabled={!isValid || reverse.isPending}
+            className="cursor-pointer rounded-[9px] bg-danger px-4 py-2 text-[12.5px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">
+            {reverse.isPending ? 'Membalik…' : 'Balik jurnal'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -168,7 +307,7 @@ function JurnalUmum() {
 /* ===== Modal Jurnal Manual ===== */
 function ManualJournalModal({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayWib);
   const [description, setDescription] = useState('');
   const [rows, setRows] = useState([
     { accountCode: '', debit: 0, credit: 0 },
@@ -243,6 +382,7 @@ function RekonBank() {
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const canWrite = useCanWriteFinance();
 
   const { data: banks } = useQuery({
     queryKey: ['bank-accounts'],
@@ -256,24 +396,17 @@ function RekonBank() {
     queryFn: async () => (await api.get('/bank-reconciliations', { params: { bankAccountCode: activeCode, month } })).data.data as ReconData
   });
 
-  const errMsg = (e: unknown) => (e as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Terjadi kesalahan';
-  const mut = <T,>(fn: (v: T) => Promise<unknown>) =>
-    useMutation({
-      mutationFn: fn,
-      onMutate: () => setErr(''),
-      onSuccess: () => qc.invalidateQueries({ queryKey: key }),
-      onError: (e) => setErr(errMsg(e))
-    });
-
-  const match = mut<{ lineId: string; journalLineId?: string }>((v) =>
-    api.post(`/bank-reconciliations/lines/${v.lineId}/match`, { journalLineId: v.journalLineId }));
-  const adjust = mut<string>((lineId) => api.post(`/bank-reconciliations/lines/${lineId}/adjust`));
-  const finalize = mut<string>((id) => api.post(`/bank-reconciliations/${id}/finalize`));
+  const match = useRekonMutation<{ lineId: string; journalLineId?: string }>((v) =>
+    api.post(`/bank-reconciliations/lines/${v.lineId}/match`, { journalLineId: v.journalLineId }), key, setErr);
+  const adjust = useRekonMutation<string>((lineId) => api.post(`/bank-reconciliations/lines/${lineId}/adjust`), key, setErr);
+  const finalize = useRekonMutation<string>((id) => api.post(`/bank-reconciliations/${id}/finalize`), key, setErr);
 
   if (!d) return <div className="text-[12.5px] text-muted-2">Memuat rekonsiliasi…</div>;
 
   const s = d.session;
   const locked = s?.status === 'completed';
+  // Tampilan tanpa aksi tulis: sesi terkunci ATAU role read-only (pimpinan).
+  const readOnly = locked || !canWrite;
   const sel = (
     <div className="mb-4 flex flex-wrap items-center gap-2">
       <select className="fld !w-auto !py-2 font-semibold" value={activeCode} onChange={(e) => { setBankCode(e.target.value); setErr(''); }}>
@@ -294,8 +427,14 @@ function RekonBank() {
       <div>
         {sel}
         {err && <ErrBar msg={err} />}
-        <StartReconciliation bankCode={activeCode} month={month} ledgerBalance={d.ledgerBalance}
-          onDone={() => qc.invalidateQueries({ queryKey: key })} onError={setErr} />
+        {canWrite ? (
+          <StartReconciliation bankCode={activeCode} month={month} ledgerBalance={d.ledgerBalance}
+            onDone={() => qc.invalidateQueries({ queryKey: key })} onError={setErr} />
+        ) : (
+          <div className="rounded-card border border-line bg-card p-6 text-[12.5px] text-muted-2 shadow-card">
+            Belum ada sesi rekonsiliasi untuk {activeCode} periode {month}. Sesi dibuka oleh tim keuangan.
+          </div>
+        )}
       </div>
     );
   }
@@ -329,7 +468,7 @@ function RekonBank() {
           <span className="text-[11px] text-muted-3">Direkonsiliasi oleh {s.reconciledBy}{s.reconciledAt ? ` · ${fmtDate(s.reconciledAt)}` : ''}{s.reconciledDiff != null ? ` · sisa timing ${fmtFull(s.reconciledDiff)}` : ''}</span>
         )}
         <div className="ml-auto flex gap-2">
-          {!locked && (
+          {!readOnly && (
             <>
               <button onClick={() => setShowEdit(true)} className="cursor-pointer rounded-[9px] border border-line-2 bg-white px-3 py-1.5 text-[11.5px] font-semibold text-muted">Ubah saldo/tanggal</button>
               <button onClick={() => setShowAdd(true)} className="cursor-pointer rounded-[9px] border border-line-2 bg-white px-3 py-1.5 text-[11.5px] font-semibold text-muted">+ Mutasi</button>
@@ -364,11 +503,11 @@ function RekonBank() {
               <span className="rounded-pill bg-panel px-2 py-[2px] text-[9.5px] font-semibold text-muted-2">{LINE_TYPE_LABEL[a.lineType] ?? a.lineType}</span>
               <span className="text-muted">{a.description}</span>
               <span className="ml-auto font-mono" style={{ color: a.amount >= 0 ? 'oklch(0.46 0.07 158)' : 'oklch(0.5 0.13 28)' }}>{fmtFull(a.amount)}</span>
-              {!locked && a.postable && (
+              {!readOnly && a.postable && (
                 <button onClick={() => adjust.mutate(a.id)} disabled={adjust.isPending}
                   className="cursor-pointer rounded-pill bg-primary px-2.5 py-[3px] text-[10px] font-semibold text-white disabled:opacity-50">Posting</button>
               )}
-              {!locked && !a.postable && <span className="text-[10px] text-muted-4">cocokkan ke jurnal</span>}
+              {!readOnly && !a.postable && <span className="text-[10px] text-muted-4">cocokkan ke jurnal</span>}
             </div>
           ))}
           {d.adjustments.bankOnlyIncome.length + d.adjustments.bankOnlyCharges.length === 0 && (
@@ -418,11 +557,11 @@ function RekonBank() {
                   </td>
                   <td className="px-5 py-3">
                     {l.status === 'matched' ? (
-                      locked
+                      readOnly
                         ? <span className="rounded-pill bg-[oklch(0.95_0.03_158)] px-2.5 py-[3px] text-[10.5px] font-semibold text-[oklch(0.42_0.07_158)]">✓ Cocok</span>
                         : <button onClick={() => match.mutate({ lineId: l.id })} disabled={match.isPending}
                             className="cursor-pointer rounded-pill bg-[oklch(0.95_0.03_158)] px-2.5 py-[3px] text-[10.5px] font-semibold text-[oklch(0.42_0.07_158)]" title="Batalkan pencocokan">✓ Cocok · batalkan</button>
-                    ) : locked ? (
+                    ) : readOnly ? (
                       <span className="text-[10.5px] text-muted-4">belum tercocok</span>
                     ) : l.suggestion ? (
                       <button onClick={() => match.mutate({ lineId: l.id, journalLineId: l.suggestion!.journalLineId })} disabled={match.isPending}
@@ -445,9 +584,9 @@ function RekonBank() {
         </div>
       </div>
 
-      {showEdit && <EditSessionModal data={d} month={month} onClose={() => setShowEdit(false)} onDone={() => { setShowEdit(false); qc.invalidateQueries({ queryKey: key }); }} onError={setErr} />}
-      {showAdd && <AddLineModal sessionId={s.id} onClose={() => setShowAdd(false)} onDone={() => { setShowAdd(false); qc.invalidateQueries({ queryKey: key }); }} onError={setErr} />}
-      {showImport && <ImportModal sessionId={s.id} onClose={() => setShowImport(false)} onDone={() => { setShowImport(false); qc.invalidateQueries({ queryKey: key }); }} onError={setErr} />}
+      {!readOnly && showEdit && <EditSessionModal data={d} month={month} onClose={() => setShowEdit(false)} onDone={() => { setShowEdit(false); qc.invalidateQueries({ queryKey: key }); }} onError={setErr} />}
+      {!readOnly && showAdd && <AddLineModal sessionId={s.id} onClose={() => setShowAdd(false)} onDone={() => { setShowAdd(false); qc.invalidateQueries({ queryKey: key }); }} onError={setErr} />}
+      {!readOnly && showImport && <ImportModal sessionId={s.id} onClose={() => setShowImport(false)} onDone={() => { setShowImport(false); qc.invalidateQueries({ queryKey: key }); }} onError={setErr} />}
     </div>
   );
 }

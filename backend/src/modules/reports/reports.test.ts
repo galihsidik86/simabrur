@@ -1,8 +1,9 @@
-import { beforeAll, afterAll, describe, expect, it } from 'vitest';
+import { beforeAll, afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { db } from '../../config/db.js';
 import { createApp } from '../../app.js';
 import { resetTestDb } from '../../test/db-setup.js';
+import { financeReportsService } from './finance.service.js';
 
 const app = createApp();
 
@@ -12,6 +13,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await db.destroy();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 async function token(email: string) {
@@ -24,6 +29,12 @@ describe('laporan keuangan', () => {
     const keu = await token('keuangan@safar.co.id');
     // Posting pengakuan pendapatan + HPP + komisi agar laporan berisi
     const cc = await db('cost_centers').where({ code: 'CC-UMR-REG-9' }).first();
+    // AK-01: HPP mereklas Uang Muka Vendor 1-1400 — sediakan DP vendor dulu utk CC
+    // ini (seed hanya memberi DP vendor ke CC-UMR-PLUS-TR).
+    await request(app).post('/v1/transactions/expense').set('Authorization', `Bearer ${keu}`).send({
+      vendorName: 'Vendor Uji Laporan', costCenterId: cc.id, sourceBankCode: '1-1200',
+      lines: [{ accountCode: '1-1400', amount: 22_000_000 }]
+    });
     await request(app).post('/v1/transactions/revenue-recognition').set('Authorization', `Bearer ${keu}`).send({
       costCenterId: cc.id, revenueAccountCode: '4-1000', amount: 30_000_000,
       hpp: [{ accountCode: '5-2000', amount: 10_000_000 }, { accountCode: '5-1000', amount: 9_000_000 }, { accountCode: '5-3000', amount: 3_000_000 }]
@@ -79,6 +90,62 @@ describe('laporan keuangan', () => {
       expect(res.status).toBe(200);
       expect(res.headers['content-type']).toContain('spreadsheetml');
     }
+  });
+});
+
+describe('AK-02: default periode laporan memakai kalender WIB, bukan UTC', () => {
+  it('incomeStatement()/balanceSheet() pada 2026-09-30T17:00Z (= 2026-10-01 00:00 WIB) → sudah tanggal Oktober', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-30T17:00:00Z'));
+    const { period } = await financeReportsService.incomeStatement();
+    expect(period.to).toBe('2026-10-01');
+    const bs = await financeReportsService.balanceSheet();
+    expect(bs.asOf).toBe('2026-10-01');
+  });
+
+  it('16:59 UTC (masih 2026-09-30 23:59 WIB) → belum berganti hari', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-30T16:59:00Z'));
+    const { period } = await financeReportsService.incomeStatement();
+    expect(period.to).toBe('2026-09-30');
+  });
+
+  it('dashboard(): chart 6 bulan & bulan berjalan mengikuti kalender WIB (bug lama: mencampur setMonth lokal & toISOString UTC)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-30T17:00:00Z')); // = 2026-10-01 00:00 WIB
+    const dash = await financeReportsService.dashboard();
+    expect(dash.cashflow).toHaveLength(6);
+    const expectedLastMonth = new Date('2026-10-01T00:00:00Z').toLocaleDateString('id-ID', { month: 'short' });
+    expect(dash.cashflow.at(-1)?.month).toBe(expectedLastMonth);
+  });
+});
+
+describe('AK-02 (sisi SQL): KPI "jamaah baru bulan ini" memakai kalender Asia/Jakarta, bukan TZ sesi Postgres', () => {
+  it('registrasi created_at UTC 2026-09-30T17:30Z (= WIB 2026-10-01 00:30) dihitung sbg bulan Oktober', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-05T04:00:00Z')); // jelas Oktober di WIB maupun UTC
+    const before = (await financeReportsService.dashboard()).kpi.jamaahNewThisMonth;
+
+    const dep = await db('departures as d')
+      .join('packages as p', 'p.id', 'd.package_id')
+      .where('p.code', 'UMR-REG-AT')
+      .select('d.id')
+      .first();
+    const reg = await request(app).post('/v1/registrations').send({
+      departureId: dep.id, roomType: 'quad', paymentScheme: 'dp',
+      jamaah: {
+        nik: '9922000000000098', fullName: 'UJI AK-02 SQL DASHBOARD', gender: 'L', birthPlace: 'Bogor', birthDate: '1980-01-01',
+        phone: '081200009998', address: 'Jl. Uji AK-02 SQL', emergencyContactName: 'Kel', emergencyContactPhone: '081300009998',
+        passportNo: 'AK02SQLD', passportExpiry: '2030-06-01'
+      }
+    });
+    expect(reg.status).toBe(201);
+    // created_at DEFAULT diisi Postgres real-time (bukan JS Date yang dipalsukan) —
+    // timpa langsung agar mensimulasikan registrasi tepat di jendela WIB 00:00–06:59.
+    await db('registrations').where({ id: reg.body.data.registrationId }).update({ created_at: '2026-09-30T17:30:00Z' });
+
+    const after = (await financeReportsService.dashboard()).kpi.jamaahNewThisMonth;
+    expect(after).toBe(before + 1);
   });
 });
 

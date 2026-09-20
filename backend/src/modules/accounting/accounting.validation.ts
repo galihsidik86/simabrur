@@ -33,7 +33,13 @@ export const expenseTxSchema = z.object({
   exchangeRateAtRecognition: z.number().positive().nullish(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
   description: z.string().max(300).nullish(),
-  lines: z.array(z.object({ accountCode: z.string().regex(/^\d-\d{4}$/), amount: z.number().positive() })).min(1)
+  // B (putaran 3): vendorBillId opsional per baris — pelunasan tagihan vendor
+  // tercatat (hanya berlaku utk baris akun 2-1300, divalidasi di service).
+  lines: z.array(z.object({
+    accountCode: z.string().regex(/^\d-\d{4}$/),
+    amount: z.number().positive(),
+    vendorBillId: z.string().uuid().nullish()
+  })).min(1)
 });
 
 export const revenueTxSchema = z.object({
@@ -41,7 +47,17 @@ export const revenueTxSchema = z.object({
   revenueAccountCode: z.enum(['4-1000', '4-2000', '4-3000']),
   amount: z.number().positive(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
-  hpp: z.array(z.object({ accountCode: z.string().regex(/^5-\d{4}$/), amount: z.number().positive() })).nullish()
+  // B (putaran 3): vendorId per komponen — wajib HANYA bila komponen ini melebihi
+  // saldo 1-1400 yang tersedia (divalidasi di service, bukan di sini karena
+  // tergantung saldo runtime); dueDate opsional per komponen, jatuh balik ke
+  // dueDate top-level bila kosong.
+  hpp: z.array(z.object({
+    accountCode: z.string().regex(/^5-\d{4}$/),
+    amount: z.number().positive(),
+    vendorId: z.string().uuid().nullish(),
+    dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish()
+  })).nullish(),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish()
 });
 
 export const commissionTxSchema = z.object({
@@ -53,7 +69,7 @@ export const commissionTxSchema = z.object({
 });
 
 export const journalsQuery = z.object({
-  source: z.enum(['payment', 'expense', 'revenue', 'commission', 'manual', 'reconciliation']).optional(),
+  source: z.enum(['payment', 'expense', 'revenue', 'commission', 'manual', 'reconciliation', 'refund']).optional(),
   month: z.string().regex(/^\d{4}-\d{2}$/).optional()
 });
 
@@ -91,4 +107,19 @@ export const matchLineSchema = z.object({
 export const upsertVendorSchema = z.object({
   name: z.string().min(2).max(120),
   type: z.enum(['hotel', 'airline', 'visa', 'catering', 'transport', 'other']).default('other')
+});
+
+export const vendorBillsQuery = z.object({
+  status: z.enum(['unpaid', 'paid', 'void']).optional(),
+  costCenterId: z.string().uuid().optional()
+});
+
+export const voidVendorBillSchema = z.object({
+  reason: z.string().trim().min(5, 'Alasan pembatalan minimal 5 karakter').max(300)
+});
+
+// C — balik jurnal manual (rekomendasi N-3).
+export const reverseJournalSchema = z.object({
+  reason: z.string().trim().min(5, 'Alasan pembalikan minimal 5 karakter'),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish()
 });

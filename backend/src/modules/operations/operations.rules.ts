@@ -1,4 +1,5 @@
 /** Aturan operasional — fungsi murni (skor kesiapan, ambang warna). */
+import { passportValidUntilLimit } from '../jamaah/jamaah.rules.js';
 
 export interface ReadinessMetrics {
   paymentPct: number; // pelunasan
@@ -26,7 +27,6 @@ export function readinessLevel(score: number): 'green' | 'gold' | 'red' {
 /** Paspor kedaluwarsa < 7 bulan setelah keberangkatan → butuh perpanjangan. */
 export function passportExpiringSoon(passportExpiry: string | null, departureDate: string): boolean {
   if (!passportExpiry) return false;
-  const limit = new Date(departureDate + 'T00:00:00Z');
-  limit.setUTCMonth(limit.getUTCMonth() + 7);
+  const limit = passportValidUntilLimit(departureDate);
   return new Date(passportExpiry + 'T00:00:00Z') < limit;
 }
