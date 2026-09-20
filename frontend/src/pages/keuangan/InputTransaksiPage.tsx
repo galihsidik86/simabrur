@@ -1,8 +1,23 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../api/client';
-import { fmtFull, fmtShort, fmtDate } from '../../utils/format';
+import { api, apiErrorMessage } from '../../api/client';
+import { useAuth } from '../../store/auth';
+import { FINANCE_WRITE_ROLES, hasRole } from '../../routes/access';
+import { fmtFull, fmtShort, fmtDate, todayWib } from '../../utils/format';
 import { ACC_CLASS_COLOR } from './KeuanganPage';
+import { PendapatanForm, emptyHppRow, type PendapatanState } from './PendapatanForm';
+import { VendorBillsPanel } from './VendorBillsPanel';
+import {
+  BIAYA_ACCOUNTS, VENDOR_BILL_ACCOUNT, accountName, allocateVendorAdvance, filledHpp, isSettleableBill,
+  revenuePreviewLines, validateExpenseForm, validateRevenueForm,
+  type CostCenterBalances, type IssuedVendorBill, type PreviewLine, type VendorBill
+} from './transaksi';
+
+/** Query yang berubah setelah tagihan vendor dibatalkan (jurnal balik Dr 2-1300 · Cr HPP). */
+const VOID_AFFECTED_QUERIES = [
+  'vendor-bills', 'journals', 'ledger', 'accounts', 'accounting-summary',
+  'income-statement', 'balance-sheet', 'profit-by-package', 'dashboard'
+] as const;
 
 /* ===== Tipe & konstanta (struktur mockup Input Transaksi.dc.html) ===== */
 const TX_TYPES = [
@@ -13,38 +28,36 @@ const TX_TYPES = [
 ] as const;
 type TxType = (typeof TX_TYPES)[number]['key'];
 
-const BIAYA_ACCOUNTS = [
-  ['1-1400', 'Uang Muka Vendor'], ['5-1000', 'Beban Tiket Maskapai'], ['5-2000', 'Beban Hotel & Akomodasi'],
-  ['5-3000', 'Beban Visa'], ['5-4000', 'Beban Katering / Konsumsi'], ['5-5000', 'Beban Transportasi & Handling'],
-  ['5-6000', 'Beban Muthawwif / TL'], ['5-7000', 'Beban Perlengkapan Jamaah'], ['6-5000', 'Beban Administrasi & Umum']
-] as const;
-
 interface BankAccount { account_code: string; name: string; currency: string }
 interface CostCenter { id: string; code: string; name: string }
+interface Vendor { id: string; name: string; type: string }
 interface Receivable { invoiceId: string; regNumber: string; name: string; remaining: number }
 interface DocSchedule { id: string; label: string; amount: number; dueDate: string; status: string }
-interface PreviewLine { code: string; name: string; debit: number; credit: number; foreign?: string }
-
-const today = () => new Date().toISOString().slice(0, 10);
+interface ExpenseLine { accountCode: string; amount: number; vendorBillId?: string }
 
 export function InputTransaksiPage() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  // Pimpinan read-only: route /keuangan/input sudah dijaga, gate ini pertahanan kedua (FE-03).
+  const canWrite = hasRole(user?.role, FINANCE_WRITE_ROLES);
   const [tx, setTx] = useState<TxType>('terima');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [issuedBills, setIssuedBills] = useState<IssuedVendorBill[]>([]);
 
   // Referensi
   const { data: banks } = useQuery({ queryKey: ['bank-accounts'], queryFn: async () => (await api.get('/bank-accounts')).data.data as BankAccount[] });
   const { data: ccs } = useQuery({ queryKey: ['cost-centers'], queryFn: async () => (await api.get('/cost-centers')).data.data as CostCenter[] });
   const { data: agents } = useQuery({ queryKey: ['agents'], queryFn: async () => (await api.get('/agents')).data.data.agents as { id: string; name: string; code: string; isActive: boolean }[] });
   const { data: recv } = useQuery({ queryKey: ['receivables'], queryFn: async () => (await api.get('/receivables')).data.data as { data: Receivable[] } });
+  const { data: vendors } = useQuery({ queryKey: ['vendors'], queryFn: async () => (await api.get('/vendors')).data.data as Vendor[] });
 
   // ---- state form Terima ----
   const [tInvoice, setTInvoice] = useState('');
   const [tSchedule, setTSchedule] = useState('');
   const [tBank, setTBank] = useState('1-1200');
   const [tMethod, setTMethod] = useState('va');
-  const [tDate, setTDate] = useState(today());
+  const [tDate, setTDate] = useState(todayWib);
   const [tAmount, setTAmount] = useState(25_000_000);
   const { data: tDoc } = useQuery({
     queryKey: ['invoice-doc', tInvoice],
@@ -59,24 +72,41 @@ export function InputTransaksiPage() {
   const [bKurs, setBKurs] = useState(4150);
   const [bSettle, setBSettle] = useState(false);
   const [bKursHutang, setBKursHutang] = useState(4100);
-  const [bDate, setBDate] = useState(today());
-  const [bLines, setBLines] = useState([
+  const [bDate, setBDate] = useState(todayWib);
+  const [bLines, setBLines] = useState<ExpenseLine[]>([
     { accountCode: '5-2000', amount: 45_000 },
     { accountCode: '5-4000', amount: 12_000 }
   ]);
   const bCurrency = banks?.find((b) => b.account_code === bBank)?.currency ?? 'IDR';
   const bRate = bCurrency === 'IDR' ? 1 : bKurs;
 
+  // Tagihan vendor (SEMUA status) — yang belum lunas jadi opsi pelunasan per baris biaya,
+  // yang sudah lunas/dibatalkan tetap tampil di panel dengan badge status.
+  const { data: vendorBills, isLoading: billsLoading } = useQuery({
+    queryKey: ['vendor-bills', bCc],
+    queryFn: async () =>
+      (await api.get('/vendor-bills', { params: { costCenterId: bCc || undefined } })).data.data as VendorBill[]
+  });
+  const bills = vendorBills ?? [];
+  const settleableBills = bills.filter(isSettleableBill);
+  const canSettleBill = bCurrency === 'IDR' && !bSettle;
+
   // ---- state form Pendapatan ----
-  const [pCc, setPCc] = useState('');
-  const [pAccount, setPAccount] = useState<'4-1000' | '4-2000'>('4-1000');
-  const [pDate, setPDate] = useState(today());
-  const [pAmount, setPAmount] = useState(0);
+  const [pForm, setPForm] = useState<PendapatanState>({
+    costCenterId: '', revenueAccountCode: '4-1000', date: todayWib(), amount: 0, hpp: [emptyHppRow()]
+  });
+  const { data: balances, isLoading: balancesLoading } = useQuery({
+    queryKey: ['cost-center-balances', pForm.costCenterId],
+    enabled: Boolean(pForm.costCenterId),
+    queryFn: async () => (await api.get(`/cost-centers/${pForm.costCenterId}/balances`)).data.data as CostCenterBalances
+  });
+  const pHpp = filledHpp(pForm.hpp);
+  const allocation = allocateVendorAdvance(pHpp, balances?.vendorAdvance1400 ?? 0);
 
   // ---- state form Komisi ----
   const [kAgentId, setKAgentId] = useState('');
   const [kCc, setKCc] = useState('');
-  const [kDate, setKDate] = useState(today());
+  const [kDate, setKDate] = useState(todayWib);
   const [kBase, setKBase] = useState(141_000_000);
   const [kPct, setKPct] = useState(3);
   const komisi = Math.round((kBase * kPct) / 100);
@@ -109,28 +139,33 @@ export function InputTransaksiPage() {
         lines.push({ code: bBank, name: bankName(bBank), debit: 0, credit: totalIdr, foreign: `${totalForeign.toLocaleString('id-ID')} ${bCurrency}` });
         return { desc: `Pelunasan hutang vendor — ${bVendor}`, lines, note: `Realisasi selisih kurs: hutang @${bKursHutang.toLocaleString('id-ID')} dibayar @${bRate.toLocaleString('id-ID')} → 7-1000.` };
       }
+      const settlingBills = bLines.some((l) => l.vendorBillId);
       return {
         desc: `Pembayaran biaya — ${bVendor}`,
         lines: [
           ...bLines.map((l) => ({
             code: l.accountCode,
-            name: BIAYA_ACCOUNTS.find((a) => a[0] === l.accountCode)?.[1] ?? l.accountCode,
+            name: accountName(l.accountCode),
             debit: Math.round((l.amount || 0) * bRate), credit: 0,
             foreign: bCurrency !== 'IDR' ? `${(l.amount || 0).toLocaleString('id-ID')} ${bCurrency}` : undefined
           })),
           { code: bBank, name: bankName(bBank), debit: 0, credit: totalIdr, foreign: bCurrency !== 'IDR' ? `${totalForeign.toLocaleString('id-ID')} ${bCurrency}` : undefined }
         ],
-        note: bCurrency !== 'IDR' ? `Transaksi valas dicatat pada IDR fungsional memakai kurs ${bRate.toLocaleString('id-ID')}.` : 'Biaya dibebankan per cost center keberangkatan.'
+        note: settlingBills
+          ? 'Pelunasan tagihan vendor tercatat: Dr 2-1300 mengurangi hutang vendor, sisa tagihan ikut berkurang (boleh sebagian).'
+          : bCurrency !== 'IDR' ? `Transaksi valas dicatat pada IDR fungsional memakai kurs ${bRate.toLocaleString('id-ID')}.` : 'Biaya dibebankan per cost center keberangkatan.'
       };
     }
     if (tx === 'pendapatan') {
+      const totalExcess = allocation.reduce((s, c) => s + c.excess, 0);
       return {
-        desc: 'Pengakuan pendapatan (PSAK 72)',
-        lines: [
-          { code: '2-1100', name: 'Uang Muka Jamaah', debit: pAmount, credit: 0 },
-          { code: pAccount, name: pAccount === '4-1000' ? 'Pendapatan Jasa Umrah' : 'Pendapatan Jasa Haji Khusus', debit: 0, credit: pAmount }
-        ],
-        note: 'Reclass Uang Muka Jamaah → Pendapatan saat penyelesaian jasa, diikuti pengakuan HPP.'
+        desc: 'Pengakuan pendapatan (PSAK 72)' + (allocation.length > 0 ? ' + pengakuan HPP' : ''),
+        lines: revenuePreviewLines({ revenueAccountCode: pForm.revenueAccountCode, amount: pForm.amount, allocation }),
+        note: allocation.length === 0
+          ? 'Reclass Uang Muka Jamaah → Pendapatan saat penyelesaian jasa, diikuti pengakuan HPP.'
+          : totalExcess > 0
+            ? `Saldo Uang Muka Vendor dialokasikan pro-rata; kelebihan ${fmtFull(totalExcess)} dicatat sebagai hutang vendor (2-1300) + tagihan vendor.`
+            : 'Seluruh HPP tertutup saldo Uang Muka Vendor (1-1400) — tidak ada hutang vendor baru.'
       };
     }
     return {
@@ -141,21 +176,30 @@ export function InputTransaksiPage() {
       ],
       note: 'Komisi diakui sebagai beban + hutang terlacak (baris commissions); dibayar/dibatalkan lewat menu Marketing.'
     };
-  }, [tx, tBank, tAmount, banks, bLines, bRate, bCurrency, bSettle, bKursHutang, bVendor, bBank, pAmount, pAccount, kAgentName, komisi]);
+  }, [tx, tBank, tAmount, banks, bLines, bRate, bCurrency, bSettle, bKursHutang, bVendor, bBank, pForm.amount, pForm.revenueAccountCode, allocation, kAgentName, komisi]);
 
   const totalDebit = preview.lines.reduce((s, l) => s + l.debit, 0);
   const totalCredit = preview.lines.reduce((s, l) => s + l.credit, 0);
   const balanced = totalDebit === totalCredit && totalDebit > 0;
 
+  /* ===== Validasi klien = kontrak backend ===== */
+  const validationMessage =
+    tx === 'terima' ? (tInvoice ? null : 'Pilih jamaah / invoice terlebih dahulu.')
+      : tx === 'biaya' ? validateExpenseForm({ lines: bLines, currency: bCurrency, bills })
+        : tx === 'pendapatan' ? validateRevenueForm({
+          costCenterId: pForm.costCenterId, amount: pForm.amount, allocation,
+          liability2100: balances?.liability2100 ?? null
+        })
+          : null;
+
   /* ===== Simpan & Posting ===== */
   const save = useMutation({
     mutationFn: async () => {
-      setError(''); setSuccess('');
       if (tx === 'terima') {
         const { data } = await api.post('/transactions/receipt',
           { invoiceId: tInvoice, scheduleId: tSchedule || null, bankAccountCode: tBank, amount: tAmount, date: tDate, method: tMethod },
           { headers: { 'Idempotency-Key': crypto.randomUUID() } });
-        return `Tersimpan — jurnal ${data.data.journal?.journalNo ?? ''} + kwitansi ${data.data.receipt?.number ?? ''}`;
+        return { message: `Tersimpan — jurnal ${data.data.journal?.journalNo ?? ''} + kwitansi ${data.data.receipt?.number ?? ''}`, bills: [] as IssuedVendorBill[] };
       }
       if (tx === 'biaya') {
         const { data } = await api.post('/transactions/expense', {
@@ -163,37 +207,55 @@ export function InputTransaksiPage() {
           exchangeRate: bCurrency === 'IDR' ? null : bKurs,
           settleDebt: bCurrency !== 'IDR' && bSettle,
           exchangeRateAtRecognition: bSettle ? bKursHutang : null,
-          date: bDate, lines: bLines.filter((l) => l.amount > 0)
+          date: bDate,
+          lines: bLines.filter((l) => l.amount > 0).map((l) => ({
+            accountCode: l.accountCode, amount: l.amount, ...(l.vendorBillId ? { vendorBillId: l.vendorBillId } : {})
+          }))
         });
-        return `Tersimpan — jurnal ${data.data.journal_no} (balance ✓)`;
+        return { message: `Tersimpan — jurnal ${data.data.journal_no} (balance ✓)`, bills: [] as IssuedVendorBill[] };
       }
       if (tx === 'pendapatan') {
         const { data } = await api.post('/transactions/revenue-recognition', {
-          costCenterId: pCc, revenueAccountCode: pAccount, amount: pAmount, date: pDate
+          costCenterId: pForm.costCenterId, revenueAccountCode: pForm.revenueAccountCode, amount: pForm.amount, date: pForm.date,
+          hpp: pHpp.length > 0
+            ? pHpp.map((c) => ({
+              accountCode: c.accountCode, amount: c.amount,
+              vendorId: c.vendorId || null, dueDate: c.dueDate || null
+            }))
+            : undefined
         });
-        return `Tersimpan — jurnal ${data.data.revenue.journal_no}`;
+        const issued = (data.data.vendorBills ?? []) as IssuedVendorBill[];
+        const hppNo = data.data.hpp?.journal_no;
+        return {
+          message: `Tersimpan — jurnal ${data.data.revenue.journal_no}${hppNo ? ` + HPP ${hppNo}` : ''}`,
+          bills: issued
+        };
       }
       const { data } = await api.post('/transactions/commission', { agentId: kActiveAgentId, costCenterId: kCc || null, base: kBase, pct: kPct, date: kDate });
-      return `Tersimpan — jurnal ${data.data.journal_no} (komisi terlacak)`;
+      return { message: `Tersimpan — jurnal ${data.data.journal_no} (komisi terlacak)`, bills: [] as IssuedVendorBill[] };
     },
-    onSuccess: (msg) => {
-      setSuccess(msg);
+    onMutate: () => { setError(''); setSuccess(''); setIssuedBills([]); },
+    onSuccess: (res) => {
+      setSuccess(res.message);
+      setIssuedBills(res.bills);
       qc.invalidateQueries();
     },
-    onError: (e: unknown) => setError((e as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Gagal menyimpan')
+    onError: (e) => setError(apiErrorMessage(e, 'Gagal menyimpan'))
   });
 
-  const canSave = balanced && (tx !== 'terima' || Boolean(tInvoice)) && (tx !== 'pendapatan' || Boolean(pCc));
+  const canSave = balanced && !validationMessage;
   const rowStyle = (on: boolean, dot: string) => on
     ? { borderColor: dot, background: '#fffdf8', boxShadow: 'var(--shadow-card)' }
     : { borderColor: '#e5dcc8', background: '#f7f2e8' };
+
+  const setLine = (i: number, next: Partial<ExpenseLine>) => setBLines(bLines.map((x, j) => (j === i ? { ...x, ...next } : x)));
 
   return (
     <div>
       {/* Selector 4 tipe */}
       <div className="mb-4 grid grid-cols-4 gap-3 max-md:grid-cols-2">
         {TX_TYPES.map((t) => (
-          <button key={t.key} onClick={() => { setTx(t.key); setError(''); setSuccess(''); }}
+          <button key={t.key} onClick={() => { setTx(t.key); setError(''); setSuccess(''); setIssuedBills([]); }}
             className="cursor-pointer rounded-[11px] border p-3.5 text-left" style={rowStyle(tx === t.key, t.dot)}>
             <span className="mb-1.5 block h-[9px] w-[9px] rounded-[3px]" style={{ background: t.dot }} />
             <div className="text-[12.5px] font-semibold">{t.label}</div>
@@ -282,26 +344,74 @@ export function InputTransaksiPage() {
               <div className="col-span-2">
                 <label className="lbl">Rincian Biaya {bCurrency !== 'IDR' && `(dalam ${bCurrency})`}</label>
                 <div className="flex flex-col gap-2">
-                  {bLines.map((l, i) => (
-                    <div key={i} className="flex gap-2">
-                      <select className="fld flex-1" value={l.accountCode} disabled={bSettle}
-                        onChange={(e) => setBLines(bLines.map((x, j) => (j === i ? { ...x, accountCode: e.target.value } : x)))}>
-                        {BIAYA_ACCOUNTS.map(([code, name]) => <option key={code} value={code}>{code} {name}</option>)}
-                      </select>
-                      <input type="number" className="fld !w-[150px] font-mono" value={l.amount || ''}
-                        onChange={(e) => setBLines(bLines.map((x, j) => (j === i ? { ...x, amount: Number(e.target.value) } : x)))} />
-                      {bLines.length > 1 && !bSettle && (
-                        <button type="button" onClick={() => setBLines(bLines.filter((_, j) => j !== i))}
-                          className="cursor-pointer rounded-[9px] border border-line-2 px-3 text-[12px] text-danger-deep">×</button>
-                      )}
-                    </div>
-                  ))}
+                  {bLines.map((l, i) => {
+                    const bill = bills.find((b) => b.id === l.vendorBillId);
+                    return (
+                      <div key={i} className={l.vendorBillId ? 'rounded-[9px] border border-line-3 bg-panel p-2.5' : ''}>
+                        <div className="flex gap-2">
+                          {l.vendorBillId ? (
+                            <select className="fld flex-1" value={VENDOR_BILL_ACCOUNT} disabled>
+                              <option value={VENDOR_BILL_ACCOUNT}>{VENDOR_BILL_ACCOUNT} {accountName(VENDOR_BILL_ACCOUNT)}</option>
+                            </select>
+                          ) : (
+                            <select className="fld flex-1" value={l.accountCode} disabled={bSettle}
+                              onChange={(e) => setLine(i, { accountCode: e.target.value })}>
+                              {BIAYA_ACCOUNTS.map(([code, name]) => <option key={code} value={code}>{code} {name}</option>)}
+                            </select>
+                          )}
+                          <input type="number" className="fld !w-[150px] font-mono" value={l.amount || ''}
+                            onChange={(e) => setLine(i, { amount: Number(e.target.value) })} />
+                          {bLines.length > 1 && !bSettle && (
+                            <button type="button" onClick={() => setBLines(bLines.filter((_, j) => j !== i))}
+                              className="cursor-pointer rounded-[9px] border border-line-2 px-3 text-[12px] text-danger-deep">×</button>
+                          )}
+                        </div>
+
+                        {canSettleBill && (
+                          <div className="mt-1.5">
+                            <select className="fld !py-1.5 !text-[11.5px]" value={l.vendorBillId ?? ''}
+                              onChange={(e) => {
+                                const id = e.target.value;
+                                const picked = settleableBills.find((b) => b.id === id);
+                                setLine(i, id
+                                  ? { vendorBillId: id, accountCode: VENDOR_BILL_ACCOUNT, amount: picked ? picked.remaining : l.amount }
+                                  : { vendorBillId: undefined, accountCode: '5-2000' });
+                              }}>
+                              <option value="">— bukan pelunasan tagihan vendor —</option>
+                              {settleableBills.map((b) => (
+                                <option key={b.id} value={b.id}>
+                                  {b.vendorName} · {b.accountCode ?? '—'} · sisa {fmtFull(b.remaining)}{b.dueDate ? ` · tempo ${fmtDate(b.dueDate)}` : ''}
+                                </option>
+                              ))}
+                            </select>
+                            {bill && (
+                              <div className="mt-1 text-[10.5px] text-muted-2">
+                                Tagihan {fmtFull(bill.amount)} · sudah dibayar {fmtFull(bill.paidAmount)} · <b className="font-mono">sisa {fmtFull(bill.remaining)}</b>
+                                {bill.costCenterCode && <> · <span className="font-mono">{bill.costCenterCode}</span></>} — boleh dilunasi sebagian.
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
                 {!bSettle && (
                   <button type="button" onClick={() => setBLines([...bLines, { accountCode: '5-3000', amount: 0 }])}
                     className="mt-2 cursor-pointer text-[11.5px] font-semibold text-primary hover:underline">+ Tambah baris akun</button>
                 )}
               </div>
+              <VendorBillsPanel
+                bills={bills} canWrite={canWrite} isLoading={billsLoading}
+                onVoided={(bill, journalNo) => {
+                  setError('');
+                  setSuccess(`Tagihan vendor ${bill.vendorName} ${fmtFull(bill.amount)} dibatalkan — jurnal balik ${journalNo}.`);
+                  // Baris biaya yang menunjuk tagihan ini tidak sah lagi → lepaskan pilihannya.
+                  setBLines((prev) => prev.map((l) => (l.vendorBillId === bill.id ? { accountCode: '5-2000', amount: l.amount } : l)));
+                  VOID_AFFECTED_QUERIES.forEach((key) => qc.invalidateQueries({ queryKey: [key] }));
+                }}
+              />
+
               <div><label className="lbl">Tanggal</label><input type="date" className="fld" value={bDate} onChange={(e) => setBDate(e.target.value)} /></div>
               <div className="flex items-end justify-end pb-1 text-[12.5px]">
                 Total dibayar: <span className="ml-2 font-mono font-bold">{fmtFull(Math.round(bLines.reduce((s, l) => s + (l.amount || 0), 0) * bRate))}</span>
@@ -310,27 +420,10 @@ export function InputTransaksiPage() {
           )}
 
           {tx === 'pendapatan' && (
-            <div className="grid grid-cols-2 gap-3.5">
-              <div className="col-span-2">
-                <label className="lbl">Keberangkatan / Cost Center</label>
-                <select className="fld" value={pCc} onChange={(e) => setPCc(e.target.value)}>
-                  <option value="">— pilih keberangkatan —</option>
-                  {ccs?.filter((c) => c.code.startsWith('CC-')).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="lbl">Akun Pendapatan</label>
-                <select className="fld" value={pAccount} onChange={(e) => setPAccount(e.target.value as typeof pAccount)}>
-                  <option value="4-1000">4-1000 Pendapatan Jasa Umrah</option>
-                  <option value="4-2000">4-2000 Pendapatan Jasa Haji Khusus</option>
-                </select>
-              </div>
-              <div><label className="lbl">Tanggal Penyelesaian Jasa</label><input type="date" className="fld" value={pDate} onChange={(e) => setPDate(e.target.value)} /></div>
-              <div className="col-span-2"><label className="lbl">Nilai Pendapatan Diakui (Rp)</label><input type="number" className="fld font-mono" value={pAmount || ''} onChange={(e) => setPAmount(Number(e.target.value))} /></div>
-              <div className="col-span-2 rounded-[9px] bg-[oklch(0.97_0.02_158)] px-3.5 py-2.5 text-[11px] leading-relaxed text-[oklch(0.4_0.06_158)]">
-                <b>PSAK 72:</b> pendapatan diakui saat kewajiban jasa terpenuhi (keberangkatan) — reclass Uang Muka Jamaah → Pendapatan, diikuti pengakuan HPP dari Uang Muka Vendor.
-              </div>
-            </div>
+            <PendapatanForm
+              state={pForm} onChange={setPForm} costCenters={ccs} vendors={vendors}
+              balances={balances} isBalancesLoading={balancesLoading} allocation={allocation}
+            />
           )}
 
           {tx === 'komisi' && (
@@ -364,7 +457,7 @@ export function InputTransaksiPage() {
         <div className="h-fit rounded-card p-5 text-[#e8e0cf] shadow-float lg:sticky lg:top-2" style={{ background: '#16211b' }}>
           <div className="flex items-baseline justify-between">
             <span className="font-display text-[16px]">Preview Jurnal</span>
-            <span className="font-mono text-[10.5px] text-[#9fb0a4]">JV-2026-xxxx · {fmtDate(today())}</span>
+            <span className="font-mono text-[10.5px] text-[#9fb0a4]">JV-2026-xxxx · {fmtDate(todayWib())}</span>
           </div>
           <div className="mt-1 text-[11px] text-[#9fb0a4]">{preview.desc}</div>
 
@@ -378,15 +471,22 @@ export function InputTransaksiPage() {
             </thead>
             <tbody>
               {preview.lines.map((l, i) => (
-                <tr key={i} className="border-b border-white/[0.07]">
-                  <td className="py-2" style={{ paddingLeft: l.credit > 0 ? 14 : 0 }}>
-                    <span className="font-mono text-[10px] font-semibold" style={{ color: ACC_CLASS_COLOR[Number(l.code[0])] }}>{l.code}</span>
-                    <span className="ml-1.5">{l.name}</span>
-                    {l.foreign && <div className="font-mono text-[9px] text-[#9fb0a4]">{l.foreign}</div>}
-                  </td>
-                  <td className="py-2 text-right font-mono">{l.debit ? l.debit.toLocaleString('id-ID') : ''}</td>
-                  <td className="py-2 text-right font-mono">{l.credit ? l.credit.toLocaleString('id-ID') : ''}</td>
-                </tr>
+                <Fragment key={i}>
+                  {l.group && l.group !== preview.lines[i - 1]?.group && (
+                    <tr>
+                      <td colSpan={3} className="pt-2.5 pb-1 text-[9.5px] uppercase tracking-[0.5px] text-[#9fb0a4]">{l.group}</td>
+                    </tr>
+                  )}
+                  <tr className="border-b border-white/[0.07]">
+                    <td className="py-2" style={{ paddingLeft: l.credit > 0 ? 14 : 0 }}>
+                      <span className="font-mono text-[10px] font-semibold" style={{ color: ACC_CLASS_COLOR[Number(l.code[0])] }}>{l.code}</span>
+                      <span className="ml-1.5">{l.name}</span>
+                      {l.foreign && <div className="font-mono text-[9px] text-[#9fb0a4]">{l.foreign}</div>}
+                    </td>
+                    <td className="py-2 text-right font-mono">{l.debit ? l.debit.toLocaleString('id-ID') : ''}</td>
+                    <td className="py-2 text-right font-mono">{l.credit ? l.credit.toLocaleString('id-ID') : ''}</td>
+                  </tr>
+                </Fragment>
               ))}
             </tbody>
             <tfoot>
@@ -404,8 +504,24 @@ export function InputTransaksiPage() {
 
           <div className="mt-2 text-[10px] leading-relaxed text-[#9fb0a4]">{preview.note}</div>
 
-          {error && <div className="mt-3 rounded-[8px] bg-[oklch(0.3_0.08_28)] px-3 py-2 text-[11px] text-[oklch(0.85_0.06_30)]">{error}</div>}
-          {success && <div className="mt-3 rounded-[8px] bg-[oklch(0.3_0.05_158)] px-3 py-2 text-[11px] text-[oklch(0.85_0.05_158)]">{success}</div>}
+          {validationMessage && !error && (
+            <div className="mt-3 rounded-[8px] bg-[oklch(0.3_0.06_78)] px-3 py-2 text-[11px] text-[oklch(0.88_0.06_82)]">{validationMessage}</div>
+          )}
+          {error && <div role="alert" className="mt-3 rounded-[8px] bg-[oklch(0.3_0.08_28)] px-3 py-2 text-[11px] text-[oklch(0.85_0.06_30)]">{error}</div>}
+          {success && <div role="status" className="mt-3 rounded-[8px] bg-[oklch(0.3_0.05_158)] px-3 py-2 text-[11px] text-[oklch(0.85_0.05_158)]">{success}</div>}
+
+          {issuedBills.length > 0 && (
+            <div className="mt-2 rounded-[8px] bg-[oklch(0.3_0.05_78)] px-3 py-2 text-[10.5px] text-[oklch(0.88_0.05_82)]">
+              <div className="font-semibold">Tagihan vendor terbit ({issuedBills.length}):</div>
+              {issuedBills.map((b) => (
+                <div key={b.id} className="mt-0.5">
+                  {b.vendorName} · <span className="font-mono">{b.accountCode}</span> · <b className="font-mono">{fmtFull(b.amount)}</b>
+                  {b.dueDate ? ` · tempo ${fmtDate(b.dueDate)}` : ' · tanpa jatuh tempo'}
+                </div>
+              ))}
+              <div className="mt-1 text-[9.5px] opacity-80">Lunasi lewat tipe transaksi "Pembayaran Biaya" → pilih tagihan vendor.</div>
+            </div>
+          )}
 
           <div className="mt-4 flex gap-2">
             <button onClick={() => canSave && save.mutate()} disabled={!canSave || save.isPending}
@@ -413,7 +529,7 @@ export function InputTransaksiPage() {
               style={{ background: canSave ? 'oklch(0.62 0.11 78)' : 'oklch(0.4 0.03 78)', cursor: canSave ? 'pointer' : 'not-allowed' }}>
               {save.isPending ? 'Memposting…' : 'Simpan & Posting'}
             </button>
-            <button onClick={() => { setError(''); setSuccess(''); }}
+            <button onClick={() => { setError(''); setSuccess(''); setIssuedBills([]); }}
               className="cursor-pointer rounded-[9px] border border-white/20 px-4 py-2.5 text-[13px] font-semibold text-[#e8e0cf]">
               Batal
             </button>

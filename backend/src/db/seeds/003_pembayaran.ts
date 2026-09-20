@@ -92,11 +92,23 @@ export async function seed(knex: Knex): Promise<void> {
   let kwtSerial = 1100; // serial kwitansi berjalan; T2 Siti dipaksa 1183 (mockup)
 
   async function insertPlan(plan: Plan) {
-    const reg = await knex('registrations').where({ reg_number: plan.reg }).first();
+    const reg = await knex('registrations as r')
+      .join('departures as d', 'd.id', 'r.departure_id')
+      .join('packages as p', 'p.id', 'd.package_id')
+      .select('r.*', 'p.triple_upcharge', 'p.double_upcharge')
+      .where('r.reg_number', plan.reg)
+      .first();
     if (!reg) throw new Error(`Seed 003: registrasi ${plan.reg} tidak ditemukan`);
     const serial = plan.reg.slice(-4);
     const [iy, im] = plan.issued.split('-');
     const totalPaid = plan.lines.filter((l) => l.paid).reduce((s, l) => s + l.amount, 0);
+    // N-2: bekukan komponen harga SAAT TERBIT (base_price + room_upcharge). `plan.total`
+    // di sini adalah angka mockup eksplisit; upcharge kamar dibatasi (LEAST) agar
+    // base_price = total - upcharge selalu pas (Σ item = total_amount, invarian N-2).
+    const roomUpcharge = Math.min(
+      reg.room_type === 'triple' ? Number(reg.triple_upcharge) : reg.room_type === 'double' ? Number(reg.double_upcharge) : 0,
+      plan.total
+    );
 
     const [invoice] = await knex('invoices')
       .insert({
@@ -105,6 +117,8 @@ export async function seed(knex: Knex): Promise<void> {
         issued_date: plan.issued,
         due_date: plan.lines[plan.lines.length - 1].due,
         total_amount: plan.total,
+        base_price: plan.total - roomUpcharge,
+        room_upcharge: roomUpcharge,
         status: totalPaid >= plan.total ? 'paid' : totalPaid > 0 ? 'partial' : 'unpaid',
         va_number: `8801 ${serial} 0000 ${serial}`
       })

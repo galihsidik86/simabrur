@@ -2,6 +2,8 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { fmtShort, fmtDate } from '../../utils/format';
+import { useAuth } from '../../store/auth';
+import { FINANCE_WRITE_ROLES, hasRole } from '../../routes/access';
 
 /** Skala warna kelas akun (identik mockup COA/Jurnal/Input Transaksi). */
 export const ACC_CLASS_COLOR: Record<number, string> = {
@@ -11,16 +13,19 @@ export const ACC_CLASS_COLOR: Record<number, string> = {
 
 const TABS = [
   { to: '/keuangan', label: 'Ringkasan', end: true },
-  { to: '/keuangan/input', label: 'Input Transaksi' },
+  { to: '/keuangan/input', label: 'Input Transaksi', writeOnly: true },
   { to: '/keuangan/jurnal', label: 'Jurnal & Rekonsiliasi' },
   { to: '/keuangan/coa', label: 'Bagan Akun' }
 ];
 
 export function KeuanganLayout() {
+  const { user } = useAuth();
+  // Pimpinan read-only: tab tulis disembunyikan (route /keuangan/input juga dijaga di App.tsx).
+  const canWrite = hasRole(user?.role, FINANCE_WRITE_ROLES);
   return (
     <div>
       <div className="mb-[18px] flex gap-1 border-b border-line-2">
-        {TABS.map((t) => (
+        {TABS.filter((t) => canWrite || !t.writeOnly).map((t) => (
           <NavLink key={t.to} to={t.to} end={t.end}
             className="border-b-2 px-3.5 py-2 text-[13px] font-semibold"
             style={({ isActive }) => isActive

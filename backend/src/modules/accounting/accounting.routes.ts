@@ -10,10 +10,14 @@ accountsRoutes.get('/', requireAuth, requireRoles(...KEU), accountingController.
 
 export const costCentersRoutes = Router();
 costCentersRoutes.get('/', requireAuth, requireRoles(...KEU), accountingController.costCenters);
+// B (putaran 3): saldo 1-1400/2-1100 per cost center — dipakai UI form HPP.
+costCentersRoutes.get('/:id/balances', requireAuth, requireRoles(...KEU), accountingController.costCenterBalances);
 
 export const journalsRoutes = Router();
 journalsRoutes.get('/', requireAuth, requireRoles(...KEU), accountingController.journals);
 journalsRoutes.post('/', requireAuth, requireRoles('keuangan'), accountingController.createManualJournal);
+// C (rekomendasi N-3): balik jurnal manual — hanya keuangan, alasan wajib.
+journalsRoutes.post('/:id/reverse', requireAuth, requireRoles('keuangan'), accountingController.reverseJournal);
 
 export const ledgerRoutes = Router();
 ledgerRoutes.get('/:code', requireAuth, requireRoles(...KEU), accountingController.ledger);
@@ -44,3 +48,9 @@ vendorsRoutes.get('/', requireAuth, requireRoles(...KEU), accountingController.v
 vendorsRoutes.post('/', requireAuth, requireRoles('keuangan'), accountingController.createVendor);
 vendorsRoutes.put('/:id', requireAuth, requireRoles('keuangan'), accountingController.updateVendor);
 vendorsRoutes.delete('/:id', requireAuth, requireRoles('keuangan'), accountingController.deleteVendor);
+
+// B (putaran 3): tagihan vendor (dari alokasi HPP > saldo 1-1400) — baca keuangan/pimpinan.
+export const vendorBillsRoutes = Router();
+vendorBillsRoutes.get('/', requireAuth, requireRoles(...KEU), accountingController.vendorBills);
+// Tugas lanjutan putaran 3: pembatalan tagihan vendor — hanya keuangan, alasan wajib.
+vendorBillsRoutes.patch('/:id/void', requireAuth, requireRoles('keuangan'), accountingController.voidVendorBill);

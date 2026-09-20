@@ -39,3 +39,22 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
   req.user = { id: payload.id, role: payload.role, branchId: payload.branchId, name: payload.name, email: payload.email };
   next();
 }
+
+/**
+ * Seperti `requireAuth`, tapi tak pernah menolak — dipakai pada endpoint PUBLIK yang
+ * perlu tahu APAKAH pemanggil kebetulan staf ber-otentikasi (mis. DOM-04/SEC-05: staf
+ * boleh mengganti dokumen verified, jalur anonim tidak). Token tak ada/tak
+ * valid/portal/agen → `req.user` tetap kosong, request tetap lanjut (tidak 401).
+ */
+export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
+  const header = req.headers.authorization;
+  if (!header?.startsWith('Bearer ')) return next();
+  try {
+    const payload = jwt.verify(header.slice(7), env.jwt.accessSecret) as AuthUser & jwt.JwtPayload & { kind?: string };
+    if (payload.kind === 'portal' || payload.kind === 'agent') return next();
+    req.user = { id: payload.id, role: payload.role, branchId: payload.branchId, name: payload.name, email: payload.email };
+  } catch {
+    // token anonim/tidak valid — biarkan lanjut sebagai request publik, jangan 401
+  }
+  next();
+}

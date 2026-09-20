@@ -1,7 +1,10 @@
 import type { Request, Response } from 'express';
 import { ok } from '../../utils/http.js';
 import { paymentsService } from './payments.service.js';
-import { createInvoiceSchema, createPaymentSchema, upsertBankAccountSchema } from './payments.validation.js';
+import {
+  createInvoiceSchema, createPaymentSchema, listRefundsQuery, payRefundSchema,
+  rejectPaymentSchema, upsertBankAccountSchema
+} from './payments.validation.js';
 
 export const paymentsController = {
   async createInvoice(req: Request, res: Response) {
@@ -18,6 +21,26 @@ export const paymentsController = {
 
   async verifyPayment(req: Request, res: Response) {
     ok(res, await paymentsService.verifyPayment(req, String(req.params.id)));
+  },
+
+  async rejectPayment(req: Request, res: Response) {
+    const { reason } = rejectPaymentSchema.parse(req.body);
+    ok(res, await paymentsService.rejectPayment(req, String(req.params.id), reason));
+  },
+
+  async listRefunds(req: Request, res: Response) {
+    const { status } = listRefundsQuery.parse(req.query);
+    ok(res, await paymentsService.listRefunds(status));
+  },
+
+  async payRefund(req: Request, res: Response) {
+    const input = payRefundSchema.parse(req.body);
+    const key = typeof req.headers['idempotency-key'] === 'string' ? req.headers['idempotency-key'] : undefined;
+    ok(res, await paymentsService.payRefund(req, String(req.params.id), input, key));
+  },
+
+  async refundReceipt(req: Request, res: Response) {
+    ok(res, await paymentsService.refundReceipt(String(req.params.id)));
   },
 
   async receivables(_req: Request, res: Response) {

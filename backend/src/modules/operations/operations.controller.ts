@@ -79,6 +79,13 @@ export const operationsController = {
   /** Ekspor Excel: aging / compliance / readiness. */
   async exportReport(req: Request, res: Response) {
     const report = String(req.query.report ?? '');
+    // NEW-BE-02: laporan KEUANGAN (income-statement/balance-sheet/profit) hanya utk role
+    // yang di NAV sidebar (AppShell) punya menu Laporan Keuangan — operasional TIDAK.
+    // Laporan operasional (aging/compliance/readiness) tetap sesuai role rute ini.
+    const FINANCIAL_REPORTS = new Set(['income-statement', 'balance-sheet', 'profit']);
+    if (FINANCIAL_REPORTS.has(report) && !['keuangan', 'pimpinan', 'admin'].includes(req.user?.role ?? '')) {
+      throw errors.forbidden();
+    }
     const wb = XLSX.utils.book_new();
 
     if (report === 'aging') {

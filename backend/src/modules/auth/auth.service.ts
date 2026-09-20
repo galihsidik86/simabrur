@@ -63,9 +63,16 @@ export const authService = {
     return { ...tokens, user: publicUser(user) };
   },
 
+  /**
+   * NEW-FE-02: tanpa `requireAuth` — token itu sendiri adalah kredensialnya. Selalu
+   * 200 (idempoten), tidak membocorkan valid/tidaknya token. Aktor audit diambil dari
+   * baris refresh_tokens (bukan `req.user`, yang kosong di endpoint publik ini).
+   */
   async logout(req: Request, refreshToken: string) {
-    await authRepository.revokeRefreshToken(sha256(refreshToken));
-    await audit(req, { action: 'auth.logout', entity: 'users', entityId: req.user?.id });
+    const hash = sha256(refreshToken);
+    const row = await authRepository.findRefreshToken(hash);
+    if (row && !row.revoked_at) await authRepository.revokeRefreshToken(hash);
+    await audit(req, { action: 'auth.logout', entity: 'users', entityId: row?.user_id, actorId: row?.user_id ?? null });
   },
 
   async me(userId: string) {

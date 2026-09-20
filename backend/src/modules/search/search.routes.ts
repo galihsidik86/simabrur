@@ -3,6 +3,7 @@ import { db } from '../../config/db.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireRoles } from '../../middleware/rbac.js';
 import { ok } from '../../utils/http.js';
+import { escapeLike } from '../../utils/like.js';
 
 const STAFF_ROLES = ['operasional', 'marketing', 'keuangan', 'pimpinan'] as const;
 
@@ -12,7 +13,7 @@ export const searchRoutes = Router();
 searchRoutes.get('/', requireAuth, requireRoles(...STAFF_ROLES), async (req, res) => {
   const q = String(req.query.q ?? '').trim();
   if (q.length < 2) return ok(res, { jamaah: [], packages: [], invoices: [] });
-  const like = `%${q}%`;
+  const like = `%${escapeLike(q)}%`;
 
   const [jamaah, packages, invoices] = await Promise.all([
     db('jamaah as j')

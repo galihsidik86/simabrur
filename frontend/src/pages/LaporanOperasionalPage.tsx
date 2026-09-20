@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../api/client';
+import { api, apiErrorMessage } from '../api/client';
 import { fmtShort, fmtDate } from '../utils/format';
 
 /* ===== Tipe ===== */
@@ -44,15 +44,25 @@ function Tile({ label, value, sub, accent }: { label: string; value: string; sub
 export function LaporanOperasionalPage() {
   const [tab, setTab] = useState<'piutang' | 'dokumen' | 'kesiapan'>('piutang');
   const [depId, setDepId] = useState('');
+  const [exportError, setExportError] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   async function download(report: string) {
-    const res = await api.get('/reports/export', { params: { report }, responseType: 'blob' });
-    const url = URL.createObjectURL(res.data);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `laporan-${report}.xlsx`;
-    a.click();
-    URL.revokeObjectURL(url);
+    setExportError('');
+    setExporting(true);
+    try {
+      const res = await api.get('/reports/export', { params: { report }, responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `laporan-${report}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setExportError(await exportErrorMessage(e));
+    } finally {
+      setExporting(false);
+    }
   }
   const exportKey = tab === 'piutang' ? 'aging' : tab === 'dokumen' ? 'compliance' : 'readiness';
 
@@ -60,21 +70,27 @@ export function LaporanOperasionalPage() {
     <div>
       <div className="mb-[18px] flex items-center gap-2">
         {([['piutang', 'Piutang (Aging)'], ['dokumen', 'Kepatuhan Dokumen'], ['kesiapan', 'Kesiapan Keberangkatan']] as const).map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)}
+          <button key={k} onClick={() => { setTab(k); setExportError(''); }}
             className="cursor-pointer border-b-2 px-3 py-2 text-[13px] font-semibold"
             style={tab === k ? { borderColor: 'var(--color-primary)', color: 'var(--color-ink-strong)' } : { borderColor: 'transparent', color: '#8c8371' }}>
             {label}
           </button>
         ))}
-        <button onClick={() => download(exportKey)}
-          className="ml-auto cursor-pointer rounded-[9px] border border-line-2 bg-white px-3.5 py-2 text-[12px] font-semibold text-muted hover:bg-panel">
-          Ekspor Excel
+        <button onClick={() => download(exportKey)} disabled={exporting}
+          className="ml-auto cursor-pointer rounded-[9px] border border-line-2 bg-white px-3.5 py-2 text-[12px] font-semibold text-muted hover:bg-panel disabled:opacity-60">
+          {exporting ? 'Mengekspor…' : 'Ekspor Excel'}
         </button>
         <button onClick={() => window.print()}
           className="cursor-pointer rounded-[9px] border border-line-2 bg-white px-3.5 py-2 text-[12px] font-semibold text-muted hover:bg-panel">
           Ekspor PDF
         </button>
       </div>
+
+      {exportError && (
+        <div role="alert" className="mb-4 rounded-[9px] bg-danger-bg px-3 py-2 text-[12px] font-medium text-danger-deep">
+          Ekspor Excel gagal: {exportError}
+        </div>
+      )}
 
       {tab === 'piutang' && <TabPiutang />}
       {tab === 'dokumen' && <TabDokumen depId={depId} setDepId={setDepId} />}
@@ -85,11 +101,11 @@ export function LaporanOperasionalPage() {
 
 /* ===== Tab 1: Piutang Aging ===== */
 function TabPiutang() {
-  const { data } = useQuery({
+  const { data, error } = useQuery({
     queryKey: ['report-aging'],
     queryFn: async () => (await api.get('/receivables/aging')).data.data as AgingData
   });
-  if (!data) return <Loading />;
+  if (!data) return error ? <LoadError error={error} /> : <Loading />;
   const order = ['belum', 'd30', 'd60', 'd90'] as const;
   return (
     <>
@@ -146,11 +162,11 @@ const CHIP: Record<string, { text: string; color: string; bg: string; title: str
 };
 
 function TabDokumen({ depId, setDepId }: { depId: string; setDepId: (v: string) => void }) {
-  const { data } = useQuery({
+  const { data, error } = useQuery({
     queryKey: ['report-compliance', depId],
     queryFn: async () => (await api.get('/reports/document-compliance', { params: depId ? { departureId: depId } : {} })).data.data as ComplianceData
   });
-  if (!data) return <Loading />;
+  if (!data) return error ? <LoadError error={error} /> : <Loading />;
   const t = data.tiles;
   const selected = data.perDeparture.find((d) => d.departureId === depId);
   return (
@@ -233,11 +249,11 @@ function TabDokumen({ depId, setDepId }: { depId: string; setDepId: (v: string) 
 
 /* ===== Tab 3: Kesiapan Keberangkatan ===== */
 function TabKesiapan() {
-  const { data } = useQuery({
+  const { data, error } = useQuery({
     queryKey: ['report-readiness'],
     queryFn: async () => (await api.get('/reports/readiness')).data.data as ReadinessData
   });
-  if (!data) return <Loading />;
+  if (!data) return error ? <LoadError error={error} /> : <Loading />;
   const t = data.tiles;
   return (
     <>
@@ -289,6 +305,32 @@ function TabKesiapan() {
   );
 }
 
+/**
+ * Unduhan memakai `responseType: 'blob'`, sehingga body error juga berupa Blob —
+ * envelope `{success:false,error:{message}}` harus dibaca dari teksnya dulu.
+ */
+async function exportErrorMessage(e: unknown): Promise<string> {
+  const fallback = 'file tidak dapat diunduh, coba lagi';
+  const data = (e as { response?: { data?: unknown } })?.response?.data;
+  if (!(data instanceof Blob)) return apiErrorMessage(e, fallback);
+  try {
+    const parsed = JSON.parse(await data.text()) as { error?: { message?: unknown } };
+    const message = parsed.error?.message;
+    return typeof message === 'string' && message ? message : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function Loading() {
   return <div className="text-[12.5px] text-muted-2">Memuat laporan…</div>;
+}
+
+/** Query gagal (mis. 403 role) → tampilkan pesan backend, bukan "Memuat…" selamanya (NEW-FE-03). */
+function LoadError({ error }: { error: unknown }) {
+  return (
+    <div className="rounded-[9px] bg-danger-bg px-3 py-2 text-[12px] font-medium text-danger-deep">
+      Gagal memuat laporan: {apiErrorMessage(error, 'terjadi kesalahan, coba muat ulang halaman')}
+    </div>
+  );
 }

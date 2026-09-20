@@ -3,22 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useAuth } from '../store/auth';
-
-/** Navigasi identik mockup Aplikasi Travel.dc.html (navDefs + titles). */
-const NAV = [
-  { to: '/', label: 'Dashboard', dot: 'var(--color-mod-dashboard)', roles: ['admin', 'pimpinan', 'keuangan', 'marketing', 'operasional'] },
-  { to: '/paket', label: 'Paket & Jadwal', dot: 'var(--color-mod-paket)', roles: ['admin', 'pimpinan', 'marketing'] },
-  { to: '/paket/master', label: 'Master Data Paket', dot: 'var(--color-mod-paket)', roles: ['admin', 'pimpinan', 'marketing'] },
-  { to: '/jamaah', label: 'Jamaah & Pendaftaran', dot: 'var(--color-mod-jamaah)', roles: ['admin', 'pimpinan', 'operasional', 'marketing'] },
-  { to: '/pembayaran', label: 'Pembayaran', dot: 'var(--color-mod-pembayaran)', roles: ['admin', 'pimpinan', 'keuangan'] },
-  { to: '/operasional', label: 'Operasional & Manifest', dot: 'var(--color-mod-operasional)', roles: ['admin', 'pimpinan', 'operasional'] },
-  { to: '/laporan-operasional', label: 'Laporan Operasional', dot: 'var(--color-mod-operasional)', roles: ['admin', 'pimpinan', 'operasional', 'keuangan'] },
-  { to: '/marketing', label: 'Marketing & Komisi', dot: 'var(--color-mod-marketing)', roles: ['admin', 'pimpinan', 'marketing'] },
-  { to: '/keuangan', label: 'Keuangan & Akuntansi', dot: 'var(--color-mod-keuangan)', roles: ['admin', 'pimpinan', 'keuangan'] },
-  { to: '/keuangan-master', label: 'Master Data Keuangan', dot: 'var(--color-mod-keuangan)', roles: ['admin', 'pimpinan', 'keuangan'] },
-  { to: '/laporan-keuangan', label: 'Laporan Keuangan', dot: 'var(--color-mod-keuangan)', roles: ['admin', 'pimpinan', 'keuangan'] },
-  { to: '/admin', label: 'Administrasi', dot: 'var(--color-mod-sistem)', roles: ['admin'] }
-];
+import { NAV, canAccess, hasRole } from '../routes/access';
 
 const TITLES: Record<string, [string, string]> = {
   '/': ['Dashboard Eksekutif', 'Ringkasan omzet, jamaah, profitabilitas & arus kas'],
@@ -68,9 +53,9 @@ function GlobalSearch({ role }: { role: string }) {
     enabled: debounced.length >= 2
   });
 
-  const canJamaah = ['admin', 'pimpinan', 'operasional', 'marketing'].includes(role);
-  const canPaket = ['admin', 'pimpinan', 'marketing'].includes(role);
-  const canInvoice = ['admin', 'pimpinan', 'keuangan'].includes(role);
+  const canJamaah = canAccess('/jamaah', role);
+  const canPaket = canAccess('/paket', role);
+  const canInvoice = canAccess('/pembayaran', role);
   const go = (to: string) => {
     setOpen(false);
     setQ('');
@@ -144,6 +129,7 @@ function GlobalSearch({ role }: { role: string }) {
 
 /** Lonceng notifikasi: ringkasan dokumen/pembayaran yang menunggu verifikasi. */
 function NotifBell() {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -161,6 +147,9 @@ function NotifBell() {
     queryFn: async () => (await api.get('/search/notifications')).data.data,
     refetchInterval: 60_000
   });
+  // Hanya item yang halamannya boleh dibuka role ini — tautan lain akan di-redirect guard route.
+  const items = data?.items.filter((i) => canAccess(i.to, user?.role)) ?? [];
+  const total = items.reduce((s, i) => s + i.count, 0);
 
   return (
     <div ref={boxRef} className="relative">
@@ -170,7 +159,7 @@ function NotifBell() {
         className="relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-[9px] border border-line-2 bg-white hover:bg-panel"
       >
         <span className="inline-block h-4 w-4 rounded-t-[5px] border-[1.5px] border-[#8c8371]" />
-        {!!data?.total && (
+        {!!total && (
           <span className="absolute right-[9px] top-2 h-2 w-2 rounded-full border-[1.5px] border-white bg-danger" />
         )}
       </button>
@@ -179,8 +168,8 @@ function NotifBell() {
           <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[1px] text-muted-3">
             Perlu Tindakan
           </div>
-          {!data?.items.length && <div className="px-3 py-2 text-[12px] text-muted-3">Tidak ada yang menunggu 🎉</div>}
-          {data?.items.map((i) => (
+          {!items.length && <div className="px-3 py-2 text-[12px] text-muted-3">Tidak ada yang menunggu 🎉</div>}
+          {items.map((i) => (
             <button
               key={i.key}
               className="block w-full cursor-pointer px-3 py-2 text-left text-[12.5px] text-ink-strong hover:bg-panel"
@@ -226,7 +215,7 @@ export function AppShell() {
           </div>
         </div>
         <nav className="flex flex-1 flex-col gap-[2px] overflow-y-auto p-3 pt-3.5">
-          {NAV.filter((n) => user && (user.role === 'admin' || n.roles.includes(user.role))).map((n) => (
+          {NAV.filter((n) => hasRole(user?.role, n.roles)).map((n) => (
             <NavLink
               key={n.to}
               to={n.to}

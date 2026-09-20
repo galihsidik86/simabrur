@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,11 +10,11 @@ import { db } from './config/db.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
 import { airlinesRoutes, departuresRoutes, hotelsRoutes, packageCategoriesRoutes, packagesRoutes } from './modules/packages/packages.routes.js';
 import { documentsRoutes, jamaahRoutes, registrationsRoutes } from './modules/jamaah/jamaah.routes.js';
-import { bankAccountsRoutes, invoicesRoutes, paymentsRoutes, receiptsRoutes, receivablesRoutes } from './modules/payments/payments.routes.js';
+import { bankAccountsRoutes, invoicesRoutes, paymentsRoutes, receiptsRoutes, receivablesRoutes, refundsRoutes } from './modules/payments/payments.routes.js';
 import { assignmentHandler, checklistsRoutes, groupStaffRoutes, manifestHandler, opsGroupsRoutes, reportsRoutes, ticketsRoutes, visasRoutes } from './modules/operations/operations.routes.js';
 import {
   accountingSummaryRoutes, accountsRoutes, bankReconciliationsRoutes, costCentersRoutes,
-  journalsRoutes, ledgerRoutes, transactionsRoutes, vendorsRoutes
+  journalsRoutes, ledgerRoutes, transactionsRoutes, vendorBillsRoutes, vendorsRoutes
 } from './modules/accounting/accounting.routes.js';
 import { financeReportsRoutes } from './modules/reports/finance.routes.js';
 import { portalRoutes } from './modules/portal/portal.routes.js';
@@ -25,6 +25,7 @@ import { mabrurRoutes } from './modules/mabrur/mabrur.routes.js';
 import { searchRoutes } from './modules/search/search.routes.js';
 import { departureGalleryRoutes, galleryRoutes } from './modules/gallery/gallery.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
+import { identityIpKey, identityOnlyKey, normalizePhone, normalizeRegNumber } from './utils/rate-limit-keys.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** Frontend build (hasil `npm run build` root) disalin ke backend/public — same-origin. */
@@ -74,6 +75,67 @@ export function createApp() {
     app.use('/v1/auth/login', authLimiter);
     app.use('/v1/portal/login', authLimiter);
     app.use('/v1/portal-agen/login', authLimiter);
+    // QA browser 2026-09-20: `req.ip` MENTAH membuat klien IPv6 bisa memutar alamat
+    // di dalam blok /64 miliknya (2^64 alamat) sehingga lapis identitas+IP praktis
+    // tak berguna baginya; express-rate-limit v8 juga menolak keyGenerator semacam
+    // itu (ERR_ERL_KEY_GEN_IPV6, 4 ValidationError tiap server start). `ipKeyGenerator`
+    // memadatkan IPv6 ke /64 dan membiarkan IPv4 apa adanya.
+    // SR-01: dua lapis per identitas yang diklaim (bukan hanya per IP seperti
+    // authLimiter di atas). Lapis LAMA (satu-satunya, key = identitas SAJA) punya
+    // celah lockout DoS: penyerang yang hanya TAHU no. registrasi/HP korban (data
+    // ini beredar luas — SMS/WA konfirmasi, kartu jamaah) bisa mengirim 5 percobaan
+    // salah dari IP mana pun dan mengunci korban keluar selama 15 menit walau
+    // korban sendiri belum pernah mencoba login — tanpa perlu tahu password/NIK.
+    // Sekarang: lapis UTAMA mengunci kombinasi identitas+IP (ambang rendah, 5),
+    // lapis KEDUA (ambang tinggi, 30) tetap per-identitas-saja sebagai rem brute
+    // force terdistribusi lintas IP. Trade-off: penyerang bisa membuat SATU IP
+    // korban ikut kena limit lapis kedua (30 percobaan gabungan sebelum terkunci)
+    // — diterima karena jauh lebih sulit/mahal dieksploitasi drive-by dibanding
+    // lockout instan 5 percobaan dari IP mana pun.
+    app.use(
+      '/v1/portal/login',
+      rateLimit({
+        windowMs: 15 * 60 * 1000,
+        limit: 5,
+        standardHeaders: true,
+        legacyHeaders: false,
+        keyGenerator: (req) => identityIpKey(normalizeRegNumber((req.body as { regNumber?: unknown })?.regNumber), ipKeyGenerator(req.ip ?? '')),
+        message: { success: false, error: { code: 'RATE_LIMITED', message: 'Terlalu banyak percobaan untuk nomor registrasi ini — coba lagi nanti atau hubungi CS' } }
+      })
+    );
+    app.use(
+      '/v1/portal/login',
+      rateLimit({
+        windowMs: 15 * 60 * 1000,
+        limit: 30,
+        standardHeaders: true,
+        legacyHeaders: false,
+        keyGenerator: (req) => identityOnlyKey(normalizeRegNumber((req.body as { regNumber?: unknown })?.regNumber), ipKeyGenerator(req.ip ?? '')),
+        message: { success: false, error: { code: 'RATE_LIMITED', message: 'Terlalu banyak percobaan untuk nomor registrasi ini — coba lagi nanti atau hubungi CS' } }
+      })
+    );
+    app.use(
+      '/v1/portal-agen/login',
+      rateLimit({
+        windowMs: 15 * 60 * 1000,
+        limit: 5,
+        standardHeaders: true,
+        legacyHeaders: false,
+        keyGenerator: (req) => identityIpKey(normalizePhone((req.body as { phone?: unknown })?.phone), ipKeyGenerator(req.ip ?? '')),
+        message: { success: false, error: { code: 'RATE_LIMITED', message: 'Terlalu banyak percobaan untuk nomor HP ini — coba lagi nanti atau hubungi CS' } }
+      })
+    );
+    app.use(
+      '/v1/portal-agen/login',
+      rateLimit({
+        windowMs: 15 * 60 * 1000,
+        limit: 30,
+        standardHeaders: true,
+        legacyHeaders: false,
+        keyGenerator: (req) => identityOnlyKey(normalizePhone((req.body as { phone?: unknown })?.phone), ipKeyGenerator(req.ip ?? '')),
+        message: { success: false, error: { code: 'RATE_LIMITED', message: 'Terlalu banyak percobaan untuk nomor HP ini — coba lagi nanti atau hubungi CS' } }
+      })
+    );
     app.use(
       '/v1/registrations',
       rateLimit({
@@ -134,6 +196,7 @@ export function createApp() {
   app.use('/v1/invoices', invoicesRoutes);
   app.use('/v1/payments', paymentsRoutes);
   app.use('/v1/receivables', receivablesRoutes);
+  app.use('/v1/refunds', refundsRoutes);
   app.use('/v1/receipts', receiptsRoutes);
   app.use('/v1/bank-accounts', bankAccountsRoutes);
   app.get('/v1/departures/:id/manifest', ...manifestHandler);
@@ -158,6 +221,7 @@ export function createApp() {
   app.use('/v1/mabrur', mabrurRoutes);
   app.use('/v1/search', searchRoutes);
   app.use('/v1/vendors', vendorsRoutes);
+  app.use('/v1/vendor-bills', vendorBillsRoutes);
   app.use('/v1/accounts', accountsRoutes);
   app.use('/v1/cost-centers', costCentersRoutes);
   app.use('/v1/journals', journalsRoutes);

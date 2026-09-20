@@ -3,8 +3,8 @@ import { ok } from '../../utils/http.js';
 import { accountingService } from './accounting.service.js';
 import {
   commissionTxSchema, expenseTxSchema, importStatementSchema, journalsQuery, manualJournalSchema,
-  matchLineSchema, openReconciliationSchema, receiptTxSchema, reconciliationQuery, revenueTxSchema,
-  statementLineSchema, upsertVendorSchema
+  matchLineSchema, openReconciliationSchema, receiptTxSchema, reconciliationQuery, reverseJournalSchema,
+  revenueTxSchema, statementLineSchema, upsertVendorSchema, vendorBillsQuery, voidVendorBillSchema
 } from './accounting.validation.js';
 
 export const accountingController = {
@@ -21,6 +21,21 @@ export const accountingController = {
   async createManualJournal(req: Request, res: Response) {
     const input = manualJournalSchema.parse(req.body);
     ok(res, await accountingService.createManualJournal(req, input), undefined, 201);
+  },
+  async reverseJournal(req: Request, res: Response) {
+    const { reason, date } = reverseJournalSchema.parse(req.body);
+    ok(res, await accountingService.reverseManualJournal(req, String(req.params.id), reason, date), undefined, 201);
+  },
+  async costCenterBalances(req: Request, res: Response) {
+    ok(res, await accountingService.costCenterBalances(String(req.params.id)));
+  },
+  async vendorBills(req: Request, res: Response) {
+    const q = vendorBillsQuery.parse(req.query);
+    ok(res, await accountingService.vendorBills(q));
+  },
+  async voidVendorBill(req: Request, res: Response) {
+    const { reason } = voidVendorBillSchema.parse(req.body);
+    ok(res, await accountingService.voidVendorBill(req, String(req.params.id), reason));
   },
   async ledger(req: Request, res: Response) {
     const from = typeof req.query.from === 'string' ? req.query.from : undefined;

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { IDENTITY_PENDING_PILL, REG_STATUS_FILTERS, regStatusPill, type RegistrationStatus } from '../api/registrations';
 import { fmtDate, fmtShort } from '../utils/format';
 
 interface JamaahRow {
@@ -16,6 +17,7 @@ interface JamaahRow {
   departureDate: string;
   paymentScheme: 'dp' | 'cicil' | 'lunas';
   registrationStatus: string;
+  identityConfirmationRequired: boolean;
   docs: { type: string; status: 'verified' | 'pending' | 'rejected' | 'missing' }[];
   docsComplete: boolean;
   totalAmount: number | null;
@@ -43,22 +45,38 @@ const TABS = [
   { key: 'lunas', label: 'Lunas' }
 ] as const;
 
+const PILL_CLASS = 'rounded-pill px-2.5 py-[3px] text-[10.5px] font-semibold';
+
 export function JamaahPage() {
   const [params] = useSearchParams();
   const initialTab = TABS.some((t) => t.key === params.get('tab')) ? (params.get('tab') as string) : 'semua';
   const [tab, setTab] = useState(initialTab);
   const [q, setQ] = useState('');
+  const [status, setStatus] = useState<'' | RegistrationStatus>('');
+  const [identityPending, setIdentityPending] = useState(false);
+
   const { data, isLoading } = useQuery({
-    queryKey: ['jamaah', tab, q],
-    queryFn: async () => (await api.get('/jamaah', { params: { tab, q: q || undefined, limit: 50 } })).data as {
-      data: JamaahRow[];
-      meta: { total: number };
-    }
+    queryKey: ['jamaah', tab, q, status, identityPending],
+    queryFn: async () =>
+      (await api.get('/jamaah', {
+        params: {
+          tab,
+          q: q || undefined,
+          status: status || undefined,
+          // Kirim HANYA saat aktif: backend memakai z.coerce.boolean(), sehingga
+          // string "false" pun akan terbaca true.
+          identityPending: identityPending ? true : undefined,
+          limit: 50
+        }
+      })).data as {
+        data: JamaahRow[];
+        meta: { total: number };
+      }
   });
 
   return (
     <div>
-      <div className="mb-[18px] flex items-center gap-2">
+      <div className="mb-3 flex items-center gap-2">
         {TABS.map((t) => {
           const on = t.key === tab;
           return (
@@ -92,6 +110,25 @@ export function JamaahPage() {
         </a>
       </div>
 
+      {/* Filter status registrasi & konfirmasi identitas (kontrak GET /v1/jamaah). */}
+      <div className="mb-[18px] flex flex-wrap items-center gap-2">
+        <label className="text-[11.5px] font-semibold text-muted" htmlFor="jamaah-status">Status</label>
+        <select id="jamaah-status" className="fld !w-[200px] !py-1.5 !text-[12px]" value={status}
+          onChange={(e) => setStatus(e.target.value as '' | RegistrationStatus)}>
+          {REG_STATUS_FILTERS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+        </select>
+        <button
+          onClick={() => setIdentityPending(!identityPending)}
+          aria-pressed={identityPending}
+          className="cursor-pointer rounded-pill border px-3 py-[5px] text-[11.5px] font-semibold"
+          style={identityPending
+            ? { color: '#fff', background: 'var(--color-primary)', borderColor: 'var(--color-primary)' }
+            : { color: '#6f6858', background: '#fff', borderColor: '#e6ddca' }}
+        >
+          Menunggu konfirmasi identitas
+        </button>
+      </div>
+
       <div className="overflow-hidden rounded-card border border-line bg-card shadow-card">
         <table className="w-full border-collapse text-[12.5px]">
           <thead>
@@ -110,6 +147,7 @@ export function JamaahPage() {
             )}
             {data?.data.map((j) => {
               const pill = SCHEME_PILL[j.paymentScheme];
+              const reg = regStatusPill(j.registrationStatus);
               return (
                 <tr key={j.registrationId} className="border-t border-line-3 hover:bg-panel">
                   <td className="px-5 py-[13px] font-mono text-[11.5px] text-muted">
@@ -120,6 +158,14 @@ export function JamaahPage() {
                     <div className="text-[10.5px] text-muted-4">
                       {j.gender} · {j.age != null ? `${j.age} th` : '—'} · {j.city}
                     </div>
+                    {j.identityConfirmationRequired && (
+                      <div className="mt-1">
+                        <span className={PILL_CLASS} style={{ color: IDENTITY_PENDING_PILL.color, background: IDENTITY_PENDING_PILL.bg }}
+                          title="Login Portal Jamaah ditahan sampai petugas mengonfirmasi identitas pendaftar.">
+                          {IDENTITY_PENDING_PILL.label}
+                        </span>
+                      </div>
+                    )}
                   </td>
                   <td className="px-3 py-[13px]">
                     {j.packageName}
@@ -158,9 +204,10 @@ export function JamaahPage() {
                     </div>
                   </td>
                   <td className="px-5 py-[13px]">
-                    <span className="rounded-pill px-2.5 py-[3px] text-[10.5px] font-semibold" style={{ color: pill.color, background: pill.bg }}>
-                      {pill.label}
-                    </span>
+                    <div className="flex flex-col items-start gap-1">
+                      <span className={PILL_CLASS} style={{ color: reg.color, background: reg.bg }}>{reg.label}</span>
+                      <span className={PILL_CLASS} style={{ color: pill.color, background: pill.bg }}>{pill.label}</span>
+                    </div>
                   </td>
                 </tr>
               );

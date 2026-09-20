@@ -37,6 +37,12 @@ describe('paspor perlu perpanjangan (< 7 bulan setelah keberangkatan)', () => {
     expect(passportExpiringSoon('2027-09-30', '2026-08-20')).toBe(false); // Siti
     expect(passportExpiringSoon(null, '2026-08-20')).toBe(false);
   });
+
+  // DOM-08: satu fungsi bersama dgn jamaah.rules.ts — clamp akhir bulan, bukan overflow.
+  it('clamp akhir bulan (31 Jul + 7 bln = 28 Feb 2027, konsisten dgn jamaah.rules)', () => {
+    expect(passportExpiringSoon('2027-02-27', '2026-07-31')).toBe(true);
+    expect(passportExpiringSoon('2027-02-28', '2026-07-31')).toBe(false);
+  });
 });
 
 // ===== Integrasi =====
@@ -151,6 +157,14 @@ describe('laporan kepatuhan & kesiapan', () => {
     expect(plusTurki.metrics.visaIssued).toBeGreaterThanOrEqual(4);
     expect(['green', 'gold', 'red']).toContain(plusTurki.level);
   });
+
+  // NEW-FE-03: NAV sidebar (AppShell) memberi keuangan akses /laporan-operasional
+  // termasuk tab "Kesiapan Keberangkatan" — dulu backend menolak (403), tab macet loading.
+  it('keuangan diizinkan mengakses kesiapan (selaras NAV)', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const res = await request(app).get('/v1/reports/readiness').set('Authorization', `Bearer ${keu}`);
+    expect(res.status).toBe(200);
+  });
 });
 
 describe('kelola rombongan (Fase I2 — integrasi Mabrur)', () => {
@@ -238,5 +252,24 @@ describe('GET /v1/reports/export (Excel)', () => {
     const keu = await token('keuangan@safar.co.id');
     const res = await request(app).get('/v1/reports/export').query({ report: 'xxx' }).set('Authorization', `Bearer ${keu}`);
     expect(res.status).toBe(400);
+  });
+
+  // NEW-BE-02: ekspor laporan KEUANGAN hanya utk role yang di NAV sidebar punya menu
+  // Laporan Keuangan (keuangan/pimpinan/admin) — operasional (di NAV cuma Laporan
+  // Operasional) ditolak, walau rute /export sendiri mengizinkannya utk aging/dst.
+  it('operasional ditolak mengekspor laporan keuangan (403); laporan operasional tetap boleh', async () => {
+    const ops = await token('ops@safar.co.id');
+    for (const report of ['income-statement', 'balance-sheet', 'profit']) {
+      const res = await request(app).get('/v1/reports/export').query({ report }).set('Authorization', `Bearer ${ops}`);
+      expect(res.status).toBe(403);
+    }
+    const okReadiness = await request(app).get('/v1/reports/export').query({ report: 'readiness' }).set('Authorization', `Bearer ${ops}`);
+    expect(okReadiness.status).toBe(200);
+  });
+
+  it('keuangan tetap boleh mengekspor laporan keuangan', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const res = await request(app).get('/v1/reports/export').query({ report: 'balance-sheet' }).set('Authorization', `Bearer ${keu}`);
+    expect(res.status).toBe(200);
   });
 });

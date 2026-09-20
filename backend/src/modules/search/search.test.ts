@@ -42,6 +42,15 @@ describe('GET /v1/search (pencarian global header)', () => {
     expect(res.body.data).toEqual({ jamaah: [], packages: [], invoices: [] });
     expect((await request(app).get('/v1/search?q=siti')).status).toBe(401);
   });
+
+  // DOM-07: "_" adalah wildcard ILIKE (cocok 1 karakter apa pun) — tanpa escape,
+  // "%__%" secara efektif cocok hampir semua baris. Tidak ada nama/no. reg berisi "__".
+  it('escape wildcard ILIKE: "__" tidak dicocokkan sebagai pola (tidak mengembalikan semua baris)', async () => {
+    const ops = await token('ops@safar.co.id');
+    const res = await request(app).get('/v1/search?q=__').set('Authorization', `Bearer ${ops}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.jamaah).toEqual([]);
+  });
 });
 
 describe('GET /v1/search/notifications (lonceng header)', () => {

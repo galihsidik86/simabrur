@@ -17,7 +17,7 @@ export interface JournalLineInput {
 export interface JournalInput {
   date: string; // YYYY-MM-DD
   description: string;
-  source: 'payment' | 'expense' | 'revenue' | 'commission' | 'manual' | 'reconciliation';
+  source: 'payment' | 'expense' | 'revenue' | 'commission' | 'manual' | 'reconciliation' | 'refund';
   refType?: string;
   refId?: string;
   costCenterId?: string | null;
@@ -63,6 +63,42 @@ export async function postJournal(trx: Knex, input: JournalInput) {
     const acc = byCode.get(code);
     if (!acc) throw errors.badRequest(`Akun ${code} tidak ada di bagan akun`);
     if (!acc.is_postable) throw errors.badRequest(`Akun ${code} (${acc.name}) adalah akun induk — tidak bisa diposting`);
+  }
+
+  // N-3: 2-1100 Uang Muka Jamaah per cost center TIDAK BOLEH negatif. Ini generik
+  // (berlaku utk SEMUA sumber jurnal, bukan hanya manual) karena postJournal adalah
+  // satu-satunya gerbang posting. Jalur sah yang sudah ada tetap lolos: penerimaan
+  // pembayaran hanya MENGKREDIT (menaikkan) 2-1100, dan pengakuan pendapatan sudah
+  // divalidasi di accounting.service SEBELUM memanggil fungsi ini (nilainya sama,
+  // jadi guard ini hanya menutup celah jurnal manual/lain — bukan mengubah hasil).
+  const liab2100Lines = norm.filter((l) => l.accountCode === '2-1100');
+  if (liab2100Lines.length > 0) {
+    if (!input.costCenterId) {
+      throw errors.badRequest('Baris 2-1100 Uang Muka Jamaah wajib menyertakan cost center keberangkatan');
+    }
+    // R3SEC-01: KUNCI baris cost center SEBELUM membaca saldo. Tanpa lock, dua
+    // transaksi konkuren pada CC yang sama (isolasi default READ COMMITTED) sama-sama
+    // membaca saldo LAMA, sama-sama lolos guard, lalu commit → 2-1100 per CC negatif.
+    // Lock diletakkan di sini (bukan di tiap pemanggil) supaya SEMUA jalur posting ikut
+    // terlindungi: jurnal manual, reverseManualJournal, payRefund, dan pemanggil baru
+    // di masa depan. transactionRevenueRecognition sudah mengunci baris yang sama di
+    // transaksi yang sama — mengunci ulang dalam satu transaksi tidak berefek (no-op).
+    // Konsekuensi: posting yang menyentuh 2-1100 pada SATU cost center berjalan seri;
+    // cost center berbeda tetap paralel.
+    await trx('cost_centers').where({ id: input.costCenterId }).forUpdate().first();
+    const netChange = liab2100Lines.reduce((s, l) => s + (l.credit - l.debit), 0);
+    const [{ liab }] = await trx('journal_lines as jl')
+      .join('accounts as a', 'a.id', 'jl.account_id')
+      .join('journals as j', 'j.id', 'jl.journal_id')
+      .where('a.code', '2-1100')
+      .andWhere('j.cost_center_id', input.costCenterId)
+      .select(trx.raw('COALESCE(SUM(jl.credit - jl.debit), 0) AS liab'));
+    const currentLiab = Number(liab ?? 0);
+    if (currentLiab + netChange < 0) {
+      throw errors.badRequest(
+        `Jurnal ini membuat saldo Uang Muka Jamaah 2-1100 keberangkatan ini negatif (saldo saat ini Rp ${currentLiab.toLocaleString('id-ID')})`
+      );
+    }
   }
 
   const year = input.date.slice(0, 4);
@@ -161,6 +197,62 @@ export function hppRecognitionLines(components: { accountCode: string; amount: n
     ...components.map((c) => ({ accountCode: c.accountCode, debit: c.amount })),
     { accountCode: '1-1400', credit: total }
   ];
+}
+
+/* ===== B (putaran 3) — Alokasi HPP > saldo 1-1400 → hutang vendor per komponen ===== */
+
+export interface HppAllocationInput {
+  accountCode: string;
+  amount: number;
+  vendorId?: string | null;
+  dueDate?: string | null;
+}
+
+export interface HppAllocationResult extends HppAllocationInput {
+  /** Bagian komponen ini yang dilunasi via reklas saldo 1-1400 (Uang Muka Vendor). */
+  allocated: number;
+  /** Kelebihan komponen ini di atas saldo 1-1400 yang tersedia — jadi hutang vendor (2-1300). */
+  excess: number;
+}
+
+/**
+ * Alokasikan saldo 1-1400 (Uang Muka Vendor) yang tersedia ke komponen HPP
+ * PRO-RATA menurut nominal masing-masing komponen (bulat rupiah); sisa pembulatan
+ * ditaruh di komponen TERAKHIR agar Σ allocated persis sama dengan
+ * `min(available, totalHpp)`. Bila total HPP ≤ saldo tersedia, setiap komponen
+ * teralokasi penuh (excess = 0 semua) — identik perilaku lama (tanpa hutang vendor).
+ */
+export function allocateVendorAdvance(components: HppAllocationInput[], available: number): HppAllocationResult[] {
+  if (components.length === 0) return [];
+  const amounts = components.map((c) => Math.round(c.amount));
+  const total = amounts.reduce((s, a) => s + a, 0);
+  const capped = Math.max(0, Math.min(Math.round(available), total));
+
+  const results: HppAllocationResult[] = [];
+  let allocatedSum = 0;
+  for (let i = 0; i < components.length - 1; i++) {
+    const alloc = total > 0 ? Math.round((capped * amounts[i]) / total) : 0;
+    allocatedSum += alloc;
+    results.push({ ...components[i], amount: amounts[i], allocated: alloc, excess: amounts[i] - alloc });
+  }
+  const lastIdx = components.length - 1;
+  // Sisa pembulatan ke komponen terakhir — clamp agar tidak negatif/lebih dari nominalnya
+  // sendiri (kasus tepi bila pembulatan komponen sebelumnya kebetulan melampaui capped).
+  const lastAlloc = Math.max(0, Math.min(amounts[lastIdx], capped - allocatedSum));
+  results.push({ ...components[lastIdx], amount: amounts[lastIdx], allocated: lastAlloc, excess: amounts[lastIdx] - lastAlloc });
+  return results;
+}
+
+/** E, versi teralokasi — Dr 5-xxxx per komponen (nominal PENUH) · Cr 1-1400 (total
+ *  alokasi) · Cr 2-1300 per komponen berkelebihan (hutang vendor). */
+export function hppRecognitionLinesAllocated(components: HppAllocationResult[]): JournalLineInput[] {
+  const totalAllocated = components.reduce((s, c) => s + c.allocated, 0);
+  const lines: JournalLineInput[] = components.map((c) => ({ accountCode: c.accountCode, debit: c.amount }));
+  if (totalAllocated > 0) lines.push({ accountCode: '1-1400', credit: totalAllocated });
+  for (const c of components) {
+    if (c.excess > 0) lines.push({ accountCode: '2-1300', credit: c.excess });
+  }
+  return lines;
 }
 
 /** F — Komisi agen: Dr 6-2000 · Cr 2-1400 Hutang Komisi Agen. */

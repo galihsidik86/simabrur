@@ -27,6 +27,16 @@ export function DocShell({ children }: { children: ReactNode }) {
   );
 }
 
+/** Baris isian bergaris titik-titik (kwitansi mockup) — dipakai kwitansi pembayaran & refund. */
+export function DotLine({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline gap-3 text-[11.5px]">
+      <span className="w-[140px] flex-none text-muted-2">{label}</span>
+      <span className="flex-1 border-b border-dotted border-[#b6ac94] pb-1 font-medium">{children}</span>
+    </div>
+  );
+}
+
 /** Kop surat PT Safar Barokah Wisata (identik di invoice & kwitansi mockup). */
 export function DocHeader({ right }: { right: ReactNode }) {
   return (

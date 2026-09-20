@@ -2,11 +2,24 @@
  * Aturan bisnis pendaftaran (PLAN.md §4.7) — fungsi murni agar mudah diuji.
  */
 
-/** Paspor wajib berlaku ≥ 7 bulan setelah tanggal keberangkatan. */
+const PASSPORT_MONTHS_REQUIRED = 7;
+
+/**
+ * Paspor wajib berlaku ≥ 7 bulan kalender setelah tanggal keberangkatan.
+ * Perhitungan selalu UTC (independen dari TZ proses) dan di-clamp ke hari
+ * terakhir bulan tujuan bila tanggal keberangkatan jatuh di ekor bulan
+ * (mis. 31 Jul + 7 bln → 28 Feb, bukan overflow ke 3 Mar).
+ * Dipakai bersama oleh jamaah.rules.ts dan operations.rules.ts — jangan
+ * duplikasi logika ini di tempat lain.
+ */
 export function passportValidUntilLimit(departureDate: string): Date {
-  const limit = new Date(departureDate);
-  limit.setMonth(limit.getMonth() + 7);
-  return limit;
+  const d = new Date(departureDate + 'T00:00:00Z');
+  const targetMonthIndex = d.getUTCMonth() + PASSPORT_MONTHS_REQUIRED;
+  const year = d.getUTCFullYear() + Math.floor(targetMonthIndex / 12);
+  const month = ((targetMonthIndex % 12) + 12) % 12;
+  const lastDayOfMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const day = Math.min(d.getUTCDate(), lastDayOfMonth);
+  return new Date(Date.UTC(year, month, day));
 }
 
 export function isPassportValid(passportExpiry: string, departureDate: string): boolean {

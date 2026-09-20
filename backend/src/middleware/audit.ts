@@ -8,6 +8,12 @@ export interface AuditEntry {
   entityId?: string;
   oldValues?: unknown;
   newValues?: unknown;
+  /**
+   * Ganti aktor default (`req.user.id`) — dipakai saat aksi terjadi di endpoint TANPA
+   * `requireAuth` (mis. NEW-FE-02 logout: kredensial adalah refresh token itu sendiri,
+   * bukan sesi ber-`req.user`), dan aktor sebenarnya diketahui dari baris token/data lain.
+   */
+  actorId?: string | null;
 }
 
 /**
@@ -21,7 +27,7 @@ export interface AuditEntry {
  */
 export async function audit(req: Request | null, entry: AuditEntry, exec: Knex = db): Promise<void> {
   await exec('audit_logs').insert({
-    user_id: req?.user?.id ?? null,
+    user_id: entry.actorId !== undefined ? entry.actorId : (req?.user?.id ?? null),
     action: entry.action,
     entity: entry.entity,
     entity_id: entry.entityId ?? null,

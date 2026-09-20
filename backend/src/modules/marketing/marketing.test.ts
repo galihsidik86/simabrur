@@ -1,4 +1,4 @@
-import { beforeAll, afterAll, describe, expect, it } from 'vitest';
+import { beforeAll, afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { db } from '../../config/db.js';
 import { createApp } from '../../app.js';
@@ -12,6 +12,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await db.destroy();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 async function token(email: string) {
@@ -147,6 +151,38 @@ describe('POST /v1/commissions/:id/approve', () => {
     const res = await request(app).post(`/v1/commissions/${pending.id}/approve`).set('Authorization', `Bearer ${keu}`);
     expect(res.status).toBe(400);
     expect(res.body.error.message).toContain('belum aktif');
+  });
+});
+
+describe('AK-02: tanggal default approve komisi memakai kalender WIB, bukan UTC', () => {
+  it('approve pada jam 02:00 WIB (= 2026-12-31 19:00 UTC) → jurnal bertanggal 2027-01-01 / JV-2027', async () => {
+    const dep = await db('departures as d')
+      .join('packages as p', 'p.id', 'd.package_id')
+      .where('p.code', 'UMR-REG-AT')
+      .select('d.id')
+      .first();
+    const reg = await request(app).post('/v1/registrations').send({
+      departureId: dep.id, roomType: 'quad', paymentScheme: 'dp', source: 'agent:brkh-07',
+      jamaah: {
+        nik: '9922000000000021', fullName: 'UJI AK-02 KOMISI', gender: 'L', birthPlace: 'Jakarta',
+        birthDate: '1979-03-03', phone: '081200002121', address: 'Jl. Uji AK-02 Komisi',
+        emergencyContactName: 'Keluarga', emergencyContactPhone: '081300002121',
+        passportNo: 'AK02C001', passportExpiry: '2030-12-01'
+      }
+    });
+    expect(reg.status).toBe(201);
+    await db('registrations').where({ id: reg.body.data.registrationId }).update({ status: 'active' });
+    const commission = await db('commissions').where({ registration_id: reg.body.data.registrationId }).first();
+
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2027-01-01T02:00:00+07:00'));
+    const keu = await token('keuangan@safar.co.id'); // login SETELAH jam dipalsukan
+
+    const res = await request(app).post(`/v1/commissions/${commission.id}/approve`).set('Authorization', `Bearer ${keu}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.journalNo).toMatch(/^JV-2027-/);
+    const journal = await db('journals').where({ journal_no: res.body.data.journalNo }).first();
+    expect(journal.date).toBe('2027-01-01');
   });
 });
 

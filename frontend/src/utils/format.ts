@@ -15,6 +15,15 @@ export function fmtDate(iso: string, style: 'short' | 'long' = 'short'): string 
   return d.toLocaleDateString('id-ID', { day: 'numeric', month: style === 'short' ? 'short' : 'long', year: 'numeric' });
 }
 
+/** Tanggal kalender hari ini di WIB (Asia/Jakarta) sebagai `YYYY-MM-DD` — selaras default `todayWib` backend. */
+export function todayWib(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(now);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
 export function age(birthDateIso: string, atIso?: string): number {
   const b = new Date(birthDateIso);
   const a = atIso ? new Date(atIso) : new Date();

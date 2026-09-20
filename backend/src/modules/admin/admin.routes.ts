@@ -6,6 +6,7 @@ import { ok, errors } from '../../utils/http.js';
 import { requireAuth } from '../../middleware/auth.js';
 import { requireRoles } from '../../middleware/rbac.js';
 import { audit } from '../../middleware/audit.js';
+import { escapeLike } from '../../utils/like.js';
 
 /** Administrasi sistem (screen baru — gap PLAN.md §5): users + audit log viewer. */
 
@@ -18,7 +19,11 @@ auditLogsRoutes.get('/', requireAuth, requireRoles(), async (req, res) => {
   const base = db('audit_logs as al')
     .leftJoin('users as u', 'u.id', 'al.user_id')
     .modify((qb) => {
-      if (q) qb.where((w) => w.whereILike('al.action', `%${q}%`).orWhereILike('al.entity', `%${q}%`).orWhereILike('u.name', `%${q}%`));
+      // ILIKE [LOW]: escape wildcard ILIKE (`\`,`%`,`_`) — lihat DOM-07/utils/like.ts.
+      if (q) {
+        const like = `%${escapeLike(q)}%`;
+        qb.where((w) => w.whereILike('al.action', like).orWhereILike('al.entity', like).orWhereILike('u.name', like));
+      }
     });
   const [{ count }] = await base.clone().count({ count: '*' });
   const rows = await base

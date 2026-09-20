@@ -11,18 +11,38 @@ const ROLE_DEFS = [
   { name: 'jamaah', label: 'Jamaah', permissions: { modules: ['portal'] } }
 ];
 
-/** Tabel dihapus global di sini (anak → induk) agar file seed lain bebas urutan FK. */
+/**
+ * Tabel dihapus global di sini (anak → induk) agar file seed lain bebas urutan FK.
+ *
+ * Seluruh FK skema ini `NO ACTION` (satu-satunya CASCADE: gallery_photos→departures),
+ * jadi SETIAP tabel anak wajib disebut dan wajib berada SEBELUM induknya. Urutan yang
+ * salah membuat `npm run seed` gagal di database yang sudah terisi — lihat catatan
+ * pada `agents` di bawah.
+ */
 const WIPE_ORDER = [
-  'mabrur_credentials',
-  'commissions', 'leads', 'agents',
-  'bank_statement_lines', 'journal_lines', 'journals',
-  'vendor_bills', 'vendors', 'cost_centers', 'exchange_rates', 'accounts',
+  // Daun: tidak ada tabel lain yang mereferensi baris-baris ini.
+  'mabrur_credentials', 'agent_notifications', 'gallery_photos',
+  'commissions', 'leads',
+  // Uang & buku besar: refunds/vendor_bills/bank_statement_lines menunjuk ke
+  // journals + cost_centers, jadi harus lebih dulu dihapus daripada keduanya.
+  'refunds', 'bank_statement_lines', 'bank_reconciliations',
+  'journal_lines', 'vendor_bills', 'journals',
+  'vendors', 'cost_centers', 'exchange_rates', 'accounts',
+  // Operasional & tagihan (semuanya menunjuk registrations).
   'checklists', 'group_staff', 'tickets', 'visas', 'manifests',
   'receipts', 'payments', 'payment_schedules', 'invoices',
-  'documents', 'registrations', 'groups', 'jamaah',
+  'documents', 'registrations',
+  // `agents` WAJIB setelah registrations (registrations.agent_id), commissions,
+  // leads, dan agent_notifications yang mereferensinya. Sebelumnya agents dihapus
+  // di awal, sehingga re-seed database terisi selalu gagal dengan
+  // "violates foreign key constraint registrations_agent_id_foreign".
+  'agents',
+  'groups', 'jamaah',
   'departures', 'package_costs', 'packages', 'airlines', 'hotels',
   'bank_accounts', 'numbering_sequences',
   'refresh_tokens', 'audit_logs', 'users', 'roles', 'branches'
+  // `package_categories` sengaja TIDAK dihapus: isinya berasal dari migrasi
+  // 20260721_0008, bukan dari seed. Menghapusnya membuat seed paket gagal.
 ];
 
 export async function seed(knex: Knex): Promise<void> {

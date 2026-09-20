@@ -9,6 +9,8 @@ import bcrypt from 'bcryptjs';
 import { postJournal, commissionLines, reverseJournal } from '../accounting/journal.engine.js';
 import { generateInitialPassword } from '../agent-portal/agent-portal.service.js';
 import { notifyAgent } from '../agent-portal/notify.js';
+import { todayWib } from '../../utils/date.js';
+import { withTransaction } from '../../utils/tx.js';
 
 const MKT = ['marketing', 'pimpinan', 'keuangan'] as const;
 
@@ -170,7 +172,7 @@ commissionsRoutes.get('/', requireAuth, requireRoles(...MKT), async (req, res) =
  * beban komisi tak diakui untuk registrasi yang masih pending/batal.
  */
 commissionsRoutes.post('/:id/approve', requireAuth, requireRoles('keuangan'), async (req, res) => {
-  const result = await db.transaction(async (trx) => {
+  const result = await withTransaction(async (trx) => {
     const c = await trx('commissions as c')
       .join('agents as a', 'a.id', 'c.agent_id')
       .leftJoin('registrations as r', 'r.id', 'c.registration_id')
@@ -187,7 +189,7 @@ commissionsRoutes.post('/:id/approve', requireAuth, requireRoles('keuangan'), as
 
     const cc = c.departure_id ? await trx('cost_centers').where({ departure_id: c.departure_id }).first() : null;
     const journal = await postJournal(trx, {
-      date: new Date().toISOString().slice(0, 10),
+      date: todayWib(),
       description: `Komisi agen — ${c.agent_name} (${Number(c.pct)}% × Rp ${Number(c.base_amount).toLocaleString('id-ID')})`,
       source: 'commission',
       refType: 'commissions',
@@ -218,7 +220,7 @@ commissionsRoutes.post('/:id/approve', requireAuth, requireRoles('keuangan'), as
       refType: 'commissions', refId: c.id
     });
     return { commissionId: c.id, journalNo: journal.journal_no, amount: Number(c.amount) };
-  });
+  }, { retries: 2 });
   await audit(req, { action: 'commissions.approve', entity: 'commissions', entityId: result.commissionId, newValues: result });
   ok(res, result);
 });
@@ -228,12 +230,12 @@ const paySchema = z.object({ bankAccountCode: z.string().regex(/^\d-\d{4}$/).def
 /** Bayar komisi ke agen → Dr 2-1400 Hutang Komisi · Cr Bank/Kas; status 'paid'. */
 commissionsRoutes.post('/:id/pay', requireAuth, requireRoles('keuangan'), async (req, res) => {
   const input = paySchema.parse(req.body ?? {});
-  const result = await db.transaction(async (trx) => {
+  const result = await withTransaction(async (trx) => {
     const c = await trx('commissions').where({ id: String(req.params.id) }).forUpdate().first();
     if (!c) throw errors.notFound('Komisi tidak ditemukan');
     if (c.status !== 'approved') throw errors.conflict('Hanya komisi berstatus approved yang bisa dibayar');
     const journal = await postJournal(trx, {
-      date: input.date ?? new Date().toISOString().slice(0, 10),
+      date: input.date ?? todayWib(),
       description: `Pembayaran komisi agen — ref ${c.id.slice(0, 8)}`,
       source: 'commission',
       refType: 'commissions',
@@ -260,21 +262,21 @@ commissionsRoutes.post('/:id/pay', requireAuth, requireRoles('keuangan'), async 
       refType: 'commissions', refId: c.id
     });
     return { commissionId: c.id, journalNo: journal.journal_no, amount: Number(c.amount) };
-  });
+  }, { retries: 2 });
   await audit(req, { action: 'commissions.pay', entity: 'commissions', entityId: result.commissionId, newValues: result });
   ok(res, result);
 });
 
 /** Batalkan komisi (storno) → balik jurnal beban+hutang. Hanya untuk komisi approved yang belum dibayar. */
 commissionsRoutes.post('/:id/reverse', requireAuth, requireRoles('keuangan'), async (req, res) => {
-  const result = await db.transaction(async (trx) => {
+  const result = await withTransaction(async (trx) => {
     const c = await trx('commissions').where({ id: String(req.params.id) }).forUpdate().first();
     if (!c) throw errors.notFound('Komisi tidak ditemukan');
     if (c.status === 'paid') throw errors.conflict('Komisi sudah dibayar — tak bisa dibatalkan langsung');
     if (c.status !== 'approved' || !c.journal_id) throw errors.conflict('Hanya komisi approved yang bisa dibatalkan');
     if (c.reversed_at) throw errors.conflict('Komisi sudah dibatalkan');
     const journal = await reverseJournal(trx, c.journal_id, {
-      date: new Date().toISOString().slice(0, 10),
+      date: todayWib(),
       description: `Pembatalan komisi agen — storno ref ${c.id.slice(0, 8)}`,
       createdBy: req.user?.id ?? null
     });
@@ -283,7 +285,7 @@ commissionsRoutes.post('/:id/reverse', requireAuth, requireRoles('keuangan'), as
       journal_id: null, approved_by: null, approved_at: null, updated_at: trx.fn.now()
     });
     return { commissionId: c.id, journalNo: journal.journal_no, amount: Number(c.amount) };
-  });
+  }, { retries: 2 });
   await audit(req, { action: 'commissions.reverse', entity: 'commissions', entityId: result.commissionId, newValues: result });
   ok(res, result);
 });
@@ -294,7 +296,7 @@ const attributeSchema = z.object({ registrationId: z.string().uuid(), agentId: z
  *  menggantikan koreksi via akses DB langsung. Hanya bila komisi belum diproses. */
 commissionsRoutes.post('/attribute', requireAuth, requireRoles('marketing', 'keuangan'), async (req, res) => {
   const input = attributeSchema.parse(req.body);
-  const result = await db.transaction(async (trx) => {
+  const result = await withTransaction(async (trx) => {
     const reg = await trx('registrations').where({ id: input.registrationId }).first();
     if (!reg) throw errors.notFound('Registrasi tidak ditemukan');
     const agent = await trx('agents').where({ id: input.agentId }).andWhere('is_active', true).first();
@@ -314,7 +316,7 @@ commissionsRoutes.post('/attribute', requireAuth, requireRoles('marketing', 'keu
       await trx('commissions').insert({ agent_id: agent.id, registration_id: input.registrationId, base_amount: base, pct: agent.commission_pct, amount });
     }
     return { registrationId: input.registrationId, agentId: agent.id, agentName: agent.name, amount };
-  });
+  }, { retries: 2 });
   await audit(req, { action: 'commissions.attribute', entity: 'registrations', entityId: input.registrationId, newValues: result });
   ok(res, result);
 });

@@ -1,7 +1,9 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../store/auth';
+import { hasRole } from './access';
 
-export function RequireAuth({ roles }: { roles?: string[] }) {
+/** Guard login + (opsional) role. `admin` selalu lolos; role terlarang → redirect ke Dashboard. */
+export function RequireAuth({ roles }: { roles?: readonly string[] }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
@@ -11,7 +13,7 @@ export function RequireAuth({ roles }: { roles?: string[] }) {
     );
   }
   if (!user) return <Navigate to="/login" state={{ from: location }} replace />;
-  if (roles && user.role !== 'admin' && !roles.includes(user.role)) {
+  if (roles && !hasRole(user.role, roles)) {
     return <Navigate to="/" replace />;
   }
   return <Outlet />;

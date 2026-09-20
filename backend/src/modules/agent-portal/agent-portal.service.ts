@@ -6,6 +6,7 @@ import { db } from '../../config/db.js';
 import { env } from '../../config/env.js';
 import { errors } from '../../utils/http.js';
 import { audit } from '../../middleware/audit.js';
+import { maskPhone } from '../../utils/mask.js';
 
 export interface AgentClaims {
   kind: 'agent';
@@ -48,7 +49,13 @@ export const agentPortalService = {
       .first();
     // Bandingkan hash walau agen tak ada (cegah user-enumeration via timing)
     const match = agent?.password_hash ? await bcrypt.compare(password, agent.password_hash) : false;
-    if (!agent || !match) throw errors.unauthorized('Nomor HP atau password salah');
+    if (!agent || !match) {
+      // SEC-01: audit percobaan gagal, sejalan dengan portal jamaah.
+      // SR-03: nomor HP di-mask (sisakan 4 digit terakhir) — log audit tidak boleh
+      // menyimpan PII lengkap yang bisa dibaca ulang oleh siapa pun ber-akses log.
+      await audit(req, { action: 'agent_portal.login_failed', entity: 'agents', entityId: agent?.id ?? undefined, newValues: { phone: maskPhone(phone.trim()) } });
+      throw errors.unauthorized('Nomor HP atau password salah');
+    }
 
     await db('agents').where({ id: agent.id }).update({ last_login_at: db.fn.now() });
     const claims: AgentClaims = { kind: 'agent', agentId: agent.id, code: agent.code };

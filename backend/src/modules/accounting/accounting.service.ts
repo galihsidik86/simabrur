@@ -3,13 +3,15 @@ import { randomUUID } from 'node:crypto';
 import { db } from '../../config/db.js';
 import { errors } from '../../utils/http.js';
 import { audit } from '../../middleware/audit.js';
+import { todayWib } from '../../utils/date.js';
 import { CLASS_NAMES } from './coa.js';
+import { withTransaction } from '../../utils/tx.js';
 import {
-  commissionLines, expenseLines, hppRecognitionLines, postJournal,
-  revenueRecognitionLines, type JournalInput, type JournalLineInput
+  allocateVendorAdvance, commissionLines, expenseLines, hppRecognitionLinesAllocated,
+  postJournal, reverseJournal, revenueRecognitionLines, type JournalInput, type JournalLineInput
 } from './journal.engine.js';
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayWib;
 const roundRp = (n: number) => Math.round(n);
 const daysBetween = (a: string | Date, b: string | Date) =>
   Math.round((new Date(a).getTime() - new Date(b).getTime()) / 86_400_000);
@@ -174,7 +176,14 @@ async function journalWithLines(journalIds: string[]) {
   if (journalIds.length === 0) return [];
   const journals = await db('journals as j')
     .leftJoin('cost_centers as cc', 'cc.id', 'j.cost_center_id')
-    .select('j.*', 'cc.code as cost_center_code', 'cc.name as cost_center_name')
+    // C — relasi pembalikan (rekomendasi N-3): sisi jurnal ASAL (kalau ini adalah
+    // pembalik jurnal lain) & sisi jurnal PEMBALIK (kalau jurnal ini sudah dibalik).
+    .leftJoin('journals as rsrc', 'rsrc.id', 'j.reversal_of_journal_id')
+    .leftJoin('journals as rby', 'rby.reversal_of_journal_id', 'j.id')
+    .select(
+      'j.*', 'cc.code as cost_center_code', 'cc.name as cost_center_name',
+      'rsrc.journal_no as reversal_of_journal_no', 'rby.journal_no as reversed_by_journal_no'
+    )
     .whereIn('j.id', journalIds)
     .orderBy('j.date', 'desc')
     .orderBy('j.journal_no', 'desc');
@@ -192,6 +201,8 @@ async function journalWithLines(journalIds: string[]) {
     costCenter: j.cost_center_code ?? null,
     currency: j.currency,
     exchangeRate: Number(j.exchange_rate),
+    reversalOfJournalNo: j.reversal_of_journal_no ?? null,
+    reversedByJournalNo: j.reversed_by_journal_no ?? null,
     lines: lines
       .filter((l) => l.journal_id === j.id)
       .map((l) => ({
@@ -255,11 +266,42 @@ export const accountingService = {
 
   /** Jurnal manual (POST /journals). */
   async createManualJournal(req: Request, input: Omit<JournalInput, 'source' | 'createdBy'>) {
-    return db.transaction(async (trx) => {
+    return withTransaction(async (trx) => {
       const journal = await postJournal(trx, { ...input, source: 'manual', createdBy: req.user?.id ?? null });
       await audit(req, { action: 'journals.manual', entity: 'journals', entityId: journal.id, newValues: input }, trx);
       return journal;
-    });
+    }, { retries: 2 });
+  },
+
+  /**
+   * C (rekomendasi N-3) — balik jurnal MANUAL (role keuangan, alasan wajib).
+   * Memakai `reverseJournal` (journal.engine.ts) sehingga guard `postJournal` (2-1100
+   * per CC tidak boleh negatif, dst.) berlaku penuh pada jurnal pembalik.
+   */
+  async reverseManualJournal(req: Request, journalId: string, reason: string, date?: string | null) {
+    return withTransaction(async (trx) => {
+      const src = await trx('journals').where({ id: journalId }).first();
+      if (!src) throw errors.notFound('Jurnal tidak ditemukan');
+      if (src.source !== 'manual') {
+        throw errors.conflict('Hanya jurnal bersumber manual yang bisa dibalik lewat menu ini');
+      }
+      const already = await trx('journals').where({ reversal_of_journal_id: journalId }).first();
+      if (already) {
+        throw errors.conflict(`Jurnal ini sudah pernah dibalik (${already.journal_no})`);
+      }
+      const reversal = await reverseJournal(trx, journalId, {
+        date: date ?? today(),
+        description: `Pembalikan jurnal ${src.journal_no} — ${reason}`,
+        createdBy: req.user?.id ?? null
+      });
+      await trx('journals').where({ id: reversal.id }).update({ reversal_of_journal_id: journalId });
+      await audit(req, {
+        action: 'journals.reverse', entity: 'journals', entityId: reversal.id,
+        oldValues: { reversalOfJournalId: journalId, reversalOfJournalNo: src.journal_no },
+        newValues: { reason }
+      }, trx);
+      return { ...reversal, reversalOfJournalNo: src.journal_no };
+    }, { retries: 2 });
   },
 
   /** Buku besar per akun: baris + saldo berjalan. */
@@ -297,6 +339,118 @@ export const accountingService = {
       .orderBy('cc.code');
   },
 
+  /** B (putaran 3) — saldo 1-1400 (Uang Muka Vendor) & 2-1100 (Uang Muka Jamaah) per
+   *  cost center, dipakai UI utk menampilkan sisa saldo sebelum mengisi form HPP. */
+  async costCenterBalances(costCenterId: string) {
+    const cc = await db('cost_centers').where({ id: costCenterId }).first();
+    if (!cc) throw errors.notFound('Cost center tidak ditemukan');
+    const debitNormalBalance = async (code: string) => {
+      const [{ bal }] = await db('journal_lines as jl')
+        .join('accounts as a', 'a.id', 'jl.account_id')
+        .join('journals as j', 'j.id', 'jl.journal_id')
+        .where('a.code', code)
+        .andWhere('j.cost_center_id', costCenterId)
+        .select(db.raw('COALESCE(SUM(jl.debit - jl.credit), 0) AS bal'));
+      return Number(bal ?? 0);
+    };
+    const creditNormalBalance = async (code: string) => {
+      const [{ bal }] = await db('journal_lines as jl')
+        .join('accounts as a', 'a.id', 'jl.account_id')
+        .join('journals as j', 'j.id', 'jl.journal_id')
+        .where('a.code', code)
+        .andWhere('j.cost_center_id', costCenterId)
+        .select(db.raw('COALESCE(SUM(jl.credit - jl.debit), 0) AS bal'));
+      return Number(bal ?? 0);
+    };
+    const [vendorAdvance1400, liability2100] = await Promise.all([debitNormalBalance('1-1400'), creditNormalBalance('2-1100')]);
+    return { costCenterId, vendorAdvance1400, liability2100 };
+  },
+
+  /** B (putaran 3) — daftar tagihan vendor (dari alokasi HPP > saldo 1-1400). */
+  async vendorBills(filter: { status?: 'unpaid' | 'paid' | 'void'; costCenterId?: string }) {
+    const rows = await db('vendor_bills as vb')
+      .join('vendors as v', 'v.id', 'vb.vendor_id')
+      .leftJoin('cost_centers as cc', 'cc.id', 'vb.cost_center_id')
+      .select(
+        'vb.id', 'vb.vendor_id', 'v.name as vendor_name', 'vb.cost_center_id', 'cc.code as cost_center_code',
+        'vb.account_code', 'vb.amount', 'vb.paid_amount', 'vb.currency', 'vb.due_date', 'vb.status', 'vb.created_at'
+      )
+      .modify((q) => {
+        if (filter.status) q.where('vb.status', filter.status);
+        if (filter.costCenterId) q.where('vb.cost_center_id', filter.costCenterId);
+      })
+      .orderBy('vb.created_at', 'desc');
+    return rows.map((r: Record<string, unknown>) => ({
+      id: r.id, vendorId: r.vendor_id, vendorName: r.vendor_name,
+      costCenterId: r.cost_center_id, costCenterCode: r.cost_center_code ?? null,
+      accountCode: r.account_code ?? null, amount: Number(r.amount), paidAmount: Number(r.paid_amount),
+      remaining: Number(r.amount) - Number(r.paid_amount), currency: r.currency,
+      dueDate: r.due_date ?? null, status: r.status
+    }));
+  },
+
+  /**
+   * Tugas lanjutan putaran 3 — PATCH /v1/vendor-bills/:id/void (role keuangan).
+   * Tagihan vendor lahir dari kelebihan komponen HPP di atas saldo 1-1400 (Dr 5-xxxx
+   * penuh · Cr 1-1400 alokasi · Cr 2-1300 kelebihan — lihat `transactionRevenueRecognition`).
+   * Membatalkannya berarti membalik SLICE 2-1300/5-xxxx milik tagihan ini SAJA (bukan
+   * seluruh jurnal HPP, yang mungkin berisi komponen lain yang TIDAK dibatalkan):
+   * Dr 2-1300 (nominal tagihan) · Cr akun HPP (`vendor_bills.account_code`).
+   * Prasyarat: `status='unpaid'` DAN `paid_amount=0` (sudah dibayar sebagian/lunas
+   * → 409, tidak bisa dibatalkan); belum pernah di-void (409).
+   */
+  async voidVendorBill(req: Request, id: string, reason: string) {
+    return withTransaction(async (trx) => {
+      const bill = await trx('vendor_bills').where({ id }).forUpdate().first();
+      if (!bill) throw errors.notFound('Tagihan vendor tidak ditemukan');
+      if (bill.status === 'void') throw errors.conflict('Tagihan vendor ini sudah dibatalkan');
+      if (bill.status === 'paid') throw errors.conflict('Tagihan vendor ini sudah lunas — tidak bisa dibatalkan');
+      if (Number(bill.paid_amount) > 0) {
+        throw errors.conflict('Tagihan vendor ini sudah memiliki pelunasan sebagian — tidak bisa dibatalkan');
+      }
+      // Defensif: seluruh vendor_bills yang ada saat ini SELALU dibuat dengan
+      // account_code terisi (lihat transactionRevenueRecognition) — tidak ada baris
+      // lama tanpa account_code di skema ini (fitur & kolom sama-sama baru putaran 3).
+      // Guard ini menutup kemungkinan masa depan (mis. baris dibuat via jalur lain).
+      if (!bill.account_code) {
+        throw errors.badRequest('Tagihan vendor ini tidak memiliki akun HPP tertaut — tidak bisa dibatalkan otomatis');
+      }
+
+      const amount = Number(bill.amount);
+      const journal = await postJournal(trx, {
+        date: today(),
+        description: `Pembatalan tagihan vendor — ${reason}`,
+        source: 'expense',
+        refType: 'vendor_bills',
+        refId: bill.id,
+        costCenterId: bill.cost_center_id,
+        createdBy: req.user?.id ?? null,
+        lines: [
+          { accountCode: '2-1300', debit: amount },
+          { accountCode: bill.account_code, credit: amount }
+        ]
+      });
+
+      await trx('vendor_bills')
+        .where({ id: bill.id })
+        .update({
+          status: 'void',
+          void_reason: reason,
+          voided_by: req.user?.id ?? null,
+          voided_at: trx.fn.now(),
+          reversal_journal_id: journal.id,
+          updated_at: trx.fn.now()
+        });
+
+      await audit(req, {
+        action: 'vendor_bills.void', entity: 'vendor_bills', entityId: bill.id,
+        oldValues: { status: bill.status }, newValues: { status: 'void', reason, journalNo: journal.journal_no }
+      }, trx);
+
+      return { id: bill.id, status: 'void' as const, journalNo: journal.journal_no };
+    }, { retries: 2 });
+  },
+
   /* ===== 4 tipe transaksi (Input Transaksi mockup) ===== */
 
   /** Terima Pembayaran — delegasi ke alur payments (payment verified + kwitansi + jurnal). */
@@ -327,13 +481,46 @@ export const accountingService = {
     vendorId?: string | null; vendorName?: string | null; costCenterId?: string | null;
     sourceBankCode: string; exchangeRate?: number | null; settleDebt?: boolean; exchangeRateAtRecognition?: number | null;
     date?: string | null; description?: string | null;
-    lines: { accountCode: string; amount: number }[];
+    lines: { accountCode: string; amount: number; vendorBillId?: string | null }[];
   }) {
-    return db.transaction(async (trx) => {
+    return withTransaction(async (trx) => {
       const bank = await trx('bank_accounts').where({ account_code: input.sourceBankCode }).first();
       if (!bank) throw errors.badRequest(`Rekening sumber ${input.sourceBankCode} tidak ditemukan`);
       const rate = bank.currency === 'IDR' ? 1 : (input.exchangeRate ?? 0);
       if (bank.currency !== 'IDR' && rate <= 0) throw errors.badRequest('Kurs wajib diisi untuk rekening valas');
+
+      // B (putaran 3) — pelunasan tagihan vendor tercatat (`vendor_bills`, dari alokasi
+      // HPP > saldo 1-1400): baris dengan vendorBillId WAJIB akun 2-1300 & rekening IDR
+      // (vendor_bills selalu dalam rupiah — tidak ada realisasi kurs utk pelunasan ini).
+      // Divalidasi & DIKUNCI di sini, SEBELUM jurnal diposting, agar transaksi gagal
+      // bersih (rollback utuh) bila tagihan tidak valid.
+      const billLines = input.lines.filter((l) => l.vendorBillId);
+      const lockedBills = new Map<string, Record<string, unknown>>();
+      if (billLines.length > 0) {
+        if (bank.currency !== 'IDR') {
+          throw errors.badRequest('Pelunasan tagihan vendor tercatat hanya didukung via rekening IDR');
+        }
+        for (const l of billLines) {
+          if (l.accountCode !== '2-1300') {
+            throw errors.badRequest('vendorBillId hanya berlaku untuk baris akun 2-1300 (Hutang Vendor)');
+          }
+          const bill = await trx('vendor_bills').where({ id: l.vendorBillId as string }).forUpdate().first();
+          if (!bill) throw errors.notFound(`Tagihan vendor ${l.vendorBillId} tidak ditemukan`);
+          if (bill.status === 'paid') throw errors.conflict('Tagihan vendor ini sudah lunas');
+          if (bill.status === 'void') throw errors.conflict('Tagihan vendor ini sudah dibatalkan — tidak bisa dilunasi');
+          if (input.vendorId && bill.vendor_id !== input.vendorId) {
+            throw errors.badRequest('Tagihan vendor tidak sesuai dengan vendorId yang dipilih');
+          }
+          const remaining = Number(bill.amount) - Number(bill.paid_amount);
+          const payNow = Math.round(l.amount);
+          if (payNow > remaining + 0.001) {
+            throw errors.badRequest(
+              `Nominal pelunasan (Rp ${payNow.toLocaleString('id-ID')}) melebihi sisa tagihan vendor (Rp ${remaining.toLocaleString('id-ID')})`
+            );
+          }
+          lockedBills.set(l.vendorBillId as string, bill);
+        }
+      }
 
       const vendorName = input.vendorName ?? (input.vendorId ? (await trx('vendors').where({ id: input.vendorId }).first())?.name : null);
       const lines = expenseLines({
@@ -355,17 +542,27 @@ export const accountingService = {
         createdBy: req.user?.id ?? null,
         lines
       });
+
+      for (const l of billLines) {
+        const bill = lockedBills.get(l.vendorBillId as string)!;
+        const payNow = Math.round(l.amount);
+        const newPaid = Number(bill.paid_amount) + payNow;
+        const status = newPaid >= Number(bill.amount) - 0.001 ? 'paid' : 'unpaid';
+        await trx('vendor_bills').where({ id: bill.id as string }).update({ paid_amount: newPaid, status, updated_at: trx.fn.now() });
+      }
+
       await audit(req, { action: 'transactions.expense', entity: 'journals', entityId: journal.id, newValues: input }, trx);
       return journal;
-    });
+    }, { retries: 2 });
   },
 
   /** Pengakuan Pendapatan (PSAK 72) + opsional pengakuan HPP sekaligus. */
   async transactionRevenueRecognition(req: Request, input: {
     costCenterId: string; revenueAccountCode: '4-1000' | '4-2000' | '4-3000'; amount: number; date?: string | null;
-    hpp?: { accountCode: string; amount: number }[] | null;
+    hpp?: { accountCode: string; amount: number; vendorId?: string | null; dueDate?: string | null }[] | null;
+    dueDate?: string | null;
   }) {
-    return db.transaction(async (trx) => {
+    return withTransaction(async (trx) => {
       const cc = await trx('cost_centers').where({ id: input.costCenterId }).forUpdate().first();
       if (!cc) throw errors.notFound('Cost center tidak ditemukan');
       const date = input.date ?? today();
@@ -394,7 +591,6 @@ export const accountingService = {
           `Pendapatan yang diakui (Rp ${input.amount.toLocaleString('id-ID')}) melebihi saldo Uang Muka Jamaah 2-1100 keberangkatan ini (Rp ${liability2100.toLocaleString('id-ID')}) — dana jamaah belum cukup diterima`
         );
       }
-
       const revenue = await postJournal(trx, {
         date,
         description: `Pengakuan pendapatan — ${cc.name}`,
@@ -407,7 +603,40 @@ export const accountingService = {
       });
 
       let hpp = null;
+      const vendorBills: { id: string; vendorId: string; vendorName: string; accountCode: string; amount: number; dueDate: string | null }[] = [];
       if (input.hpp && input.hpp.length > 0) {
+        // (3) B (putaran 3) — saldo 1-1400 Uang Muka Vendor per cost center dialokasikan
+        // PRO-RATA ke komponen HPP menurut nominal (sisa pembulatan ke komponen terakhir).
+        // Kelebihan per komponen (di atas alokasinya) WAJIB vendorId valid → dicatat sbg
+        // hutang vendor 2-1300 + baris `vendor_bills` unpaid. Bila total HPP ≤ saldo →
+        // perilaku lama persis (semua teralokasi, tanpa hutang).
+        const [{ adv }] = await trx('journal_lines as jl')
+          .join('accounts as a', 'a.id', 'jl.account_id')
+          .join('journals as j', 'j.id', 'jl.journal_id')
+          .where('a.code', '1-1400')
+          .andWhere('j.cost_center_id', cc.id)
+          .select(trx.raw('COALESCE(SUM(jl.debit - jl.credit), 0) AS adv'));
+        const advance1400 = Number(adv ?? 0);
+
+        const allocation = allocateVendorAdvance(input.hpp, advance1400);
+        const overComponents = allocation.filter((c) => c.excess > 0);
+        const vendorMap = new Map<string, { id: string; name: string }>();
+        if (overComponents.length > 0) {
+          const missingVendorId = overComponents.find((c) => !c.vendorId);
+          if (missingVendorId) {
+            throw errors.badRequest(
+              `Komponen HPP ${missingVendorId.accountCode} kelebihan Rp ${missingVendorId.excess.toLocaleString('id-ID')} dari saldo Uang Muka Vendor 1-1400 keberangkatan ini (Rp ${advance1400.toLocaleString('id-ID')}) — wajib pilih vendor untuk sisa kelebihan (dicatat sbg hutang vendor 2-1300)`
+            );
+          }
+          const vendorIds = [...new Set(overComponents.map((c) => c.vendorId as string))];
+          const vendors = await trx('vendors').whereIn('id', vendorIds);
+          for (const v of vendors) vendorMap.set(v.id, { id: v.id, name: v.name });
+          const missingVendorRow = overComponents.find((c) => !vendorMap.has(c.vendorId as string));
+          if (missingVendorRow) {
+            throw errors.badRequest(`Vendor untuk komponen HPP ${missingVendorRow.accountCode} tidak ditemukan`);
+          }
+        }
+
         hpp = await postJournal(trx, {
           date,
           description: `Pengakuan HPP — ${cc.name}`,
@@ -416,12 +645,33 @@ export const accountingService = {
           refId: cc.id,
           costCenterId: cc.id,
           createdBy: req.user?.id ?? null,
-          lines: hppRecognitionLines(input.hpp)
+          lines: hppRecognitionLinesAllocated(allocation)
         });
+
+        for (const c of overComponents) {
+          const vendor = vendorMap.get(c.vendorId as string)!;
+          const dueDate = c.dueDate ?? input.dueDate ?? null;
+          const [bill] = await trx('vendor_bills')
+            .insert({
+              vendor_id: vendor.id,
+              cost_center_id: cc.id,
+              amount: c.excess,
+              currency: 'IDR',
+              status: 'unpaid',
+              due_date: dueDate,
+              journal_id: hpp.id,
+              account_code: c.accountCode
+            })
+            .returning('*');
+          vendorBills.push({
+            id: bill.id, vendorId: vendor.id, vendorName: vendor.name,
+            accountCode: c.accountCode, amount: c.excess, dueDate: bill.due_date ?? null
+          });
+        }
       }
       await audit(req, { action: 'transactions.revenue', entity: 'journals', entityId: revenue.id, newValues: input }, trx);
-      return { revenue, hpp };
-    });
+      return { revenue, hpp, vendorBills };
+    }, { retries: 2 });
   },
 
   /** Pengakuan Komisi agen manual (ad-hoc, tanpa registrasi) — dibukukan sebagai baris
@@ -429,7 +679,7 @@ export const accountingService = {
   async transactionCommission(req: Request, input: {
     agentId: string; costCenterId?: string | null; base: number; pct: number; date?: string | null;
   }) {
-    return db.transaction(async (trx) => {
+    return withTransaction(async (trx) => {
       const agent = await trx('agents').where({ id: input.agentId }).first();
       if (!agent) throw errors.badRequest('Agen tidak ditemukan');
       if (!agent.is_active) throw errors.badRequest('Agen tidak aktif');
@@ -459,7 +709,7 @@ export const accountingService = {
       await trx('journals').where({ id: journal.id }).update({ ref_id: commission.id });
       await audit(req, { action: 'transactions.commission', entity: 'commissions', entityId: commission.id, newValues: { agentId: agent.id, amount } }, trx);
       return { ...journal, commissionId: commission.id };
-    });
+    }, { retries: 2 });
   },
 
   /* ===== Rekonsiliasi bank ===== */
@@ -616,7 +866,7 @@ export const accountingService = {
     if (session?.status === 'completed') throw errors.conflict('Rekonsiliasi terkunci');
     const bank = await db('bank_accounts').where({ id: line.bank_account_id }).first();
 
-    const journal = await db.transaction(async (trx) => {
+    const journal = await withTransaction(async (trx) => {
       const j = await postJournal(trx, {
         date: new Date(line.line_date).toISOString().slice(0, 10),
         description: `Penyesuaian rekonsiliasi — ${line.description}`,
@@ -635,7 +885,7 @@ export const accountingService = {
       await trx('bank_statement_lines').where({ id: statementLineId })
         .update({ matched_journal_line_id: bankLine.id, status: 'matched', updated_at: trx.fn.now() });
       return j;
-    });
+    }, { retries: 2 });
     await audit(req, { action: 'reconciliation.adjust', entity: 'bank_statement_lines', entityId: statementLineId, newValues: { journalNo: journal.journal_no } });
     return recomputeForLine(await db('bank_statement_lines').where({ id: statementLineId }).first());
   },

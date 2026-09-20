@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../api/client';
+import { api, apiErrorMessage } from '../api/client';
 import { BackButton } from '../components/BackButton';
 import { fmtShort, fmtFull, fmtDate, age } from '../utils/format';
 
@@ -43,6 +43,33 @@ const METHODS = [
   { id: 'manual', label: 'Transfer Manual', desc: 'Konfirmasi bukti bayar' }
 ] as const;
 
+/** Sama dengan multer limits.fileSize backend (jamaah.routes.ts). */
+const MAX_DOC_BYTES = 5 * 1024 * 1024;
+
+interface Registered { jamaahId: string; regNumber: string }
+interface FailedDoc { docType: string; message: string }
+
+const docName = (docType: string) => DOCS.find((d) => d.id === docType)?.name ?? docType;
+
+/** Unggah dokumen satu per satu; kegagalan satu file tidak menggagalkan yang lain (FE-04). */
+async function uploadDocuments(jamaahId: string, files: Record<string, File | null>): Promise<{ uploaded: number; failed: FailedDoc[] }> {
+  let uploaded = 0;
+  const failed: FailedDoc[] = [];
+  for (const [docType, file] of Object.entries(files)) {
+    if (!file) continue;
+    const fd = new FormData();
+    fd.append('docType', docType);
+    fd.append('file', file);
+    try {
+      await api.post(`/jamaah/${jamaahId}/documents`, fd);
+      uploaded++;
+    } catch (e: unknown) {
+      failed.push({ docType, message: apiErrorMessage(e, 'Gagal mengunggah') });
+    }
+  }
+  return { uploaded, failed };
+}
+
 const EMPTY_FORM = {
   nama: '', nik: '', hp: '', tmpt: '', tgl: '', gender: 'L' as 'L' | 'P', email: '', alamat: '',
   darurat: '', daruratHp: '', paspor: '', pIssue: '', pExpiry: '', mahram: '', mahramRel: ''
@@ -62,7 +89,9 @@ export function DaftarWizard() {
   const [agree, setAgree] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [done, setDone] = useState<{ regNumber: string; docsUploaded: number } | null>(null);
+  // Hasil POST registrasi disimpan segera: registrasi tidak pernah dikirim ulang (retry → 409).
+  const [registered, setRegistered] = useState<Registered | null>(null);
+  const [done, setDone] = useState<{ regNumber: string; docsUploaded: number; failedDocs: FailedDoc[] } | null>(null);
 
   const { data: pakets } = useQuery({
     queryKey: ['public-packages'],
@@ -101,47 +130,46 @@ export function DaftarWizard() {
   }, [step, pkg, form, passportCheck, mahramWajib, agree]);
 
   async function submit() {
-    if (!pkg?.departure) return;
+    if (!pkg?.departure || busy) return;
     setBusy(true);
     setError('');
-    try {
-      const { data } = await api.post('/registrations', {
-        departureId: pkg.departure.id,
-        roomType: room,
-        paymentScheme: scheme,
-        source: referral.trim() ? `agent:${referral.trim().toUpperCase()}` : 'web',
-        jamaah: {
-          nik: form.nik, fullName: form.nama, gender: form.gender, birthPlace: form.tmpt, birthDate: form.tgl,
-          phone: form.hp, email: form.email || null, address: form.alamat,
-          emergencyContactName: form.darurat, emergencyContactPhone: form.daruratHp,
-          passportNo: form.paspor || null, passportIssuedAt: form.pIssue || null, passportExpiry: form.pExpiry || null,
-          mahramName: form.mahram || null, mahramRelation: form.mahramRel || null
-        }
-      });
-      const jamaahId = data.data.jamaahId as string;
-      let uploaded = 0;
-      for (const [docType, file] of Object.entries(files)) {
-        if (!file) continue;
-        const fd = new FormData();
-        fd.append('docType', docType);
-        fd.append('file', file);
-        await api.post(`/jamaah/${jamaahId}/documents`, fd);
-        uploaded++;
+    let reg = registered;
+    if (!reg) {
+      try {
+        reg = await postRegistration(pkg.departure.id);
+        setRegistered(reg);
+      } catch (e: unknown) {
+        setError(apiErrorMessage(e, 'Terjadi kesalahan, coba lagi'));
+        setBusy(false);
+        return;
       }
-      setDone({ regNumber: data.data.regNumber, docsUploaded: uploaded });
-    } catch (e: unknown) {
-      setError(
-        (e as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ??
-          'Terjadi kesalahan, coba lagi'
-      );
-    } finally {
-      setBusy(false);
     }
+    // Registrasi sudah tersimpan → SuccessScreen SELALU tampil; dokumen gagal diunggah menyusul via Portal.
+    const { uploaded, failed } = await uploadDocuments(reg.jamaahId, files);
+    setDone({ regNumber: reg.regNumber, docsUploaded: uploaded, failedDocs: failed });
+    setBusy(false);
+  }
+
+  async function postRegistration(departureId: string): Promise<Registered> {
+    const { data } = await api.post('/registrations', {
+      departureId,
+      roomType: room,
+      paymentScheme: scheme,
+      source: referral.trim() ? `agent:${referral.trim().toUpperCase()}` : 'web',
+      jamaah: {
+        nik: form.nik, fullName: form.nama, gender: form.gender, birthPlace: form.tmpt, birthDate: form.tgl,
+        phone: form.hp, email: form.email || null, address: form.alamat,
+        emergencyContactName: form.darurat, emergencyContactPhone: form.daruratHp,
+        passportNo: form.paspor || null, passportIssuedAt: form.pIssue || null, passportExpiry: form.pExpiry || null,
+        mahramName: form.mahram || null, mahramRelation: form.mahramRel || null
+      }
+    });
+    return { jamaahId: data.data.jamaahId as string, regNumber: data.data.regNumber as string };
   }
 
   function restart() {
     setStep(1); setPkg(null); setForm(EMPTY_FORM); setFiles({}); setRoom('quad');
-    setScheme('dp'); setMethod('va'); setAgree(false); setDone(null); setError('');
+    setScheme('dp'); setMethod('va'); setAgree(false); setRegistered(null); setDone(null); setError('');
   }
 
   /* ============ Render ============ */
@@ -162,7 +190,7 @@ export function DaftarWizard() {
         </div>
 
         {done ? (
-          <SuccessScreen regNumber={done.regNumber} docsUploaded={done.docsUploaded} scheme={scheme} method={method} dueNow={dueNow} onRestart={restart} />
+          <SuccessScreen regNumber={done.regNumber} docsUploaded={done.docsUploaded} failedDocs={done.failedDocs} scheme={scheme} method={method} dueNow={dueNow} onRestart={restart} />
         ) : (
           <>
             {/* Stepper */}
@@ -369,9 +397,25 @@ function StepDokumen({ form, set, files, setFiles, passportCheck, hasExpiry }: {
   passportCheck: { valid: boolean; minValidUntil: string } | null;
   hasExpiry: boolean;
 }) {
+  const [sizeError, setSizeError] = useState('');
+
+  const pickFile = (docId: string, label: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = e.target.files?.[0];
+    e.target.value = ''; // agar memilih file yang sama lagi tetap memicu onChange
+    if (!picked) return;
+    if (picked.size > MAX_DOC_BYTES) {
+      const mb = (picked.size / (1024 * 1024)).toFixed(1).replace('.', ',');
+      setSizeError(`${label}: file "${picked.name}" berukuran ${mb} MB — melebihi batas 5 MB. Kompres atau pilih file lain.`);
+      return;
+    }
+    setSizeError('');
+    setFiles({ ...files, [docId]: picked });
+  };
+
   return (
     <div>
       <StepTitle title="Unggah Dokumen" sub="JPG/PNG/PDF, maks 5 MB. Dokumen diverifikasi tim operasional setelah pendaftaran." />
+      {sizeError && <div className="mb-3 rounded-[9px] bg-danger-bg px-3.5 py-2.5 text-[12px] font-medium text-danger-deep">{sizeError}</div>}
       <div className="flex flex-col gap-2">
         {DOCS.map((d) => {
           const file = files[d.id];
@@ -398,7 +442,7 @@ function StepDokumen({ form, set, files, setFiles, passportCheck, hasExpiry }: {
                 type="file"
                 accept=".jpg,.jpeg,.png,.pdf"
                 className="hidden"
-                onChange={(e) => setFiles({ ...files, [d.id]: e.target.files?.[0] ?? null })}
+                onChange={pickFile(d.id, d.name)}
               />
             </label>
           );
@@ -607,12 +651,15 @@ function StepKonfirmasi({ pkg, form, room, files, scheme, method, dueNow, agree,
 }
 
 /* ============ Success ============ */
-function SuccessScreen({ regNumber, docsUploaded, scheme, method, dueNow, onRestart }: {
-  regNumber: string; docsUploaded: number; scheme: string; method: string; dueNow: number; onRestart: () => void;
+function SuccessScreen({ regNumber, docsUploaded, failedDocs, scheme, method, dueNow, onRestart }: {
+  regNumber: string; docsUploaded: number; failedDocs: FailedDoc[]; scheme: string; method: string; dueNow: number; onRestart: () => void;
 }) {
+  const remainingDocs = Math.max(0, DOCS.length - docsUploaded);
   const steps = [
     `Bayar ${SCHEMES.find((s) => s.id === scheme)?.label} — ${fmtFull(dueNow)} via ${METHODS.find((m) => m.id === method)?.label}. Instruksi pembayaran dikirim via WhatsApp.`,
-    `Lengkapi dokumen — ${Math.max(0, 6 - docsUploaded)} dokumen lagi dapat diunggah menyusul.`,
+    remainingDocs > 0
+      ? `Lengkapi dokumen — ${docsUploaded} dokumen terunggah, ${remainingDocs} dokumen lagi dapat diunggah menyusul via Portal Jamaah.`
+      : `Semua ${docsUploaded} dokumen terunggah.`,
     'Tim kami memverifikasi data & dokumen Anda. Pantau status di portal jamaah.'
   ];
   return (
@@ -623,6 +670,22 @@ function SuccessScreen({ regNumber, docsUploaded, scheme, method, dueNow, onRest
       <div className="mx-auto mt-3 w-fit rounded-[10px] border border-line-2 bg-panel px-6 py-3 font-mono text-[20px] font-semibold tracking-wide text-ink-strong">
         {regNumber}
       </div>
+      {failedDocs.length > 0 && (
+        <div className="mt-4 rounded-[9px] bg-danger-bg px-3.5 py-2.5 text-left text-[12px] text-danger-deep">
+          <div className="font-semibold">
+            {failedDocs.length} dokumen gagal diunggah — pendaftaran Anda tetap tersimpan.
+          </div>
+          <ul className="mt-1 list-disc pl-4">
+            {failedDocs.map((f) => (
+              <li key={f.docType}>{docName(f.docType)}: {f.message}</li>
+            ))}
+          </ul>
+          <div className="mt-1">
+            Simpan nomor registrasi di atas, lalu unggah menyusul via{' '}
+            <a href="/portal" target="_blank" rel="noopener noreferrer" className="font-semibold underline">Portal Jamaah</a>.
+          </div>
+        </div>
+      )}
       <div className="mt-6 flex flex-col gap-2.5 text-left">
         {steps.map((s, i) => (
           <div key={i} className="flex items-start gap-3 rounded-[10px] border border-line-3 bg-panel p-3">

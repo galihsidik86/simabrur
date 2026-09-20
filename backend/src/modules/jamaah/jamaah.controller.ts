@@ -4,7 +4,10 @@ import { ok, errors } from '../../utils/http.js';
 import { db } from '../../config/db.js';
 import { jamaahService } from './jamaah.service.js';
 import { resolveUploadPath } from './storage.js';
-import { createRegistrationSchema, listJamaahQuery, passportCheckQuery, updateJamaahSchema, verifyDocumentSchema, DOC_TYPES } from './jamaah.validation.js';
+import {
+  cancelRegistrationSchema, createRegistrationSchema, listJamaahQuery, passportCheckQuery,
+  updateJamaahSchema, verifyDocumentSchema, DOC_TYPES
+} from './jamaah.validation.js';
 
 const CONTENT_TYPE: Record<string, string> = {
   '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg'
@@ -65,5 +68,14 @@ export const jamaahController = {
   async verifyDocument(req: Request, res: Response) {
     const input = verifyDocumentSchema.parse(req.body);
     ok(res, await jamaahService.verifyDocument(req, String(req.params.id), input.status, input.note));
+  },
+
+  async confirmIdentity(req: Request, res: Response) {
+    ok(res, await jamaahService.confirmIdentity(req, String(req.params.id)));
+  },
+
+  async cancelRegistration(req: Request, res: Response) {
+    const { reason } = cancelRegistrationSchema.parse(req.body);
+    ok(res, await jamaahService.cancelRegistration(req, String(req.params.id), reason));
   }
 };
