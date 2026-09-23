@@ -3,6 +3,11 @@ import { db } from '../../config/db.js';
 import { errors } from '../../utils/http.js';
 import { audit } from '../../middleware/audit.js';
 import { passportExpiringSoon, readinessLevel, readinessScore } from './operations.rules.js';
+import { withTransaction } from '../../utils/tx.js';
+
+/** DOM-05: daya tampung satu kamar menurut tipenya (enum `room_type` di migrasi 0002). */
+type RoomType = 'quad' | 'triple' | 'double';
+const ROOM_CAPACITY: Record<RoomType, number> = { quad: 4, triple: 3, double: 2 };
 
 const REQUIRED_DOCS = ['KTP', 'KK', 'PPR', 'FTO', 'VKS'];
 const ALL_DOCS = [...REQUIRED_DOCS, 'NKH'];
@@ -164,31 +169,76 @@ export const operationsService = {
 
   /** Tetapkan/lepaskan registrasi ke rombongan + nomor kamar. */
   async assignRegistration(req: Request, registrationId: string, input: { groupId?: string | null; roomNumber?: string | null }) {
-    const reg = await db('registrations').where({ id: registrationId }).first();
-    if (!reg) throw errors.notFound('Registrasi tidak ditemukan');
-    if (input.groupId) {
-      const group = await db('groups').where({ id: input.groupId }).first();
-      if (!group) throw errors.notFound('Rombongan tidak ditemukan');
-      if (group.departure_id !== reg.departure_id) {
-        throw errors.badRequest('Rombongan bukan milik keberangkatan registrasi ini');
+    // DOM-05: penempatan dijalankan dalam transaksi karena kapasitas harus DIHITUNG
+    // lalu DITULIS tanpa ada yang menyelip di antaranya. Dua petugas yang menempatkan
+    // jamaah terakhir secara bersamaan dulu sama-sama lolos (baca–lalu–tulis tanpa
+    // lock), sehingga rombongan atau kamar bisa kelebihan penghuni.
+    return withTransaction(async (trx) => {
+      const reg = await trx('registrations').where({ id: registrationId }).first();
+      if (!reg) throw errors.notFound('Registrasi tidak ditemukan');
+
+      if (input.groupId) {
+        // Kunci baris rombongan SEBELUM menghitung anggotanya — hitungan di bawah baru
+        // bermakna kalau tidak ada transaksi lain yang sedang menambah anggota.
+        const group = await trx('groups').where({ id: input.groupId }).forUpdate().first();
+        if (!group) throw errors.notFound('Rombongan tidak ditemukan');
+        if (group.departure_id !== reg.departure_id) {
+          throw errors.badRequest('Rombongan bukan milik keberangkatan registrasi ini');
+        }
+        // Registrasi yang MEMANG sudah ada di rombongan ini tidak dihitung ulang, supaya
+        // menyimpan ulang penempatan yang sama tidak tiba-tiba ditolak saat pas penuh.
+        if (reg.group_id !== input.groupId) {
+          const row = (await trx('registrations')
+            .where({ group_id: input.groupId })
+            .whereNot('status', 'cancelled')
+            .count({ n: '*' })
+            .first()) as { n: string } | undefined;
+          if (Number(row?.n ?? 0) >= Number(group.capacity)) {
+            throw errors.conflict(
+              `Rombongan "${group.name}" sudah penuh (${group.capacity} jamaah) — pilih rombongan lain atau naikkan kapasitasnya`
+            );
+          }
+        }
       }
-    }
-    const [updated] = await db('registrations')
-      .where({ id: registrationId })
-      .update({
-        ...(input.groupId !== undefined && { group_id: input.groupId }),
-        ...(input.roomNumber !== undefined && { room_number: input.roomNumber }),
-        updated_at: db.fn.now()
-      })
-      .returning('*');
-    await audit(req, {
-      action: 'registrations.assign_group',
-      entity: 'registrations',
-      entityId: registrationId,
-      oldValues: { groupId: reg.group_id, roomNumber: reg.room_number },
-      newValues: input
+
+      if (input.roomNumber) {
+        const kapasitas = ROOM_CAPACITY[reg.room_type as RoomType];
+        // Nomor kamar hanya unik DI DALAM satu keberangkatan, jadi penghuni dicari
+        // dengan batasan departure_id — bukan secara global.
+        const penghuni = await trx('registrations')
+          .where({ departure_id: reg.departure_id, room_number: input.roomNumber })
+          .whereNot('id', registrationId)
+          .whereNot('status', 'cancelled')
+          .select('room_type');
+
+        const bedaTipe = penghuni.find((p) => p.room_type !== reg.room_type);
+        if (bedaTipe) {
+          throw errors.conflict(
+            `Kamar ${input.roomNumber} sudah dihuni jamaah tipe ${bedaTipe.room_type} — tidak bisa dicampur dengan tipe ${reg.room_type}`
+          );
+        }
+        if (kapasitas && penghuni.length >= kapasitas) {
+          throw errors.conflict(`Kamar ${input.roomNumber} sudah penuh (${kapasitas} orang untuk tipe ${reg.room_type})`);
+        }
+      }
+
+      const [updated] = await trx('registrations')
+        .where({ id: registrationId })
+        .update({
+          ...(input.groupId !== undefined && { group_id: input.groupId }),
+          ...(input.roomNumber !== undefined && { room_number: input.roomNumber }),
+          updated_at: trx.fn.now()
+        })
+        .returning('*');
+      await audit(req, {
+        action: 'registrations.assign_group',
+        entity: 'registrations',
+        entityId: registrationId,
+        oldValues: { groupId: reg.group_id, roomNumber: reg.room_number },
+        newValues: input
+      });
+      return updated;
     });
-    return updated;
   },
 
   async checklists(registrationId: string) {

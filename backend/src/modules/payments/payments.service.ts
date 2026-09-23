@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { db } from '../../config/db.js';
 import { errors } from '../../utils/http.js';
 import { audit } from '../../middleware/audit.js';
-import { nextNumber } from '../../utils/numbering.js';
+import { nextNumber, nextSequenceValue } from '../../utils/numbering.js';
 import { terbilang } from '../../utils/terbilang.js';
 import { todayWib } from '../../utils/date.js';
 import { withTransaction } from '../../utils/tx.js';
@@ -44,6 +44,13 @@ export async function issueInvoice(trx: Knex.Transaction, registrationId: string
   const [iy, im] = issueDate.split('-');
   const number = await nextNumber(trx, `INV/${iy}/${im}`, 4, '/');
 
+  // SEC-01: serial VA diambil dari sekuens SENDIRI, bukan diturunkan dari nomor
+  // registrasi. Alasan yang sama seperti nomor invoice di atas, ditambah: nomor
+  // registrasi kini acak & berhuruf sehingga tidak bisa dijadikan digit VA, dan VA
+  // tercetak di invoice — menurunkannya dari nomor registrasi akan membocorkan
+  // kredensial login Portal Jamaah kepada siapa pun yang melihat invoice.
+  const vaSerial = await nextSequenceValue(trx, 'VA-BSI');
+
   const [invoice] = await trx('invoices')
     .insert({
       registration_id: registrationId,
@@ -55,7 +62,7 @@ export async function issueInvoice(trx: Knex.Transaction, registrationId: string
       // menampilkan rincian ini apa adanya walau harga paket direvisi kemudian.
       base_price: Number(reg.base_price),
       room_upcharge: upcharge,
-      va_number: vaNumber(reg.reg_number)
+      va_number: vaNumber(vaSerial)
     })
     .returning('*');
 
@@ -612,7 +619,19 @@ export const paymentsService = {
     return withTransaction(async (trx) => {
       const refund = await trx('refunds').where({ id: refundId }).forUpdate().first();
       if (!refund) throw errors.notFound('Refund tidak ditemukan');
-      if (refund.status === 'paid') throw errors.conflict('Refund ini sudah dibayar');
+      if (refund.status === 'paid') {
+        // R3-01: pemeriksaan idempotency di atas berjalan DI LUAR transaksi, jadi dua
+        // request dengan kunci sama bisa sama-sama lolos dan sama-sama masuk ke sini.
+        // Yang kalah mendapati refund sudah `paid` dan dulu dijawab 409 — padahal itu
+        // percobaan ulang yang SAH (mis. klien kehilangan respons lalu mengirim lagi),
+        // dan justru inilah yang seharusnya dilindungi Idempotency-Key.
+        // Diperiksa ulang DI DALAM lock: kalau kuncinya memang milik baris ini,
+        // kembalikan hasil yang sama seperti request pertama, bukan galat.
+        if (idempotencyKey && refund.idempotency_key === idempotencyKey) {
+          return buildRefundDetail(trx, refund.id);
+        }
+        throw errors.conflict('Refund ini sudah dibayar');
+      }
 
       const paidTotal = Number(refund.paid_total);
       const deduction = Math.round(input.deduction);

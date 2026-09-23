@@ -1,0 +1,15 @@
+{
+  // Pemeriksaan tipe untuk BERKAS TES.
+  //
+  // `tsconfig.json` sengaja mengecualikan `src/**/*.test.ts` agar build produksi tidak
+  // ikut mengompilasinya. Efek sampingnya: kesalahan tipe di berkas tes TIDAK PERNAH
+  // terlihat — impor yang sudah dihapus pun baru ketahuan saat vitest dijalankan.
+  // Konfigurasi ini menutup celah itu; dipanggil lewat `npm run typecheck` di backend.
+  //
+  // `src/db/seeds` tetap dikecualikan: berkas seed memakai impor tanpa ekstensi karena
+  // dijalankan loader knex, sehingga menyalahi aturan NodeNext di sini tanpa alasan.
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "src/db/seeds"]
+}

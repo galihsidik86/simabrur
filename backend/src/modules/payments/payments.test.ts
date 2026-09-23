@@ -4,7 +4,7 @@ import { db } from '../../config/db.js';
 import { createApp } from '../../app.js';
 import { resetTestDb } from '../../test/db-setup.js';
 import { terbilang } from '../../utils/terbilang.js';
-import { buildSchedules, receivableStatus, agingBucket, invoiceNumber, vaNumber } from './payments.rules.js';
+import { buildSchedules, receivableStatus, agingBucket, vaNumber } from './payments.rules.js';
 import { idempotencyConflicts, paymentsService } from './payments.service.js';
 
 const app = createApp();
@@ -80,10 +80,19 @@ describe('status piutang & aging bucket', () => {
   });
 });
 
-describe('penomoran invoice & VA', () => {
-  it('INV menyematkan serial registrasi; VA pola 8801', () => {
-    expect(invoiceNumber('UMR-2026-0418', '2026-06-10')).toBe('INV/2026/06/0418');
-    expect(vaNumber('UMR-2026-0418')).toBe('8801 0418 0000 0418');
+describe('penomoran VA (SEC-01)', () => {
+  it('menyusun 16 digit berprefix 8801 dari serial sekuens sendiri', () => {
+    expect(vaNumber(1)).toBe('8801 0000 0000 0001');
+    expect(vaNumber(123_456)).toBe('8801 0000 0012 3456');
+    expect(vaNumber(999_999_999_999)).toBe('8801 9999 9999 9999');
+  });
+
+  it('tidak memuat jejak nomor registrasi dan selalu berupa angka', () => {
+    // Dulu vaNumber('UMR-2026-0418') → '8801 0418 0000 0418': 4 digit terakhir nomor
+    // registrasi tercetak di invoice. Sekarang serial VA tidak punya hubungan apa pun
+    // dengan nomor registrasi, sehingga VA tidak bisa dipakai menebak kredensial portal.
+    expect(vaNumber(418).replace(/ /g, '')).toMatch(/^8801\d{12}$/);
+    expect(vaNumber(418)).not.toContain('0418 0000');
   });
 });
 
@@ -135,6 +144,26 @@ describe('golden thread Hj. Siti Rohmah (angka mockup)', () => {
     expect(d.paid).toBe(28_700_000);
     expect(d.remaining).toBe(11_200_000);
     expect(d.schedules).toHaveLength(4);
+  });
+
+  it('SEC-03: dokumen invoice & kwitansi tidak lagi terbuka untuk semua staf yang login', async () => {
+    const inv = await db('invoices').where({ number: 'INV/2026/06/0418' }).first();
+    const receipt = await db('receipts').first();
+
+    for (const email of ['marketing@safar.co.id', 'ops@safar.co.id']) {
+      const t = await token(email);
+      const invRes = await request(app).get(`/v1/invoices/${inv.id}/document`).set('Authorization', `Bearer ${t}`);
+      expect(invRes.status).toBe(403);
+      const recRes = await request(app).get(`/v1/receipts/${receipt.id}/document`).set('Authorization', `Bearer ${t}`);
+      expect(recRes.status).toBe(403);
+    }
+
+    // Role modul Pembayaran tetap bisa — pembatasan tidak boleh memutus alur yang sah.
+    for (const email of ['keuangan@safar.co.id', 'pimpinan@safar.co.id']) {
+      const t = await token(email);
+      const invRes = await request(app).get(`/v1/invoices/${inv.id}/document`).set('Authorization', `Bearer ${t}`);
+      expect(invRes.status).toBe(200);
+    }
   });
 
   it('dokumen kwitansi KWT/2026/06/1183: terbilang benar', async () => {

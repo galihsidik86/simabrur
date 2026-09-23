@@ -1,9 +1,10 @@
 import type { Request } from 'express';
+import type { Knex } from 'knex';
 import { z } from 'zod';
 import { db } from '../../config/db.js';
 import { errors } from '../../utils/http.js';
 import { audit } from '../../middleware/audit.js';
-import { nextNumber } from '../../utils/numbering.js';
+import { randomSerial } from '../../utils/numbering.js';
 import { jamaahRepository } from './jamaah.repository.js';
 import { isPassportValid, needsMahram, passportValidUntilLimit, regNumberKey, ageAt } from './jamaah.rules.js';
 import { REQUIRED_DOC_TYPES, type createRegistrationSchema, type updateJamaahSchema } from './jamaah.validation.js';
@@ -19,6 +20,29 @@ type UpdateJamaahInput = z.infer<typeof updateJamaahSchema>;
 /** Kolom DATE Postgres kembali sebagai string 'YYYY-MM-DD' (lihat config/db.ts); helper ini defensif bila tipe berubah. */
 function toISODate(v: unknown): string {
   return (v as { toISOString?: () => string })?.toISOString?.().slice(0, 10) ?? String(v);
+}
+
+/**
+ * SEC-01: nomor registrasi merangkap KREDENSIAL — login Portal Jamaah memakai
+ * nomor registrasi + NIK. Selama nomornya berurutan (UMR-2026-0418 → 0419), siapa pun
+ * yang memegang satu nomor sah bisa menebak nomor jamaah lain dan tinggal mencari
+ * NIK-nya. Nomor kini memakai serial ACAK 8 karakter (32^8 ≈ 1,1 triliun kemungkinan)
+ * sehingga tidak bisa dienumerasi. Prefix UMR/HAJ + tahun sengaja DIPERTAHANKAN karena
+ * dibaca manusia dan dipakai laporan.
+ *
+ * `reg_number` ber-UNIQUE di DB. Tabrakan praktis mustahil, tetapi tetap diperiksa agar
+ * kalaupun terjadi hasilnya percobaan ulang senyap, bukan 500 ke pendaftar.
+ *
+ * Nomor LAMA yang sudah berurutan tidak ikut berubah — lihat
+ * `backend/scripts/renumber-registrations.ts` bila ingin menomori ulang data lama.
+ */
+async function generateRegNumber(trx: Knex.Transaction, key: string): Promise<string> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = `${key}-${randomSerial(8)}`;
+    const taken = await trx('registrations').where({ reg_number: candidate }).first();
+    if (!taken) return candidate;
+  }
+  throw new Error('Gagal membuat nomor registrasi unik setelah 5 percobaan');
 }
 
 export const jamaahService = {
@@ -375,9 +399,19 @@ export const jamaahService = {
         throw errors.badRequest('Jamaah perempuan di bawah 45 tahun wajib mencantumkan mahram/pendamping');
       }
 
+      // QA-03: endpoint /daftar bersifat PUBLIK. Untuk NIK yang SUDAH terdaftar, jalur
+      // publik tidak boleh menulis APA PUN ke profil jamaah lain — termasuk sekadar
+      // "mengisi kolom yang masih kosong". Terbukti di QA browser: email korban yang
+      // tadinya NULL terisi dari input orang asing, tanpa review petugas.
+      // Ini tidak membuang data pendaftar: registrasi lewat jalur ini SELALU ditahan
+      // (identity_confirmation_required di bawah — syaratnya sama persis), jadi
+      // penahanan itulah gerbang review-nya, dan petugas yang melengkapi profil lewat
+      // endpoint staf setelah identitas dikonfirmasi.
+      const isPublicReuse = wasExistingJamaah && !req.user;
+
       // DOM-06: paspor tidak boleh dipakai jamaah lain (NIK berbeda) — hanya relevan
       // utk paspor yang BENAR-BENAR akan ditulis (baru, atau mengisi kolom kosong).
-      const passportToWrite = jamaahRow?.passport_no ? null : j.passportNo;
+      const passportToWrite = jamaahRow?.passport_no || isPublicReuse ? null : j.passportNo;
       if (passportToWrite) {
         const dupPassport = await trx('jamaah')
           .whereRaw('upper(passport_no) = upper(?)', [passportToWrite])
@@ -387,8 +421,14 @@ export const jamaahService = {
       }
 
       if (jamaahRow) {
-        // NEW-BE-01: JANGAN menimpa profil jamaah existing dari endpoint publik —
-        // hanya lengkapi kolom yang masih kosong (mis. paspor belum pernah diisi).
+        // NEW-BE-01: JANGAN menimpa profil jamaah existing — hanya lengkapi kolom yang
+        // masih kosong (mis. paspor belum pernah diisi). QA-03: pelengkapan itu kini
+        // hanya berjalan bila ada PETUGAS yang bertanggung jawab (req.user terisi);
+        // jalur publik sama sekali tidak menyentuh profil jamaah yang sudah ada.
+        //
+        // Syaratnya sengaja diletakkan DI DALAM cabang ini, bukan pada `if` di atas:
+        // cabang `else` di bawah meng-INSERT jamaah baru, jadi melewatkan `if` untuk
+        // jamaah yang sudah ada akan menabrak UNIQUE `jamaah.nik` (23505 → 409).
         const fillIfEmpty: Record<string, unknown> = {};
         const setIfEmpty = (col: string, val: unknown) => {
           if (val !== null && val !== undefined && (jamaahRow![col] === null || jamaahRow![col] === undefined)) {
@@ -401,7 +441,7 @@ export const jamaahService = {
         setIfEmpty('passport_expiry', j.passportExpiry ?? null);
         setIfEmpty('mahram_name', j.mahramName ?? null);
         setIfEmpty('mahram_relation', j.mahramRelation ?? null);
-        if (Object.keys(fillIfEmpty).length) {
+        if (!isPublicReuse && Object.keys(fillIfEmpty).length) {
           [jamaahRow] = await trx('jamaah').where({ id: jamaahRow.id }).update({ ...fillIfEmpty, updated_at: trx.fn.now() }).returning('*');
         }
       } else {
@@ -426,11 +466,11 @@ export const jamaahService = {
           .returning('*');
       }
 
-      const regNumber = await nextNumber(trx, regNumberKey(dep.package_type, departureDate));
+      const regNumber = await generateRegNumber(trx, regNumberKey(dep.package_type, departureDate));
       // NEW-BE-01 (putaran 2): registrasi baru via jalur PUBLIK (tanpa staf) yang reuse
       // NIK sudah terdaftar ditahan dari login Portal Jamaah sampai dikonfirmasi petugas.
       // Registrasi dengan NIK baru, atau dibuat staf/sistem (req.user terisi), tidak ditahan.
-      const identityConfirmationRequired = wasExistingJamaah && !req.user;
+      const identityConfirmationRequired = isPublicReuse;
       const [registration] = await trx('registrations')
         .insert({
           reg_number: regNumber,
@@ -582,6 +622,16 @@ export const jamaahService = {
           }
         }
       }
+    } else if (before.status === 'verified' && (REQUIRED_DOC_TYPES as readonly string[]).includes(doc.doc_type)) {
+      // N-6: kebalikan dari blok di atas. Dokumen WAJIB yang tadinya `verified` lalu
+      // ditolak/dikembalikan ke pending membuat berkas jamaah tidak lengkap lagi —
+      // tetapi registrasinya dulu tetap `active`, sehingga laporan kesiapan dan
+      // manifest memperlakukannya seolah sudah beres. Diturunkan lagi ke
+      // `pending_documents` agar status selalu mencerminkan kelengkapan dokumen.
+      // Hanya menyentuh yang `active`: cancelled/completed tidak boleh dihidupkan lagi.
+      await db('registrations')
+        .where({ jamaah_id: doc.jamaah_id, status: 'active' })
+        .update({ status: 'pending_documents', updated_at: db.fn.now() });
     }
     await audit(req, {
       action: `documents.${status}`,

@@ -1,6 +1,18 @@
 import axios from 'axios';
 
-export const api = axios.create({ baseURL: '/v1' });
+/**
+ * QA-05: TANPA `timeout`, menyimpan data saat koneksi putus membuat browser mengantre
+ * request tanpa batas — tombol tertahan di "Menyimpan…" selamanya dan pengguna tidak
+ * diberi tahu apa pun. Dengan batas waktu, axios melempar `ECONNABORTED` sehingga
+ * halaman bisa menampilkan pesan (lihat `apiErrorMessage`).
+ *
+ * 30 detik: jauh di atas request normal (terlama ±2 dtk), tapi masih terasa sebagai
+ * kegagalan, bukan menggantung. Unggah berkas TIDAK lewat instance ini (memakai `axios`
+ * polos dengan FormData), jadi batas ini tidak memotong unggahan di jaringan lambat.
+ */
+const REQUEST_TIMEOUT_MS = 30_000;
+
+export const api = axios.create({ baseURL: '/v1', timeout: REQUEST_TIMEOUT_MS });
 
 let accessToken: string | null = null;
 export function setAccessToken(token: string | null) {
@@ -14,7 +26,8 @@ api.interceptors.request.use((config) => {
 
 export interface RefreshResult {
   accessToken: string;
-  refreshToken: string;
+  // SEC-07: `refreshToken` sengaja TIDAK ada di sini. Backend tidak lagi mengirimkannya
+  // dalam body — ia hanya hidup sebagai cookie httpOnly yang tak terbaca JavaScript.
   user: import('../store/auth').User;
 }
 
@@ -50,8 +63,20 @@ api.interceptors.response.use(
 
 /** Pesan error dari envelope backend `{success:false,error:{code,message}}`. */
 export function apiErrorMessage(e: unknown, fallback: string): string {
-  const message = (e as { response?: { data?: { error?: { message?: unknown } } } })?.response?.data?.error?.message;
-  return typeof message === 'string' && message ? message : fallback;
+  const err = e as { code?: string; response?: { data?: { error?: { message?: unknown } } } };
+  const message = err?.response?.data?.error?.message;
+  if (typeof message === 'string' && message) return message;
+
+  // QA-05: tanpa `response` berarti request tidak pernah sampai ke server — koneksi
+  // putus atau melewati batas waktu. `fallback` biasanya berbunyi seperti "Gagal
+  // menyimpan pembayaran", yang menyesatkan di sini: tidak ada yang gagal di server,
+  // datanya justru belum terkirim sama sekali.
+  if (!err?.response) {
+    return err?.code === 'ECONNABORTED'
+      ? 'Server tidak merespons dalam 30 detik. Data belum tersimpan — periksa koneksi lalu coba lagi.'
+      : 'Tidak dapat terhubung ke server. Data belum tersimpan — periksa koneksi lalu coba lagi.';
+  }
+  return fallback;
 }
 
 /**
@@ -65,39 +90,53 @@ const LOGOUT_TIMEOUT_MS = 5_000;
 
 export async function logoutSession(): Promise<void> {
   if (refreshing) await refreshing;
-  const refreshToken = localStorage.getItem('safar.refresh');
   try {
-    if (refreshToken) {
-      const headers = accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined;
-      // Batas waktu: server yang menggantung tak boleh membuat tombol "Keluar" macet.
-      await axios.post('/v1/auth/logout', { refreshToken }, { headers, timeout: LOGOUT_TIMEOUT_MS });
-    }
+    const headers = accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined;
+    // SEC-07: tanpa body — cookie httpOnly yang otomatis dikirim browser ADALAH
+    // kredensialnya. Batas waktu: server yang menggantung tak boleh membuat tombol
+    // "Keluar" macet. Backend selalu 200 dan selalu menghapus cookie-nya.
+    await axios.post('/v1/auth/logout', null, { headers, timeout: LOGOUT_TIMEOUT_MS });
   } catch {
-    // Server tak terjangkau / token sudah tak berlaku — sesi lokal tetap diakhiri di bawah.
+    // Server tak terjangkau / sesi sudah berakhir — sesi lokal tetap diakhiri di bawah.
   } finally {
-    localStorage.removeItem('safar.refresh');
     setAccessToken(null);
   }
 }
 
+/** Jeda sebelum percobaan kedua — lihat penjelasan balapan antar-tab di `doRefresh`. */
+const REFRESH_RETRY_DELAY_MS = 200;
+
+async function postRefresh(): Promise<RefreshResult> {
+  // SEC-07: tanpa body. Cookie `safar.refresh` ber-path `/v1/auth` ikut terkirim sendiri.
+  const { data } = await axios.post('/v1/auth/refresh', null, { timeout: REQUEST_TIMEOUT_MS });
+  setAccessToken(data.data.accessToken);
+  return data.data as RefreshResult;
+}
+
 async function doRefresh(): Promise<RefreshResult | null> {
-  const refreshToken = localStorage.getItem('safar.refresh');
-  if (!refreshToken) return null;
+  // Ada sesi berjalan di tab ini? Menentukan apakah kegagalan pertama layak dicoba ulang.
+  const hadSession = accessToken !== null;
   try {
-    const { data } = await axios.post('/v1/auth/refresh', { refreshToken });
-    localStorage.setItem('safar.refresh', data.data.refreshToken);
-    setAccessToken(data.data.accessToken);
-    return data.data as RefreshResult;
+    return await postRefresh();
   } catch {
-    // Compare-and-swap: hanya bersihkan sesi bila token tersimpan masih token
-    // yang kita coba. Bila refresh lain (tab lain / request paralel) sudah
-    // merotasinya, 401 kita adalah replay yang tak berbahaya — jangan hapus
-    // token segar milik sesi yang sah.
-    if (localStorage.getItem('safar.refresh') === refreshToken) {
-      localStorage.removeItem('safar.refresh');
+    if (hadSession) {
+      // Dua tab me-refresh bersamaan mengirim cookie yang SAMA; server mencabut token
+      // lama secara atomik sehingga satu menang dan satu menerima 401. Dulu ini
+      // ditangani compare-and-swap terhadap token di localStorage — dengan cookie
+      // httpOnly token itu tak bisa dibaca JS lagi. Gantinya satu kali coba ulang:
+      // saat itu `Set-Cookie` dari tab pemenang sudah mendarat di cookie jar yang
+      // dipakai bersama, jadi percobaan kedua membawa token yang segar.
+      await new Promise((resolve) => setTimeout(resolve, REFRESH_RETRY_DELAY_MS));
+      try {
+        return await postRefresh();
+      } catch {
+        // Percobaan kedua pun gagal → sesi memang sudah berakhir.
+      }
       setAccessToken(null);
       window.dispatchEvent(new Event('safar:logout'));
     }
+    // Tanpa sesi sebelumnya (mis. memuat halaman login), 401 adalah hal normal —
+    // jangan memicu event logout yang membersihkan cache tanpa sebab.
     return null;
   }
 }

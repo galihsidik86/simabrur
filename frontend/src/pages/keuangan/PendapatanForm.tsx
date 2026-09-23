@@ -1,6 +1,6 @@
 import { fmtFull } from '../../utils/format';
 import {
-  HPP_ACCOUNTS, REVENUE_ACCOUNTS, alignAllocation,
+  HPP_ACCOUNTS, REVENUE_ACCOUNTS, alignAllocation, newRowUid,
   type CostCenterBalances, type HppAllocationRow, type HppComponent, type RevenueAccountCode
 } from './transaksi';
 
@@ -21,7 +21,7 @@ export interface PendapatanState {
   hpp: HppComponent[];
 }
 
-export const emptyHppRow = (): HppComponent => ({ accountCode: '5-2000', amount: 0, vendorId: '', dueDate: '' });
+export const emptyHppRow = (): HppComponent => ({ uid: newRowUid(), accountCode: '5-2000', amount: 0, vendorId: '', dueDate: '' });
 
 interface Props {
   state: PendapatanState;
@@ -95,7 +95,8 @@ export function PendapatanForm({ state, onChange, costCenters, vendors, balances
             const hasExcess = (alloc?.excess ?? 0) > 0;
             const vendorMissing = hasExcess && !row.vendorId;
             return (
-              <div key={i} className="rounded-[9px] border border-line-3 bg-panel p-2.5">
+              // R3TS-04: kunci stabil per baris — baris HPP bisa dihapus di tengah.
+              <div key={row.uid} className="rounded-[9px] border border-line-3 bg-panel p-2.5">
                 <div className="flex gap-2">
                   <select className="fld flex-1" value={row.accountCode} onChange={(e) => patchRow(i, { accountCode: e.target.value })}>
                     {HPP_ACCOUNTS.map(([code, name]) => <option key={code} value={code}>{code} {name}</option>)}

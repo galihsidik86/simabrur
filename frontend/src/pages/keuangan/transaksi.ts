@@ -130,8 +130,24 @@ export interface CostCenterBalances {
   liability2100: number;
 }
 
+/**
+ * R3TS-04: identitas baris yang stabil untuk `key` React.
+ *
+ * Daftar baris HPP dan baris biaya bisa DIHAPUS di tengah. Dengan `key={i}`, menghapus
+ * baris tengah membuat React mengira baris sesudahnya "berubah isi" alih-alih bergeser —
+ * fokus kursor melompat dan isi input bisa tampak pindah baris. `uid` tidak pernah ikut
+ * terkirim ke server: payload dibangun dengan memilih field satu per satu.
+ */
+let rowCounter = 0;
+export function newRowUid(): string {
+  rowCounter += 1;
+  return `row-${rowCounter}`;
+}
+
 /* ===== Komponen HPP & alokasi saldo 1-1400 ===== */
 export interface HppComponent {
+  /** Kunci render saja (lihat `newRowUid`) — bukan bagian kontrak API. */
+  uid: string;
   accountCode: string;
   amount: number;
   /** Wajib HANYA bila komponen ini berkelebihan (excess > 0) — kontrak backend. */

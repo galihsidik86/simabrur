@@ -40,6 +40,17 @@ export const FINANCE_WRITE_ROLES: readonly string[] = ['admin', 'keuangan'];
  */
 export const REFUND_RECEIPT_ROLES: readonly string[] = ['admin', 'keuangan', 'pimpinan', 'operasional', 'marketing'];
 
+/**
+ * SEC-03: role yang boleh membuka dokumen invoice `/dokumen/invoice/:id` dan kwitansi
+ * `/dokumen/kwitansi/:id`. Harus sama persis dengan `requireRoles('keuangan','pimpinan')`
+ * pada `GET /v1/invoices/:id/document` dan `GET /v1/receipts/:id/document`.
+ *
+ * Nilainya sengaja identik dengan role NAV `/pembayaran`: satu-satunya pintu masuk ke
+ * halaman ini adalah tabel di PembayaranPage dan panel lonceng, yang dua-duanya sudah
+ * dipagari `canAccess('/pembayaran')`.
+ */
+export const PAYMENT_DOC_ROLES: readonly string[] = ['admin', 'keuangan', 'pimpinan'];
+
 /** Roles untuk satu entri NAV (dipakai `<RequireAuth roles=…>` di App.tsx). */
 export function rolesFor(path: NavPath): readonly string[] {
   const item = NAV_ITEMS.find((n) => n.to === path);
@@ -55,7 +66,11 @@ export function hasRole(role: string | undefined, roles: readonly string[]): boo
 /**
  * Apakah role boleh membuka `path` (boleh berisi query/sub-path, mis. `/jamaah/123`
  * atau `/jamaah?tab=dokumen`). Dicocokkan ke entri NAV dengan prefix terpanjang;
- * path di luar NAV (mis. `/dokumen/invoice/:id`) hanya butuh login → true.
+ * path di luar NAV secara default hanya butuh login → true.
+ *
+ * Halaman `/dokumen/*` ada di luar NAV, jadi TIDAK dijaga fungsi ini — masing-masing
+ * dipagari eksplisit di App.tsx lewat `PAYMENT_DOC_ROLES` / `REFUND_RECEIPT_ROLES`
+ * agar cocok dengan `requireRoles` di backend (SEC-03).
  */
 export function canAccess(path: string, role: string | undefined): boolean {
   if (!role) return false;

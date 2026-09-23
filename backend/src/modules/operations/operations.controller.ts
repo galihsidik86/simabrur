@@ -1,9 +1,44 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { ok, errors } from '../../utils/http.js';
 import { operationsService } from './operations.service.js';
 import { paymentsService } from '../payments/payments.service.js';
+
+/**
+ * SEC-04: dulu `XLSX.utils.json_to_sheet` dari paket `xlsx` 0.18.5, yang punya advisory
+ * HIGH tanpa versi perbaikan di registry npm. Diganti `exceljs`. Helper ini menjaga
+ * bentuk pemakaian lama (array objek → satu sheet) supaya keenam cabang laporan di
+ * `exportReport` tidak perlu ditulis ulang satu per satu.
+ *
+ * Kunci objek BARIS PERTAMA menentukan kolom — sama seperti perilaku `json_to_sheet`.
+ */
+type SheetRow = Record<string, unknown>;
+
+/**
+ * Sebagian sumber laporan (mis. `paymentsService.aging()`) mengembalikan kolom bertipe
+ * `unknown`. Dulu itu lolos begitu saja karena `json_to_sheet` menerima `any`; di sini
+ * nilainya dinormalkan secara eksplisit supaya tidak ada `[object Object]` menyelinap
+ * ke dalam berkas Excel.
+ */
+function cell(value: unknown): string | number {
+  if (typeof value === 'number' || typeof value === 'string') return value;
+  if (value === null || value === undefined) return '';
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === 'boolean') return value ? 'Ya' : 'Tidak';
+  return String(value);
+}
+
+function appendSheet(wb: ExcelJS.Workbook, name: string, rows: SheetRow[]): void {
+  const ws = wb.addWorksheet(name);
+  if (!rows.length) return; // laporan kosong tetap menghasilkan sheet, bukan error
+  const headers = Object.keys(rows[0]);
+  ws.columns = headers.map((h) => ({ header: h, key: h, width: Math.max(12, h.length + 2) }));
+  ws.getRow(1).font = { bold: true };
+  // Bentuk array: urutan mengikuti `headers`, jadi baris yang kebetulan punya kunci
+  // berbeda (mis. baris TOTAL) tetap jatuh ke kolom yang benar.
+  for (const row of rows) ws.addRow(headers.map((h) => cell(row[h])));
+}
 
 const visaSchema = z.object({
   registrationId: z.string().uuid(),
@@ -86,7 +121,7 @@ export const operationsController = {
     if (FINANCIAL_REPORTS.has(report) && !['keuangan', 'pimpinan', 'admin'].includes(req.user?.role ?? '')) {
       throw errors.forbidden();
     }
-    const wb = XLSX.utils.book_new();
+    const wb = new ExcelJS.Workbook();
 
     if (report === 'aging') {
       const { rows } = await paymentsService.aging();
@@ -95,14 +130,14 @@ export const operationsController = {
         Total: r.total, Terbayar: r.paid, Sisa: r.remaining,
         'Jatuh Tempo': r.nextDueDate ?? '', Umur: r.agingBucket, Status: r.status
       }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Piutang Aging');
+      appendSheet(wb, 'Piutang Aging', data);
     } else if (report === 'compliance') {
       const { perDeparture } = await operationsService.documentCompliance();
       const data = perDeparture.map((d) => ({
         Paket: d.packageName, Keberangkatan: d.departureDate, Jamaah: d.jamaahCount,
         'Kelengkapan %': d.pct, Catatan: d.note
       }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Kepatuhan Dokumen');
+      appendSheet(wb, 'Kepatuhan Dokumen', data);
     } else if (report === 'readiness') {
       const { cards } = await operationsService.readiness();
       const data = cards.map((c) => ({
@@ -111,19 +146,19 @@ export const operationsController = {
         Visa: `${c.metrics.visaIssued}/${c.jamaahCount}`, Tiket: `${c.metrics.ticketIssued}/${c.jamaahCount}`,
         Manifest: c.manifestStatus, Catatan: c.note
       }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Kesiapan');
+      appendSheet(wb, 'Kesiapan', data);
     } else if (report === 'income-statement') {
       const { financeReportsService } = await import('../reports/finance.service.js');
       const { lines } = await financeReportsService.incomeStatement();
       const data = lines.filter((l) => l.kind !== 'head').map((l) => ({ Kode: l.code ?? '', Uraian: l.label, Jumlah: l.amount ?? '' }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Laba Rugi');
+      appendSheet(wb, 'Laba Rugi', data);
     } else if (report === 'balance-sheet') {
       const { financeReportsService } = await import('../reports/finance.service.js');
       const bs = await financeReportsService.balanceSheet();
       const rows = [...bs.assets.lines, ...bs.liabilitiesEquity.lines]
         .filter((l) => l.kind !== 'head')
         .map((l) => ({ Kode: (l as { code?: string }).code ?? '', Uraian: l.label, Jumlah: l.amount ?? '' }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Neraca');
+      appendSheet(wb, 'Neraca', rows);
     } else if (report === 'profit') {
       const { financeReportsService } = await import('../reports/finance.service.js');
       const { packages, total } = await financeReportsService.profitByPackage();
@@ -131,12 +166,12 @@ export const operationsController = {
         ...packages.map((p) => ({ Paket: p.name, Jamaah: p.jamaah, Pendapatan: p.revenue, HPP: p.cogs, 'Laba Kotor': p.grossProfit, 'Margin %': p.margin })),
         { Paket: 'TOTAL', Jamaah: total.jamaah, Pendapatan: total.revenue, HPP: total.cogs, 'Laba Kotor': total.grossProfit, 'Margin %': total.margin }
       ];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Laba per Paket');
+      appendSheet(wb, 'Laba per Paket', data);
     } else {
       throw errors.badRequest('report harus salah satu dari: aging, compliance, readiness, income-statement, balance-sheet, profit');
     }
 
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    const buf = Buffer.from(await wb.xlsx.writeBuffer());
     res
       .setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
       .setHeader('Content-Disposition', `attachment; filename="laporan-${report}.xlsx"`)

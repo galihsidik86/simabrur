@@ -3,6 +3,23 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../store/auth';
 import { BackButton } from '../components/BackButton';
 
+/**
+ * Terima HANYA path internal sebagai tujuan setelah login.
+ *
+ * Nilainya berasal dari `location.state` yang di-set `RequireAuth`, jadi hari ini tidak
+ * bisa dikendalikan penyerang. Validasi ini pertahanan berlapis untuk advisory React
+ * Router GHSA-wrjc-x8rr-h8h6 (open redirect lewat backslash pada `<Link>`/`useNavigate`),
+ * yang perbaikan resminya hanya tersedia di React Router v7 — lompatan mayor yang akan
+ * membatalkan seluruh hasil uji browser. Menolak `//host`, `\\host`, dan URL absolut
+ * membuat jalur itu tertutup tanpa menaikkan versi.
+ */
+function safeReturnPath(value: unknown): string {
+  if (typeof value !== 'string') return '/';
+  const path = value.replace(/\\/g, '/');
+  if (!path.startsWith('/') || path.startsWith('//')) return '/';
+  return path;
+}
+
 export function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -18,7 +35,7 @@ export function Login() {
     setError('');
     try {
       await login(email, password);
-      navigate((location.state as { from?: { pathname: string } })?.from?.pathname ?? '/', { replace: true });
+      navigate(safeReturnPath((location.state as { from?: { pathname?: unknown } })?.from?.pathname), { replace: true });
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ??

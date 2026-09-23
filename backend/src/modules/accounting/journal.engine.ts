@@ -29,6 +29,43 @@ export interface JournalInput {
 
 const round = (n: number) => Math.round(n); // rupiah bulat — hindari selisih floating point
 
+/**
+ * AK-03 — rekonsiliasi bank yang sudah `completed` MENGUNCI periodenya.
+ *
+ * Finalisasi menyatakan "saldo buku akun bank ini per tanggal koran sudah cocok dan
+ * ditandatangani" (snapshot `reconciled_diff`). Tanpa penguncian, jurnal baru bertanggal
+ * MUNDUR ke dalam periode itu diam-diam menggeser saldo buku sesudah fakta, sehingga
+ * pernyataan yang sudah ditandatangani jadi tidak benar dan tidak ada yang tahu.
+ *
+ * Bentuk paling minimal yang aman: tolak posting yang MENYENTUH akun bank terkunci pada
+ * tanggal ≤ statement_date sesi completed-nya. Diletakkan di `postJournal` karena ini
+ * satu-satunya gerbang posting — semua jalur (manual, pembayaran, biaya, penyesuaian,
+ * pembalikan) ikut terlindungi tanpa perubahan di pemanggil.
+ *
+ * Batas yang disadari (sengaja TIDAK diperluas):
+ *  - Penguncian hanya per AKUN BANK, bukan per periode akuntansi menyeluruh. Jurnal
+ *    yang tidak menyentuh akun bank terkunci tetap bisa mundur ke periode itu — untuk
+ *    itu dibutuhkan penutupan periode (period close) yang belum ada di skema ini.
+ *  - Tidak ada jalur "buka kembali" rekonsiliasi; `openReconciliation` memang sudah
+ *    menolak sesi completed (409), jadi kunci ini bersifat tetap. Koreksi dilakukan
+ *    dengan jurnal bertanggal SETELAH statement_date — praktik akuntansi yang lazim.
+ */
+async function assertReconciliationNotLocked(trx: Knex, date: string, accountCodes: string[]) {
+  const locked = await trx('bank_reconciliations as r')
+    .join('bank_accounts as b', 'b.id', 'r.bank_account_id')
+    .select('b.account_code', 'r.period', 'r.statement_date')
+    .where('r.status', 'completed')
+    .whereIn('b.account_code', accountCodes)
+    .andWhere('r.statement_date', '>=', date)
+    .orderBy('r.statement_date', 'desc')
+    .first();
+  if (locked) {
+    throw errors.conflict(
+      `Rekonsiliasi rekening ${locked.account_code} periode ${locked.period} sudah diselesaikan & terkunci — jurnal bertanggal ${date} tidak bisa diposting. Gunakan tanggal setelah ${new Date(locked.statement_date).toISOString().slice(0, 10)}.`
+    );
+  }
+}
+
 export async function postJournal(trx: Knex, input: JournalInput) {
   if (input.lines.length < 2) throw errors.badRequest('Jurnal minimal 2 baris');
 
@@ -100,6 +137,8 @@ export async function postJournal(trx: Knex, input: JournalInput) {
       );
     }
   }
+
+  await assertReconciliationNotLocked(trx, input.date, codes);
 
   const year = input.date.slice(0, 4);
   const journalNo = await nextNumber(trx as Knex.Transaction, `JV-${year}`);

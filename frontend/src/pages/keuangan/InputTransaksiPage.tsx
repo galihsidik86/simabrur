@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../../api/client';
 import { useAuth } from '../../store/auth';
@@ -8,7 +8,7 @@ import { ACC_CLASS_COLOR } from './KeuanganPage';
 import { PendapatanForm, emptyHppRow, type PendapatanState } from './PendapatanForm';
 import { VendorBillsPanel } from './VendorBillsPanel';
 import {
-  BIAYA_ACCOUNTS, VENDOR_BILL_ACCOUNT, accountName, allocateVendorAdvance, filledHpp, isSettleableBill,
+  BIAYA_ACCOUNTS, VENDOR_BILL_ACCOUNT, accountName, allocateVendorAdvance, filledHpp, isSettleableBill, newRowUid,
   revenuePreviewLines, validateExpenseForm, validateRevenueForm,
   type CostCenterBalances, type IssuedVendorBill, type PreviewLine, type VendorBill
 } from './transaksi';
@@ -33,7 +33,9 @@ interface CostCenter { id: string; code: string; name: string }
 interface Vendor { id: string; name: string; type: string }
 interface Receivable { invoiceId: string; regNumber: string; name: string; remaining: number }
 interface DocSchedule { id: string; label: string; amount: number; dueDate: string; status: string }
-interface ExpenseLine { accountCode: string; amount: number; vendorBillId?: string }
+/** `uid`: kunci render stabil (R3TS-04) — baris biaya bisa dihapus di tengah. */
+interface ExpenseLine { uid: string; accountCode: string; amount: number; vendorBillId?: string }
+const newExpenseLine = (accountCode: string, amount = 0): ExpenseLine => ({ uid: newRowUid(), accountCode, amount });
 
 export function InputTransaksiPage() {
   const qc = useQueryClient();
@@ -73,9 +75,9 @@ export function InputTransaksiPage() {
   const [bSettle, setBSettle] = useState(false);
   const [bKursHutang, setBKursHutang] = useState(4100);
   const [bDate, setBDate] = useState(todayWib);
-  const [bLines, setBLines] = useState<ExpenseLine[]>([
-    { accountCode: '5-2000', amount: 45_000 },
-    { accountCode: '5-4000', amount: 12_000 }
+  const [bLines, setBLines] = useState<ExpenseLine[]>(() => [
+    newExpenseLine('5-2000', 45_000),
+    newExpenseLine('5-4000', 12_000)
   ]);
   const bCurrency = banks?.find((b) => b.account_code === bBank)?.currency ?? 'IDR';
   const bRate = bCurrency === 'IDR' ? 1 : bKurs;
@@ -89,6 +91,22 @@ export function InputTransaksiPage() {
   });
   const bills = vendorBills ?? [];
   const settleableBills = bills.filter(isSettleableBill);
+
+  // QA-04: setelah sebuah tagihan LUNAS, ia keluar dari `settleableBills` sehingga
+  // dropdown balik ke "— bukan pelunasan tagihan vendor —". Tetapi `vendorBillId`-nya
+  // masih tertinggal di state baris. Akibatnya bukan cuma teks bantuan basi ("sisa
+  // Rp 0 … boleh dilunasi sebagian") yang ikut tampil: barisnya JUGA masih akan
+  // dikirim sebagai pelunasan tagihan yang sudah lunas lalu ditolak backend.
+  // Dibersihkan di sumbernya begitu daftar tagihan berubah, supaya dropdown, teks
+  // bantuan, dan payload selalu sepakat.
+  useEffect(() => {
+    setBLines((prev) => {
+      const basi = (l: ExpenseLine) => Boolean(l.vendorBillId) && !settleableBills.some((b) => b.id === l.vendorBillId);
+      if (!prev.some(basi)) return prev; // penting: jangan bikin state baru tiap render
+      return prev.map((l) => (basi(l) ? { ...l, vendorBillId: undefined, accountCode: '5-2000' } : l));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendorBills]);
   const canSettleBill = bCurrency === 'IDR' && !bSettle;
 
   // ---- state form Pendapatan ----
@@ -347,7 +365,8 @@ export function InputTransaksiPage() {
                   {bLines.map((l, i) => {
                     const bill = bills.find((b) => b.id === l.vendorBillId);
                     return (
-                      <div key={i} className={l.vendorBillId ? 'rounded-[9px] border border-line-3 bg-panel p-2.5' : ''}>
+                      // R3TS-04: kunci stabil per baris — baris biaya bisa dihapus di tengah.
+                      <div key={l.uid} className={l.vendorBillId ? 'rounded-[9px] border border-line-3 bg-panel p-2.5' : ''}>
                         <div className="flex gap-2">
                           {l.vendorBillId ? (
                             <select className="fld flex-1" value={VENDOR_BILL_ACCOUNT} disabled>
@@ -397,7 +416,7 @@ export function InputTransaksiPage() {
                   })}
                 </div>
                 {!bSettle && (
-                  <button type="button" onClick={() => setBLines([...bLines, { accountCode: '5-3000', amount: 0 }])}
+                  <button type="button" onClick={() => setBLines([...bLines, newExpenseLine('5-3000')])}
                     className="mt-2 cursor-pointer text-[11.5px] font-semibold text-primary hover:underline">+ Tambah baris akun</button>
                 )}
               </div>
@@ -407,7 +426,7 @@ export function InputTransaksiPage() {
                   setError('');
                   setSuccess(`Tagihan vendor ${bill.vendorName} ${fmtFull(bill.amount)} dibatalkan — jurnal balik ${journalNo}.`);
                   // Baris biaya yang menunjuk tagihan ini tidak sah lagi → lepaskan pilihannya.
-                  setBLines((prev) => prev.map((l) => (l.vendorBillId === bill.id ? { accountCode: '5-2000', amount: l.amount } : l)));
+                  setBLines((prev) => prev.map((l) => (l.vendorBillId === bill.id ? { ...l, vendorBillId: undefined, accountCode: '5-2000' } : l)));
                   VOID_AFFECTED_QUERIES.forEach((key) => qc.invalidateQueries({ queryKey: [key] }));
                 }}
               />
