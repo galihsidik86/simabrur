@@ -64,11 +64,13 @@ describe('Portal Agen — isolasi & PII', () => {
     const H = { Authorization: `Bearer ${s.token}` };
 
     const agent = await db('agents').where({ code: 'BRKH-07' }).first();
-    const ownRegs = await db('registrations').where({ agent_id: agent.id }).count({ n: '*' }).first();
+    // `.first()` bertipe `| undefined`; dijadikan angka sekali di sini agar tidak perlu
+    // dibubuhi `!` berulang di bawah (dan agar lolos pemeriksaan tipe berkas tes).
+    const ownRegs = Number((await db('registrations').where({ agent_id: agent.id }).count({ n: '*' }).first())?.n ?? 0);
 
     const jamaah = await request(app).get('/v1/portal-agen/jamaah').set(H);
     expect(jamaah.status).toBe(200);
-    expect(jamaah.body.data.length).toBe(Number(ownRegs.n));
+    expect(jamaah.body.data.length).toBe(ownRegs);
     // referral agen LAIN (AMNH-12 → UMR-2026-0421) TIDAK muncul
     expect(jamaah.body.data.find((r: { regNumber: string }) => r.regNumber === 'UMR-2026-0421')).toBeUndefined();
     // PII sensitif tak bocor
@@ -77,11 +79,11 @@ describe('Portal Agen — isolasi & PII', () => {
     expect(first).toHaveProperty('paymentPct');
 
     const comms = await request(app).get('/v1/portal-agen/commissions').set(H);
-    const ownComms = await db('commissions').where({ agent_id: agent.id }).count({ n: '*' }).first();
-    expect(comms.body.data.length).toBe(Number(ownComms.n));
+    const ownComms = Number((await db('commissions').where({ agent_id: agent.id }).count({ n: '*' }).first())?.n ?? 0);
+    expect(comms.body.data.length).toBe(ownComms);
 
     const summary = await request(app).get('/v1/portal-agen/summary').set(H);
-    expect(summary.body.data.totalReferrals).toBe(Number(ownRegs.n));
+    expect(summary.body.data.totalReferrals).toBe(ownRegs);
   });
 
   it('saling-tolak antar-kind: token agen ditolak di rute staf & portal jamaah; sebaliknya juga', async () => {

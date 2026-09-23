@@ -2,7 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './store/auth';
 import { RequireAuth } from './routes/RequireAuth';
-import { FINANCE_WRITE_ROLES, REFUND_RECEIPT_ROLES, rolesFor } from './routes/access';
+import { FINANCE_WRITE_ROLES, PAYMENT_DOC_ROLES, REFUND_RECEIPT_ROLES, rolesFor } from './routes/access';
 import { AppShell } from './layouts/AppShell';
 import { Login } from './pages/Login';
 import { PaketPage } from './pages/PaketPage';
@@ -44,9 +44,14 @@ export default function App() {
             <Route path="/portal-agen" element={<AgenPortalPage />} />
             <Route path="/kebijakan-privasi" element={<KebijakanPrivasi />} />
             <Route element={<RequireAuth />}>
-              {/* Dokumen A4 printable — di luar AppShell & di luar NAV (cukup login; backend yang membatasi). */}
-              <Route path="/dokumen/invoice/:id" element={<InvoiceDoc />} />
-              <Route path="/dokumen/kwitansi/:id" element={<KwitansiDoc />} />
+              {/* Dokumen A4 printable — di luar AppShell & di luar NAV.
+                  SEC-03: dulu "cukup login", sehingga marketing/operasional bisa membuka
+                  invoice & kwitansi siapa pun. Kini dipagari role yang sama dengan
+                  `requireRoles('keuangan','pimpinan')` di backend. */}
+              <Route element={<RequireAuth roles={PAYMENT_DOC_ROLES} />}>
+                <Route path="/dokumen/invoice/:id" element={<InvoiceDoc />} />
+                <Route path="/dokumen/kwitansi/:id" element={<KwitansiDoc />} />
+              </Route>
               {/* Kwitansi refund dibatasi role, sama dengan GET /v1/refunds/:id/receipt. */}
               <Route element={<RequireAuth roles={REFUND_RECEIPT_ROLES} />}>
                 <Route path="/dokumen/refund/:id" element={<KwitansiRefundDoc />} />

@@ -79,15 +79,22 @@ export function agingBucket(nextDueDate: string | null, today: string): 'belum' 
   return 'd90';
 }
 
-/** Nomor invoice INV/YYYY/MM/NNNN — NNNN mengikuti serial nomor registrasi (mockup). */
-export function invoiceNumber(regNumber: string, issueDate: string): string {
-  const serial = regNumber.slice(-4);
-  const [y, m] = issueDate.split('-');
-  return `INV/${y}/${m}/${serial}`;
-}
+// `invoiceNumber()` DIHAPUS (SEC-01). Fungsi itu menyusun nomor invoice dari 4 digit
+// terakhir nomor registrasi; ia sudah tidak dipakai produksi (payments.service.ts
+// memakai sekuens atomik `nextNumber`) dan hanya hidup lewat tesnya sendiri. Dibiarkan
+// ada, ia mengundang orang menyambungkannya kembali dan menghidupkan ulang kaitan
+// nomor-registrasi → nomor-dokumen yang justru sedang diputus.
 
-/** VA BSI menyematkan serial registrasi: 8801 0418 0000 0418 (mockup). */
-export function vaNumber(regNumber: string): string {
-  const serial = regNumber.slice(-4);
-  return `8801 ${serial} 0000 ${serial}`;
+/**
+ * VA BSI (mockup) — 16 digit: prefix 8801 + serial 12 digit.
+ *
+ * SEC-01: dulu `8801 <4 digit akhir regNumber> 0000 <sama>`. Kaitan itu berbahaya dua
+ * arah — nomor registrasi bisa dibaca dari VA yang tercetak di invoice, dan sebaliknya.
+ * Karena nomor registrasi kini ACAK dan berhuruf, menurunkan VA darinya juga akan
+ * menghasilkan VA tak valid. Serial VA sekarang berasal dari sekuens sendiri yang tidak
+ * punya hubungan apa pun dengan nomor registrasi.
+ */
+export function vaNumber(serial: number): string {
+  const digits = String(serial).padStart(12, '0');
+  return `8801 ${digits.slice(0, 4)} ${digits.slice(4, 8)} ${digits.slice(8, 12)}`;
 }

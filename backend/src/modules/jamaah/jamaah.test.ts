@@ -88,16 +88,88 @@ describe('POST /v1/registrations (wizard publik)', () => {
     plusTurkiDepId = dep.id;
   });
 
-  it('mendaftarkan jamaah baru: nomor UMR-2026-05xx, kuota bertambah, harga sesuai kamar', async () => {
+  // SEC-01: alfabet Crockford base32 — 0-9 dan A-Z TANPA I, L, O, U.
+  const REG_NUMBER_RE = /^UMR-2026-[0-9A-HJKMNP-TV-Z]{8}$/;
+
+  it('mendaftarkan jamaah baru: nomor UMR-2026-xxxxxxxx, kuota bertambah, harga sesuai kamar', async () => {
     const before = await db('departures').where({ id: plusTurkiDepId }).first();
     const res = await request(app)
       .post('/v1/registrations')
       .send({ departureId: plusTurkiDepId, roomType: 'triple', paymentScheme: 'cicil', jamaah: jamaahPayload('9900000000000001') });
     expect(res.status).toBe(201);
-    expect(res.body.data.regNumber).toMatch(/^UMR-2026-05\d{2}$/);
+    expect(res.body.data.regNumber).toMatch(REG_NUMBER_RE);
     expect(res.body.data.totalPrice).toBe(39_900_000 + 3_500_000);
     const after = await db('departures').where({ id: plusTurkiDepId }).first();
     expect(after.seats_taken).toBe(before.seats_taken + 1);
+  });
+
+  // NIK 99000000000000{01..21} sudah dipakai kasus uji lain di file ini, dan kuota
+  // UMR-PLUS-TR tinggal 6 kursi (seed: quota 40 / taken 34) sehingga dipakai berebut.
+  // Dua tes di bawah karena itu memakai NIK seri 31+ dan keberangkatan yang longgar.
+  const depIdByCode = async (code: string) => {
+    const d = await db('departures as d')
+      .join('packages as p', 'p.id', 'd.package_id')
+      .where('p.code', code)
+      .select('d.id')
+      .first();
+    return d.id as string;
+  };
+
+  it('SEC-01: nomor registrasi acak — bukan lagi serial 4 digit yang bisa ditebak', async () => {
+    const depId = await depIdByCode('UMR-PLUS-AQ');
+    const daftar = (nik: string) =>
+      request(app)
+        .post('/v1/registrations')
+        .send({ departureId: depId, roomType: 'quad', paymentScheme: 'dp', jamaah: jamaahPayload(nik) });
+
+    const a = await daftar('9900000000000031');
+    const b = await daftar('9900000000000032');
+    expect([a.status, b.status]).toEqual([201, 201]);
+
+    const pola = /^UMR-2026-[0-9A-HJKMNP-TV-Z]{8}$/;
+    expect(a.body.data.regNumber).toMatch(pola);
+    expect(b.body.data.regNumber).toMatch(pola);
+    expect(b.body.data.regNumber).not.toBe(a.body.data.regNumber);
+
+    // Inti SEC-01: skema lama selalu menghasilkan serial 4 digit berurutan (0500 → 0501),
+    // sehingga satu nomor sah langsung membocorkan nomor jamaah lain. Serial sekarang
+    // 8 karakter dari ruang 32^8 dan tidak berbentuk angka berurutan.
+    const serial = (n: string) => n.slice('UMR-2026-'.length);
+    expect(serial(a.body.data.regNumber)).not.toMatch(/^\d{4}$/);
+    expect(serial(b.body.data.regNumber)).not.toMatch(/^\d{4}$/);
+  });
+
+  it('QA-03: jalur PUBLIK tidak mengisi kolom profil yang masih kosong milik jamaah yang sudah ada', async () => {
+    const nik = '9900000000000033';
+    const depPertama = await depIdByCode('UMR-PLUS-AQ');
+    const pertama = await request(app)
+      .post('/v1/registrations')
+      .send({ departureId: depPertama, roomType: 'quad', paymentScheme: 'dp', jamaah: jamaahPayload(nik) });
+    expect(pertama.status).toBe(201);
+
+    const sebelum = await db('jamaah').where({ nik }).first();
+    expect(sebelum.email).toBeNull();
+
+    // Orang lain menembakkan NIK korban + email miliknya sendiri, tanpa token petugas.
+    const depKedua = await depIdByCode('UMR-REG-AT');
+    const kedua = await request(app)
+      .post('/v1/registrations')
+      .send({
+        departureId: depKedua,
+        roomType: 'quad',
+        paymentScheme: 'dp',
+        jamaah: jamaahPayload(nik, { email: 'penyusup@example.com', fullName: 'NAMA PENYUSUP' })
+      });
+    expect(kedua.status).toBe(201);
+
+    const sesudah = await db('jamaah').where({ nik }).first();
+    expect(sesudah.email).toBeNull(); // kolom kosong TIDAK ikut terisi — inti QA-03
+    expect(sesudah.full_name).toBe(sebelum.full_name); // profil tetap tidak tertimpa (NEW-BE-01)
+
+    // Data pendaftar tidak dibuang diam-diam: registrasi ditahan sampai petugas
+    // mengonfirmasi identitas, dan petugas itulah yang melengkapi profil.
+    const reg = await db('registrations').where({ reg_number: kedua.body.data.regNumber }).first();
+    expect(reg.identity_confirmation_required).toBe(true);
   });
 
   it('menolak paspor < 7 bulan setelah keberangkatan', async () => {
@@ -301,6 +373,27 @@ describe('dokumen: unggah & verifikasi', () => {
     }
     const reg = await db('registrations').where({ jamaah_id: jamaahRow.id }).first();
     expect(reg.status).toBe('active');
+  });
+
+  it('N-6: dokumen WAJIB yang ditolak kembali menurunkan registrasi aktif ke pending_documents', async () => {
+    const jamaahRow = await db('jamaah').where({ nik: '9900000000000001' }).first();
+    const ops = await token('ops@safar.co.id');
+
+    // Prasyarat: tes sebelumnya membuat registrasi ini `active` dgn 5 dokumen wajib verified.
+    const sebelum = await db('registrations').where({ jamaah_id: jamaahRow.id }).first();
+    expect(sebelum.status).toBe('active');
+
+    // Satu dokumen WAJIB ditarik kembali — berkasnya jadi tidak lengkap lagi.
+    const ktp = await db('documents').where({ jamaah_id: jamaahRow.id, doc_type: 'KTP' }).first();
+    const tolak = await request(app)
+      .patch(`/v1/documents/${ktp.id}/verify`)
+      .set('Authorization', `Bearer ${ops}`)
+      .send({ status: 'rejected', note: 'Scan buram, mohon unggah ulang' });
+    expect(tolak.status).toBe(200);
+
+    // Dulu status tetap `active`, sehingga laporan kesiapan & manifest menganggapnya beres.
+    const sesudah = await db('registrations').where({ jamaah_id: jamaahRow.id }).first();
+    expect(sesudah.status).toBe('pending_documents');
   });
 });
 

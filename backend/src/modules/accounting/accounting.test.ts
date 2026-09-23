@@ -615,6 +615,67 @@ describe('PATCH /v1/vendor-bills/:id/void (tugas lanjutan putaran 3)', () => {
   });
 });
 
+describe('R3SEC-02: cost center pelunasan tagihan vendor wajib cocok dengan tagihannya', () => {
+  // Tagihan disisipkan LANGSUNG ke DB (bukan lewat revenue-recognition) karena tiap
+  // cost center seed hanya boleh mengakui pendapatan SEKALI — lihat catatan di akhir
+  // describe "B (putaran 3)". Yang diuji di sini murni guard pelunasan, bukan alur HPP.
+  async function seedUnpaidBill(costCenterCode: string, amount: number) {
+    const cc = await db('cost_centers').where({ code: costCenterCode }).first();
+    const vendor = await db('vendors').where({ name: 'Grand Al Massa Hotel' }).first();
+    const [bill] = await db('vendor_bills')
+      .insert({
+        vendor_id: vendor.id, cost_center_id: cc.id, amount, currency: 'IDR',
+        status: 'unpaid', account_code: '5-2000'
+      })
+      .returning('*');
+    return { cc, vendor, bill };
+  }
+
+  const journalCount = async () =>
+    Number((await db('journals').count<{ n: string }[]>('id as n').first())!.n);
+
+  it('costCenterId input ≠ cost center tagihan → 400, tanpa jurnal & paid_amount tidak berubah', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const { vendor, bill } = await seedUnpaidBill('CC-UMR-PLUS-AQ', 5_000_000);
+    const lain = await db('cost_centers').where({ code: 'CC-UMR-REG-9' }).first();
+    const before = await journalCount();
+
+    const res = await request(app).post('/v1/transactions/expense').set('Authorization', `Bearer ${keu}`).send({
+      vendorId: vendor.id, costCenterId: lain.id, sourceBankCode: '1-1200',
+      lines: [{ accountCode: '2-1300', amount: 1_000_000, vendorBillId: bill.id }]
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/cost center/i);
+    expect(await journalCount()).toBe(before); // rollback utuh — tidak ada jurnal nyasar
+    const after = await db('vendor_bills').where({ id: bill.id }).first();
+    expect(Number(after.paid_amount)).toBe(0);
+  });
+
+  it('costCenterId input = cost center tagihan → 201 (jalur sah tidak diblokir)', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const { cc, vendor, bill } = await seedUnpaidBill('CC-UMR-PLUS-AQ', 3_000_000);
+    const res = await request(app).post('/v1/transactions/expense').set('Authorization', `Bearer ${keu}`).send({
+      vendorId: vendor.id, costCenterId: cc.id, sourceBankCode: '1-1200',
+      lines: [{ accountCode: '2-1300', amount: 3_000_000, vendorBillId: bill.id }]
+    });
+    expect(res.status).toBe(201);
+    const after = await db('vendor_bills').where({ id: bill.id }).first();
+    expect(Number(after.paid_amount)).toBe(3_000_000);
+    expect(after.status).toBe('paid');
+  });
+
+  it('tanpa costCenterId tetap diterima — tidak ada keberangkatan salah yang dituju', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const { vendor, bill } = await seedUnpaidBill('CC-UMR-PLUS-AQ', 2_000_000);
+    const res = await request(app).post('/v1/transactions/expense').set('Authorization', `Bearer ${keu}`).send({
+      vendorId: vendor.id, sourceBankCode: '1-1200',
+      lines: [{ accountCode: '2-1300', amount: 2_000_000, vendorBillId: bill.id }]
+    });
+    expect(res.status).toBe(201);
+    expect(Number((await db('vendor_bills').where({ id: bill.id }).first()).paid_amount)).toBe(2_000_000);
+  });
+});
+
 describe('POST /v1/journals/:id/reverse (C, rekomendasi N-3)', () => {
   it('balik jurnal manual → jurnal pembalik balance, saldo akun kembali, relasi reversalOfJournalNo/reversedByJournalNo tampil di GET /journals', async () => {
     const keu = await token('keuangan@safar.co.id');
@@ -881,6 +942,44 @@ describe('rekonsiliasi bank — sesi, pencocokan, penyesuaian, finalisasi', () =
     const res = await request(app).post('/v1/bank-reconciliations').set('Authorization', `Bearer ${mkt}`)
       .send({ bankAccountCode: '1-1200', period: '2026-08', statementDate: '2026-08-31', closingBalance: 0 });
     expect(res.status).toBe(403);
+  });
+});
+
+describe('AK-03: rekonsiliasi completed mengunci posting ke periode terkunci', () => {
+  const journalCount = async () =>
+    Number((await db('journals').count<{ n: string }[]>('id as n').first())!.n);
+
+  // Prasyarat: describe rekonsiliasi di atas sudah memfinalisasi 1-1200 periode 2026-06
+  // (statement_date 2026-06-30). Rekening lain hanya punya sesi draft.
+  it('jurnal menyentuh rekening terkunci bertanggal ≤ statement_date → 409, tidak tersimpan', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const before = await journalCount();
+    const res = await request(app).post('/v1/journals').set('Authorization', `Bearer ${keu}`).send({
+      date: '2026-06-15', description: 'Backdate ke periode rekonsiliasi yang sudah terkunci',
+      lines: [{ accountCode: '6-5000', debit: 250_000 }, { accountCode: '1-1200', credit: 250_000 }]
+    });
+    expect(res.status).toBe(409);
+    expect(res.body.error.message).toMatch(/rekonsiliasi/i);
+    expect(await journalCount()).toBe(before);
+  });
+
+  it('tanggal SETELAH statement_date tetap boleh — periode berjalan tidak ikut terkunci', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    const res = await request(app).post('/v1/journals').set('Authorization', `Bearer ${keu}`).send({
+      date: '2026-07-02', description: 'Posting periode berjalan setelah rekonsiliasi Juni',
+      lines: [{ accountCode: '6-5000', debit: 250_000 }, { accountCode: '1-1200', credit: 250_000 }]
+    });
+    expect(res.status).toBe(201);
+  });
+
+  it('rekening yang sesinya masih draft tidak ikut terkunci', async () => {
+    const keu = await token('keuangan@safar.co.id');
+    // 1-1100 (kas) hanya punya sesi draft 2026-07 → backdate Juni masih sah.
+    const res = await request(app).post('/v1/journals').set('Authorization', `Bearer ${keu}`).send({
+      date: '2026-06-15', description: 'Backdate ke rekening yang belum difinalisasi',
+      lines: [{ accountCode: '6-5000', debit: 50_000 }, { accountCode: '1-1100', credit: 50_000 }]
+    });
+    expect(res.status).toBe(201);
   });
 });
 

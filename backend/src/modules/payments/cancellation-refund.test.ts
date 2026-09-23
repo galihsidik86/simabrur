@@ -338,6 +338,35 @@ describe('POST /v1/refunds/:id/pay', () => {
     expect(again.status).toBe(409);
   });
 
+  it('R3-01: dua request BERSAMAAN dgn Idempotency-Key sama → dua-duanya 200 & satu jurnal (bukan 409 palsu)', async () => {
+    const admin = await token('admin@safar.co.id');
+    const ops = await token('ops@safar.co.id');
+    const keu = await token('keuangan@safar.co.id');
+    const { refund } = await setupCancelledWithRefund(admin, keu, ops, 'UJI-REFUND-R301', 7_000_000);
+
+    const key = `refund-balapan-${refund.id}`;
+    const kirim = () =>
+      request(app)
+        .post(`/v1/refunds/${refund.id}/pay`)
+        .set('Authorization', `Bearer ${keu}`)
+        .set('Idempotency-Key', key)
+        .send({ deduction: 0, bankAccountCode: '1-1200' });
+
+    // Pemeriksaan Idempotency-Key berjalan DI LUAR transaksi, jadi dua request yang
+    // datang bersamaan sama-sama lolos. Sebelum perbaikan, yang kalah lock mendapati
+    // refund sudah `paid` lalu dijawab 409 — padahal justru percobaan ulang seperti
+    // inilah yang seharusnya dilindungi Idempotency-Key.
+    const [a, b] = await Promise.all([kirim(), kirim()]);
+
+    expect([a.status, b.status], `a=${JSON.stringify(a.body)} b=${JSON.stringify(b.body)}`).toEqual([200, 200]);
+    expect(a.body.data.status).toBe('paid');
+    expect(b.body.data.journalNumber).toBe(a.body.data.journalNumber);
+
+    // Yang terpenting: tidak ada pembayaran ganda — hanya satu jurnal refund terbentuk.
+    const jurnal = await db('journals').where({ source: 'refund', ref_id: refund.id }).count({ n: '*' }).first();
+    expect(Number(jurnal?.n)).toBe(1);
+  });
+
   it('deduction 1.000.000 → Cr 4-9000 sebesar potongan, refundAmount = paidTotal − deduction', async () => {
     const admin = await token('admin@safar.co.id');
     const ops = await token('ops@safar.co.id');

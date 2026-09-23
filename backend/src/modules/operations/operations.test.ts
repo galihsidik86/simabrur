@@ -195,6 +195,14 @@ describe('kelola rombongan (Fase I2 — integrasi Mabrur)', () => {
     expect(assign.status).toBe(200);
     expect(assign.body.data.group_id).toBe(group.body.data.id);
 
+    // DOM-05: menyimpan ULANG penempatan yang sama tidak boleh ditolak, walau rombongan
+    // sudah pas penuh — anggota yang memang sudah di dalamnya tidak dihitung dua kali.
+    const ulang = await request(app)
+      .patch(`/v1/registrations/${reg.id}/assignment`)
+      .set('Authorization', `Bearer ${ops}`)
+      .send({ groupId: group.body.data.id, roomNumber: '101' });
+    expect(ulang.status).toBe(200);
+
     // Staf dgn nomor HP
     const staff = await request(app).post('/v1/group-staff').set('Authorization', `Bearer ${ops}`)
       .send({ groupId: group.body.data.id, staffName: 'Ust. Uji', role: 'muthawwif', phone: '081211110000' });
@@ -233,6 +241,61 @@ describe('kelola rombongan (Fase I2 — integrasi Mabrur)', () => {
 
     const mkt = await token('marketing@safar.co.id');
     expect((await request(app).post('/v1/groups').set('Authorization', `Bearer ${mkt}`).send({})).status).toBe(403);
+  });
+
+  it('DOM-05: kapasitas rombongan & kamar divalidasi (409), bukan diterima diam-diam', async () => {
+    const ops = await token('ops@safar.co.id');
+    const dep = await db('departures as d')
+      .join('packages as p', 'p.id', 'd.package_id')
+      .where('p.code', 'UMR-REG-9')
+      .select('d.id')
+      .first();
+
+    // Rombongan berkapasitas 1 → anggota kedua harus ditolak.
+    const grup = await request(app).post('/v1/groups').set('Authorization', `Bearer ${ops}`)
+      .send({ departureId: dep.id, name: 'Grup Kapasitas 1', capacity: 1 });
+    expect(grup.status).toBe(201);
+
+    const regs = await db('registrations').where({ departure_id: dep.id }).whereNot('status', 'cancelled').limit(3);
+    expect(regs.length).toBeGreaterThanOrEqual(2);
+
+    const pertama = await request(app)
+      .patch(`/v1/registrations/${regs[0].id}/assignment`)
+      .set('Authorization', `Bearer ${ops}`)
+      .send({ groupId: grup.body.data.id });
+    expect(pertama.status).toBe(200);
+
+    const kedua = await request(app)
+      .patch(`/v1/registrations/${regs[1].id}/assignment`)
+      .set('Authorization', `Bearer ${ops}`)
+      .send({ groupId: grup.body.data.id });
+    expect(kedua.status).toBe(409);
+    expect(kedua.body.error.message).toContain('sudah penuh');
+    // Dan penolakannya benar-benar tidak menulis apa pun.
+    const setelah = await db('registrations').where({ id: regs[1].id }).first();
+    expect(setelah.group_id).not.toBe(grup.body.data.id);
+
+    // Kapasitas KAMAR: tipe double hanya muat 2 orang.
+    const kamar = 'DOM05-01';
+    const doubles = await db('registrations')
+      .where({ departure_id: dep.id, room_type: 'double' })
+      .whereNot('status', 'cancelled')
+      .limit(3);
+    if (doubles.length >= 3) {
+      for (const r of doubles.slice(0, 2)) {
+        const res = await request(app)
+          .patch(`/v1/registrations/${r.id}/assignment`)
+          .set('Authorization', `Bearer ${ops}`)
+          .send({ roomNumber: kamar });
+        expect(res.status).toBe(200);
+      }
+      const ketiga = await request(app)
+        .patch(`/v1/registrations/${doubles[2].id}/assignment`)
+        .set('Authorization', `Bearer ${ops}`)
+        .send({ roomNumber: kamar });
+      expect(ketiga.status).toBe(409);
+      expect(ketiga.body.error.message).toContain('penuh');
+    }
   });
 });
 

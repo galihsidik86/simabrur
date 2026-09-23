@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import fs from 'node:fs';
@@ -55,6 +56,9 @@ export function createApp() {
   // cross-origin (origin:false), bukan wildcard '*' yang memantulkan semua origin.
   app.use(cors(env.corsOrigin ? { origin: env.corsOrigin.split(','), credentials: false } : { origin: false }));
   app.use(express.json({ limit: '2mb' }));
+  // SEC-07: refresh token kini cookie httpOnly, jadi request perlu diurai cookie-nya.
+  // Express tidak menyertakan parser cookie bawaan.
+  app.use(cookieParser());
 
   // Respons API tidak boleh di-cache proxy/hosting (dynamic cache shared hosting
   // pernah menyajikan respons GET ber-otentikasi yang basi lintas token)

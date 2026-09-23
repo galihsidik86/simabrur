@@ -5,7 +5,11 @@ import { paymentsController } from './payments.controller.js';
 
 export const invoicesRoutes = Router();
 invoicesRoutes.post('/', requireAuth, requireRoles('keuangan'), paymentsController.createInvoice);
-invoicesRoutes.get('/:id/document', requireAuth, paymentsController.invoiceDocument);
+// SEC-03: dokumen invoice memuat rincian harga + nomor VA. `requireAuth` saja berarti
+// SETIAP staf yang login (marketing, operasional) bisa menarik invoice siapa pun hanya
+// dengan mengetahui id-nya. Dibatasi ke role modul Pembayaran — sama dengan
+// `canAccess('/pembayaran')` di frontend, jadi tidak ada alur UI yang putus.
+invoicesRoutes.get('/:id/document', requireAuth, requireRoles('keuangan', 'pimpinan'), paymentsController.invoiceDocument);
 invoicesRoutes.get('/:id/payments', requireAuth, requireRoles('keuangan', 'pimpinan'), paymentsController.invoicePayments);
 
 export const paymentsRoutes = Router();
@@ -29,7 +33,9 @@ receivablesRoutes.get('/', requireAuth, requireRoles('keuangan', 'pimpinan', 'ma
 receivablesRoutes.get('/aging', requireAuth, requireRoles('keuangan', 'pimpinan', 'operasional'), paymentsController.aging);
 
 export const receiptsRoutes = Router();
-receiptsRoutes.get('/:id/document', requireAuth, paymentsController.receiptDocument);
+// SEC-03: alasan sama seperti dokumen invoice di atas — kwitansi memuat nominal bayar
+// dan identitas jamaah, jadi tidak cukup hanya "sudah login".
+receiptsRoutes.get('/:id/document', requireAuth, requireRoles('keuangan', 'pimpinan'), paymentsController.receiptDocument);
 
 export const bankAccountsRoutes = Router();
 bankAccountsRoutes.get('/', requireAuth, requireRoles('keuangan', 'pimpinan'), paymentsController.bankAccounts);

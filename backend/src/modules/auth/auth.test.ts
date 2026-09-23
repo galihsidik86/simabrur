@@ -22,14 +22,37 @@ async function login(email: string, password = 'safar123') {
   return request(app).post('/v1/auth/login').send({ email, password });
 }
 
+/**
+ * SEC-07: refresh token hidup sebagai cookie httpOnly, bukan lagi field body. Supertest
+ * tidak menyimpan cookie antar-request, jadi tes mengambilnya sendiri dari `Set-Cookie`
+ * lalu mengirimkannya balik — persis seperti yang dilakukan browser.
+ */
+function refreshCookie(res: { headers: Record<string, unknown> }): string {
+  const raw = res.headers['set-cookie'] as string[] | undefined;
+  const found = (raw ?? []).find((c) => c.startsWith('safar.refresh='));
+  if (!found) throw new Error('Respons tidak menyetel cookie safar.refresh');
+  return found.split(';')[0]; // "safar.refresh=<token>" tanpa atributnya
+}
+
 describe('POST /v1/auth/login', () => {
   it('mengembalikan token + profil untuk kredensial valid', async () => {
     const res = await login('admin@safar.co.id');
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data.accessToken).toBeTruthy();
-    expect(res.body.data.refreshToken).toBeTruthy();
     expect(res.body.data.user).toMatchObject({ email: 'admin@safar.co.id', role: 'admin', branch: 'Safar Jakarta' });
+  });
+
+  it('SEC-07: refresh token dikirim sebagai cookie httpOnly, bukan di body', async () => {
+    const res = await login('admin@safar.co.id');
+    // Body tidak boleh lagi memuat kredensial berumur panjang — ini inti SEC-07.
+    expect(res.body.data.refreshToken).toBeUndefined();
+
+    const cookie = (res.headers['set-cookie'] as unknown as string[]).find((c) => c.startsWith('safar.refresh='))!;
+    expect(cookie).toBeTruthy();
+    expect(cookie).toContain('HttpOnly'); // tak terbaca JavaScript → XSS tak bisa mencurinya
+    expect(cookie).toContain('SameSite=Strict'); // tak ikut terkirim lintas situs → proteksi CSRF
+    expect(cookie).toContain('Path=/v1/auth'); // hanya dikirim ke endpoint auth
   });
 
   it('menolak password salah dengan envelope error standar', async () => {
@@ -68,32 +91,46 @@ describe('GET /v1/auth/me', () => {
 
 describe('POST /v1/auth/refresh (rotasi)', () => {
   it('menerbitkan pasangan token baru dan mencabut token lama', async () => {
-    const { body } = await login('marketing@safar.co.id');
-    const oldRefresh = body.data.refreshToken;
+    const res = await login('marketing@safar.co.id');
+    const oldCookie = refreshCookie(res);
 
-    const first = await request(app).post('/v1/auth/refresh').send({ refreshToken: oldRefresh });
+    const first = await request(app).post('/v1/auth/refresh').set('Cookie', oldCookie);
     expect(first.status).toBe(200);
-    expect(first.body.data.refreshToken).not.toBe(oldRefresh);
+    expect(refreshCookie(first)).not.toBe(oldCookie);
 
     // token lama sudah dirotasi → ditolak
-    const reuse = await request(app).post('/v1/auth/refresh').send({ refreshToken: oldRefresh });
+    const reuse = await request(app).post('/v1/auth/refresh').set('Cookie', oldCookie);
     expect(reuse.status).toBe(401);
+  });
+
+  it('tanpa cookie sama sekali → 401 (bukan 400), sehingga klien langsung ke halaman login', async () => {
+    const res = await request(app).post('/v1/auth/refresh');
+    expect(res.status).toBe(401);
   });
 });
 
 describe('POST /v1/auth/logout (NEW-FE-02)', () => {
   it('tanpa header Authorization (token sudah dihapus di klien) tetap 200 dan mencabut refresh token', async () => {
-    const { body } = await login('marketing@safar.co.id');
-    const res = await request(app).post('/v1/auth/logout').send({ refreshToken: body.data.refreshToken });
+    const loginRes = await login('marketing@safar.co.id');
+    const cookie = refreshCookie(loginRes);
+
+    const res = await request(app).post('/v1/auth/logout').set('Cookie', cookie);
     expect(res.status).toBe(200);
     expect(res.body.data.loggedOut).toBe(true);
+    // Cookie ikut dihapus di browser: Max-Age/Expires nol agar tak ada sisa kredensial.
+    expect((res.headers['set-cookie'] as unknown as string[]).some((c) => c.startsWith('safar.refresh=;'))).toBe(true);
 
-    const refreshAfter = await request(app).post('/v1/auth/refresh').send({ refreshToken: body.data.refreshToken });
+    const refreshAfter = await request(app).post('/v1/auth/refresh').set('Cookie', cookie);
     expect(refreshAfter.status).toBe(401);
   });
 
-  it('idempoten & tidak membocorkan validitas token: token acak juga 200', async () => {
-    const res = await request(app).post('/v1/auth/logout').send({ refreshToken: 'token-acak-tidak-pernah-ada' });
+  it('idempoten & tidak membocorkan validitas token: cookie acak juga 200', async () => {
+    const res = await request(app).post('/v1/auth/logout').set('Cookie', 'safar.refresh=token-acak-tidak-pernah-ada');
+    expect(res.status).toBe(200);
+  });
+
+  it('idempoten juga tanpa cookie sama sekali — tombol Keluar tidak boleh pernah gagal', async () => {
+    const res = await request(app).post('/v1/auth/logout');
     expect(res.status).toBe(200);
   });
 });

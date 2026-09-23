@@ -55,7 +55,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function login(email: string, password: string) {
     const { data } = await api.post('/auth/login', { email, password });
-    localStorage.setItem('safar.refresh', data.data.refreshToken);
+    // SEC-07: refresh token tidak lagi ikut di body — backend menyetelnya sebagai
+    // cookie httpOnly pada respons ini. Hanya access token (umur pendek) yang
+    // disimpan di memori; tidak ada kredensial di localStorage lagi.
     setAccessToken(data.data.accessToken);
     queryClient.clear();
     setUser(data.data.user);

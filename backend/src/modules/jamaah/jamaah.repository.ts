@@ -56,7 +56,11 @@ export const jamaahRepository = {
         'i.total_amount',
         'pp.paid'
       )
-      .orderBy('r.reg_number')
+      // SEC-01: nomor registrasi kini ACAK, jadi mengurutkan dengannya menghasilkan
+      // urutan sembarang (dulu ia kebetulan = urutan pendaftaran karena berurutan).
+      // `created_at` adalah pengganti yang setia pada maksud semula; `r.id` hanya
+      // pemecah seri agar paginasi stabil bila dua registrasi lahir pada detik sama.
+      .orderBy([{ column: 'r.created_at' }, { column: 'r.id' }])
       .limit(opts.limit)
       .offset((opts.page - 1) * opts.limit);
 
