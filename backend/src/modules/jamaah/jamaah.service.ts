@@ -8,7 +8,8 @@ import { randomSerial } from '../../utils/numbering.js';
 import { jamaahRepository } from './jamaah.repository.js';
 import { isPassportValid, needsMahram, passportValidUntilLimit, regNumberKey, ageAt } from './jamaah.rules.js';
 import { REQUIRED_DOC_TYPES, type createRegistrationSchema, type updateJamaahSchema } from './jamaah.validation.js';
-import { issueInvoice, paymentsService } from '../payments/payments.service.js';
+import { issueInvoice } from '../payments/payments.service.js';
+import { refundsService } from '../payments/refunds.service.js';
 import { notifyAgent } from '../agent-portal/notify.js';
 import { todayWib } from '../../utils/date.js';
 import { reverseJournal } from '../accounting/journal.engine.js';
@@ -166,7 +167,7 @@ export const jamaahService = {
       const totalPrice =
         r.invoice_total_amount != null ? Number(r.invoice_total_amount) : Number(r.base_price) + upcharge;
       // Langkah 9 (kontrak butir 5): registrasi cancelled memuat alasan/refund.
-      const refund = r.status === 'cancelled' ? await paymentsService.refundByRegistration(r.id) : null;
+      const refund = r.status === 'cancelled' ? await refundsService.refundByRegistration(r.id) : null;
       return {
         id: r.id,
         regNumber: r.reg_number,
@@ -183,6 +184,9 @@ export const jamaahService = {
         identityConfirmationRequired: Boolean(r.identity_confirmation_required),
         cancelledAt: r.cancelled_at ?? null,
         cancelReason: r.cancel_reason ?? null,
+        agentId: r.agent_id ?? null,
+        agentName: r.agent_name ?? null,
+        commissionStatus: r.commission_status ?? null,
         refund
       };
     }));
@@ -332,7 +336,7 @@ export const jamaahService = {
             created_by: req.user?.id ?? null
           })
           .returning('*');
-        refund = await paymentsService.refundDetail(trx, refundRow.id);
+        refund = await refundsService.refundDetail(trx, refundRow.id);
       }
 
       await audit(req, {

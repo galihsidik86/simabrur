@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { ok } from '../../utils/http.js';
 import { paymentsService } from './payments.service.js';
+import { refundsService } from './refunds.service.js';
 import {
   createInvoiceSchema, createPaymentSchema, listRefundsQuery, payRefundSchema,
   rejectPaymentSchema, upsertBankAccountSchema
@@ -30,17 +31,17 @@ export const paymentsController = {
 
   async listRefunds(req: Request, res: Response) {
     const { status } = listRefundsQuery.parse(req.query);
-    ok(res, await paymentsService.listRefunds(status));
+    ok(res, await refundsService.listRefunds(status));
   },
 
   async payRefund(req: Request, res: Response) {
     const input = payRefundSchema.parse(req.body);
     const key = typeof req.headers['idempotency-key'] === 'string' ? req.headers['idempotency-key'] : undefined;
-    ok(res, await paymentsService.payRefund(req, String(req.params.id), input, key));
+    ok(res, await refundsService.payRefund(req, String(req.params.id), input, key));
   },
 
   async refundReceipt(req: Request, res: Response) {
-    ok(res, await paymentsService.refundReceipt(String(req.params.id)));
+    ok(res, await refundsService.refundReceipt(String(req.params.id)));
   },
 
   async receivables(_req: Request, res: Response) {

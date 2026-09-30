@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, apiErrorMessage } from '../api/client';
 import { BackButton } from '../components/BackButton';
+import { REFERRAL_QUERY_PARAM, normalizeReferralCode } from '../api/agents';
 import { fmtShort, fmtFull, fmtDate, age } from '../utils/format';
 
 /* ============ Tipe & konstanta (struktur data persis mockup Pendaftaran Jamaah) ============ */
@@ -46,6 +48,9 @@ const METHODS = [
 /** Sama dengan multer limits.fileSize backend (jamaah.routes.ts). */
 const MAX_DOC_BYTES = 5 * 1024 * 1024;
 
+/** Panjang minimal sebelum kode referral diperiksa ke `GET /registrations/agent-check`. */
+const REFERRAL_MIN_LENGTH = 3;
+
 interface Registered { jamaahId: string; regNumber: string }
 interface FailedDoc { docType: string; message: string }
 
@@ -78,6 +83,12 @@ const EMPTY_FORM = {
 /* ============ Komponen ============ */
 
 export function DaftarWizard() {
+  // Tautan referral agen: `/daftar?ref=BRKH-07`. Dibaca sekali saat mount —
+  // kode dari tautan mengunci field agar jamaah tidak perlu (dan tidak sengaja)
+  // mengubahnya, tapi kuncinya bisa dibuka lewat tautan "Ubah".
+  const [searchParams] = useSearchParams();
+  const refFromUrl = normalizeReferralCode(searchParams.get(REFERRAL_QUERY_PARAM));
+
   const [step, setStep] = useState(1);
   const [pkg, setPkg] = useState<PaketRow | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -85,7 +96,8 @@ export function DaftarWizard() {
   const [room, setRoom] = useState<'quad' | 'triple' | 'double'>('quad');
   const [scheme, setScheme] = useState<'dp' | 'cicil' | 'lunas'>('dp');
   const [method, setMethod] = useState<'va' | 'card' | 'manual'>('va');
-  const [referral, setReferral] = useState('');
+  const [referral, setReferral] = useState(refFromUrl);
+  const [referralLocked, setReferralLocked] = useState(refFromUrl.length > 0);
   const [agree, setAgree] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -170,6 +182,9 @@ export function DaftarWizard() {
   function restart() {
     setStep(1); setPkg(null); setForm(EMPTY_FORM); setFiles({}); setRoom('quad');
     setScheme('dp'); setMethod('va'); setAgree(false); setRegistered(null); setDone(null); setError('');
+    // Kembalikan ke kondisi awal halaman: kode dari tautan agen tetap berlaku
+    // untuk pendaftaran berikutnya, kode yang diketik manual dibuang.
+    setReferral(refFromUrl); setReferralLocked(refFromUrl.length > 0);
   }
 
   /* ============ Render ============ */
@@ -235,7 +250,11 @@ export function DaftarWizard() {
                 )}
                 {step === 4 && <StepKamar pkg={pkg} room={room} setRoom={setRoom} form={form} set={set} mahramWajib={Boolean(mahramWajib)} />}
                 {step === 5 && (
-                  <StepBayar scheme={scheme} setScheme={setScheme} method={method} setMethod={setMethod} total={total} referral={referral} setReferral={setReferral} />
+                  <StepBayar
+                    scheme={scheme} setScheme={setScheme} method={method} setMethod={setMethod} total={total}
+                    referral={referral} setReferral={setReferral}
+                    linkCode={referralLocked ? refFromUrl : ''} onUnlockReferral={() => setReferralLocked(false)}
+                  />
                 )}
                 {step === 6 && (
                   <StepKonfirmasi pkg={pkg} form={form} room={room} files={files} scheme={scheme} method={method} dueNow={dueNow} agree={agree} setAgree={setAgree} />
@@ -526,7 +545,7 @@ function StepKamar({ pkg, room, setRoom, form, set, mahramWajib }: {
 }
 
 /* ============ Step 5 — Pembayaran ============ */
-function StepBayar({ scheme, setScheme, method, setMethod, total, referral, setReferral }: {
+function StepBayar({ scheme, setScheme, method, setMethod, total, referral, setReferral, linkCode, onUnlockReferral }: {
   scheme: 'dp' | 'cicil' | 'lunas';
   setScheme: (s: 'dp' | 'cicil' | 'lunas') => void;
   method: 'va' | 'card' | 'manual';
@@ -534,13 +553,26 @@ function StepBayar({ scheme, setScheme, method, setMethod, total, referral, setR
   total: number;
   referral: string;
   setReferral: (v: string) => void;
+  /** Kode dari `?ref=` selama kuncinya belum dibuka jamaah; string kosong = ketik manual. */
+  linkCode: string;
+  onUnlockReferral: () => void;
 }) {
   const code = referral.trim();
   const { data: agentCheck, isFetching: checkingAgent } = useQuery({
     queryKey: ['agent-check', code],
-    enabled: code.length >= 3,
+    enabled: code.length >= REFERRAL_MIN_LENGTH,
     queryFn: async () => (await api.get('/registrations/agent-check', { params: { code } })).data.data as { found: boolean; agentName?: string }
   });
+
+  // Nilai masih persis kode dari tautan → perlakukan sebagai "dari tautan agen".
+  // Begitu jamaah mengetik sendiri, status ini gugur dan field tak pernah terkunci lagi.
+  const fromLink = linkCode.length > 0 && code === linkCode;
+  // Tautan yang kodenya tidak cocok agen aktif TIDAK boleh menghalangi pendaftaran:
+  // kuncinya dilepas sendiri dan jamaah hanya diberi peringatan lembut.
+  const linkBroken = fromLink && (code.length < REFERRAL_MIN_LENGTH || agentCheck?.found === false);
+  const linkVerified = fromLink && agentCheck?.found === true;
+  const inputLocked = fromLink && !linkBroken;
+
   return (
     <div>
       <StepTitle title="Skema & Metode Pembayaran" sub="Dana jamaah dikelola dengan akad wakalah — dicatat sebagai titipan hingga keberangkatan." />
@@ -587,18 +619,45 @@ function StepBayar({ scheme, setScheme, method, setMethod, total, referral, setR
       </div>
 
       <div className="mt-5 rounded-[11px] border border-line-3 bg-panel p-4">
-        <label className="lbl">Kode Referral Agen (opsional)</label>
-        <input className="fld font-mono !w-[220px]" value={referral} onChange={(e) => setReferral(e.target.value.toUpperCase())} placeholder="mis. BRKH-07" />
-        {code.length >= 3 ? (
+        <label className="lbl" htmlFor="referral-code">Kode Referral Agen (opsional)</label>
+        <div className="flex items-center gap-2.5">
+          <input
+            id="referral-code"
+            className="fld font-mono !w-[220px]"
+            value={referral}
+            onChange={(e) => setReferral(e.target.value.toUpperCase())}
+            placeholder="mis. BRKH-07"
+            readOnly={inputLocked}
+            aria-readonly={inputLocked}
+            style={inputLocked ? { background: '#f0eadc', cursor: 'default' } : undefined}
+          />
+          {inputLocked && (
+            <button type="button" onClick={onUnlockReferral} className="cursor-pointer text-[11px] font-semibold text-primary hover:underline">
+              Ubah
+            </button>
+          )}
+        </div>
+
+        {linkBroken && (
+          <div className="mt-1.5 text-[10.5px] font-semibold" style={{ color: 'oklch(0.5 0.1 78)' }}>
+            Kode dari tautan agen tidak dikenal — Anda bisa memperbaikinya di atas. Pendaftaran tetap dapat dilanjutkan.
+          </div>
+        )}
+
+        {code.length >= REFERRAL_MIN_LENGTH ? (
           checkingAgent ? (
             <div className="mt-1.5 text-[10.5px] text-muted-3">Memeriksa kode…</div>
+          ) : linkVerified ? (
+            <div className="mt-1.5 text-[10.5px] font-semibold" style={{ color: 'oklch(0.46 0.07 158)' }}>
+              ✓ Dari tautan agen {agentCheck?.agentName} — komisi dikreditkan ke beliau. Bukan agen Anda? Klik “Ubah”.
+            </div>
           ) : agentCheck?.found ? (
             <div className="mt-1.5 text-[10.5px] font-semibold" style={{ color: 'oklch(0.46 0.07 158)' }}>✓ Dikreditkan ke agen {agentCheck.agentName}</div>
-          ) : (
+          ) : !linkBroken ? (
             <div className="mt-1.5 text-[10.5px] font-semibold" style={{ color: 'oklch(0.55 0.15 28)' }}>Kode tidak dikenal — komisi tidak akan tercatat. Periksa kembali.</div>
-          )
+          ) : null
         ) : (
-          <div className="mt-1.5 text-[10.5px] text-muted-3">Isi bila Anda mendaftar melalui agen/mitra Safar.</div>
+          !linkBroken && <div className="mt-1.5 text-[10.5px] text-muted-3">Isi bila Anda mendaftar melalui agen/mitra Safar.</div>
         )}
       </div>
     </div>

@@ -15,7 +15,11 @@ const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', dot: 'var(--color-mod-dashboard)', roles: ['admin', 'pimpinan', 'keuangan', 'marketing', 'operasional'] },
   { to: '/paket', label: 'Paket & Jadwal', dot: 'var(--color-mod-paket)', roles: ['admin', 'pimpinan', 'marketing'] },
   { to: '/paket/master', label: 'Master Data Paket', dot: 'var(--color-mod-paket)', roles: ['admin', 'pimpinan', 'marketing'] },
-  { to: '/jamaah', label: 'Jamaah & Pendaftaran', dot: 'var(--color-mod-jamaah)', roles: ['admin', 'pimpinan', 'operasional', 'marketing'] },
+  // `keuangan` disamakan dengan backend: `GET /v1/jamaah` dan `GET /v1/jamaah/:id`
+  // sudah memakai requireRoles('operasional','marketing','keuangan','pimpinan'), dan
+  // Keuangan berwenang atas `POST /v1/commissions/attribute` yang dipicu dari halaman
+  // detail jamaah (panel "Tetapkan agen"). Sebelumnya frontend lebih ketat dari backend.
+  { to: '/jamaah', label: 'Jamaah & Pendaftaran', dot: 'var(--color-mod-jamaah)', roles: ['admin', 'pimpinan', 'operasional', 'marketing', 'keuangan'] },
   { to: '/pembayaran', label: 'Pembayaran', dot: 'var(--color-mod-pembayaran)', roles: ['admin', 'pimpinan', 'keuangan'] },
   { to: '/operasional', label: 'Operasional & Manifest', dot: 'var(--color-mod-operasional)', roles: ['admin', 'pimpinan', 'operasional'] },
   { to: '/laporan-operasional', label: 'Laporan Operasional', dot: 'var(--color-mod-operasional)', roles: ['admin', 'pimpinan', 'operasional', 'keuangan'] },
