@@ -79,8 +79,13 @@ export const jamaahRepository = {
       // DOM-03: invoice.total_amount = sumber kebenaran (dibekukan saat terbit).
       // Harga paket bisa berubah setelah registrasi; jangan hitung ulang dari harga terkini.
       .leftJoin('invoices as i', 'i.registration_id', 'r.id')
+      // Atribusi agen + status komisi dalam satu query (commissions.registration_id UNIQUE → 1 baris/registrasi).
+      .leftJoin('agents as ag', 'ag.id', 'r.agent_id')
+      .leftJoin('commissions as cm', 'cm.registration_id', 'r.id')
       .select(
         'r.*',
+        'ag.name as agent_name',
+        'cm.status as commission_status',
         'p.name as package_name',
         'p.base_price',
         'p.triple_upcharge',

@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import axios from 'axios';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fmtShort, fmtFull, fmtDate } from '../../utils/format';
+import { QRCodeSVG } from 'qrcode.react';
+import { referralInviteText, referralLink, whatsappShareUrl } from '../../api/agents';
 import { useInstallPrompt, setManifestForRoute } from '../../pwa';
 
 /* ===== API portal agen (token terpisah dari staf & portal jamaah) ===== */
@@ -182,7 +184,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         ))}
       </div>
 
-      {tab === 'ringkasan' && <RingkasanTab />}
+      {tab === 'ringkasan' && <RingkasanTab me={me.data} />}
       {tab === 'jamaah' && <JamaahTab />}
       {tab === 'komisi' && <KomisiTab />}
       {tab === 'leads' && <LeadsTab />}
@@ -224,11 +226,108 @@ function NotifTab() {
   );
 }
 
+/** Ukuran render QR (px). CSS mengecilkannya di layar sempit lewat `w-[min(100%,200px)]`. */
+const QR_SIZE_PX = 200;
+const QR_PANEL_ID = 'referral-qr-panel';
+
 function Card({ children }: { children: ReactNode }) {
   return <div className="rounded-[13px] border border-[#e9e0cd] bg-[#fffdf8] p-4 shadow-[0_4px_16px_-12px_rgba(60,50,20,0.3)]">{children}</div>;
 }
 
-function RingkasanTab() {
+/**
+ * Tautan pendaftaran milik agen + tombol bagikan. Tautan ini mengisi kode referral
+ * otomatis di wizard `/daftar`, sehingga komisi tidak lagi bergantung pada jamaah
+ * yang ingat mengetik kodenya.
+ */
+function ReferralShareCard({ me }: { me?: Me }) {
+  const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState('');
+  // QR disembunyikan secara bawaan supaya kartu tidak memenuhi layar ponsel.
+  const [showQr, setShowQr] = useState(false);
+
+  // Bersihkan timer "Tersalin" saat komponen dilepas / disalin ulang.
+  useEffect(() => {
+    if (!copied) return;
+    const id = setTimeout(() => setCopied(false), 2500);
+    return () => clearTimeout(id);
+  }, [copied]);
+
+  if (!me?.referralCode) return null;
+  const link = referralLink(me.referralCode);
+  const invite = referralInviteText(me.name, link);
+
+  async function copy() {
+    setCopyError('');
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+      setCopyError('Gagal menyalin otomatis — tekan lama pada tautan di atas lalu salin manual.');
+    }
+  }
+
+  return (
+    <Card>
+      <div className="text-[12.5px] font-semibold text-[#26221b]">Tautan Pendaftaran Saya</div>
+      <p className="mt-0.5 text-[10.5px] text-[#8c8371]">
+        Bagikan tautan ini ke calon jamaah. Kode referral <b className="font-mono">{me.referralCode}</b> terisi otomatis di formulir,
+        jadi jamaah tak perlu mengetiknya.
+      </p>
+      <input
+        readOnly
+        value={link}
+        onFocus={(e) => e.currentTarget.select()}
+        aria-label="Tautan pendaftaran referral"
+        className="fld mt-2.5 font-mono !text-[10.5px]"
+      />
+      <div className="mt-2 flex gap-2">
+        <button onClick={copy}
+          className="flex-1 cursor-pointer rounded-[9px] border border-[#e6ddca] bg-white px-3 py-2 text-[12px] font-semibold text-[#6f6858]">
+          {copied ? '✓ Tersalin' : 'Salin tautan'}
+        </button>
+        <a href={whatsappShareUrl(invite)} target="_blank" rel="noopener noreferrer"
+          className="flex-1 cursor-pointer rounded-[9px] bg-[oklch(0.5_0.09_165)] px-3 py-2 text-center text-[12px] font-semibold text-white">
+          Bagikan ke WhatsApp
+        </a>
+      </div>
+      {copyError && <div role="alert" className="mt-2 text-[10.5px] font-medium text-danger-deep">{copyError}</div>}
+
+      <button
+        onClick={() => setShowQr((v) => !v)}
+        aria-expanded={showQr}
+        aria-controls={QR_PANEL_ID}
+        className="mt-2 w-full cursor-pointer rounded-[9px] border border-dashed border-[#e6ddca] bg-transparent px-3 py-1.5 text-[11.5px] font-semibold text-[#6f6858]"
+      >
+        {showQr ? 'Sembunyikan QR code' : 'Tampilkan QR code'}
+      </button>
+      {showQr && (
+        <div id={QR_PANEL_ID} className="mt-2 flex flex-col items-center">
+          {/* Kotak putih = quiet zone + kontras penuh, apa pun warna latar kartu. */}
+          <div className="rounded-[10px] border border-[#e6ddca] bg-white p-3">
+            <QRCodeSVG
+              value={link}
+              size={QR_SIZE_PX}
+              level="M"
+              marginSize={2}
+              bgColor="#ffffff"
+              fgColor="#16211b"
+              role="img"
+              title={`QR code tautan pendaftaran agen ${me.referralCode}`}
+              aria-label={`QR code untuk tautan pendaftaran ${link}. Pindai dengan kamera ponsel calon jamaah.`}
+              className="h-auto w-[min(100%,200px)]"
+            />
+          </div>
+          <p className="mt-1.5 text-center text-[10.5px] text-[#8c8371]">
+            Minta calon jamaah memindai dengan kamera ponsel — kode <b className="font-mono">{me.referralCode}</b> terisi otomatis.
+          </p>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function RingkasanTab({ me }: { me?: Me }) {
   const { data: s } = useQuery({ queryKey: ['agen-summary'], queryFn: async () => (await agenApi.get('/summary')).data.data as Summary });
   if (!s) return <div className="text-[12px] text-[#8c8371]">Memuat…</div>;
   const tiles = [
@@ -238,14 +337,17 @@ function RingkasanTab() {
     { label: 'Komisi Pending', value: fmtShort(s.commissionPending), sub: 'menunggu persetujuan', accent: 'oklch(0.5 0.02 265)' }
   ];
   return (
-    <div className="grid grid-cols-2 gap-3">
-      {tiles.map((t) => (
-        <div key={t.label} className="rounded-[13px] border border-[#e9e0cd] bg-[#fffdf8] p-3.5 shadow-[0_4px_16px_-12px_rgba(60,50,20,0.3)]" style={{ borderLeft: `4px solid ${t.accent}` }}>
-          <div className="text-[10.5px] text-[#8c8371]">{t.label}</div>
-          <div className="mt-1 font-mono text-[18px] font-semibold text-[#26221b]">{t.value}</div>
-          <div className="text-[9.5px] text-[#a89e88]">{t.sub}</div>
-        </div>
-      ))}
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-2 gap-3">
+        {tiles.map((t) => (
+          <div key={t.label} className="rounded-[13px] border border-[#e9e0cd] bg-[#fffdf8] p-3.5 shadow-[0_4px_16px_-12px_rgba(60,50,20,0.3)]" style={{ borderLeft: `4px solid ${t.accent}` }}>
+            <div className="text-[10.5px] text-[#8c8371]">{t.label}</div>
+            <div className="mt-1 font-mono text-[18px] font-semibold text-[#26221b]">{t.value}</div>
+            <div className="text-[9.5px] text-[#a89e88]">{t.sub}</div>
+          </div>
+        ))}
+      </div>
+      <ReferralShareCard me={me} />
     </div>
   );
 }
@@ -355,17 +457,20 @@ function ProfilTab({ me }: { me?: Me }) {
   const [showChange, setShowChange] = useState(false);
   if (showChange) return <ChangePassword onDone={() => setShowChange(false)} onLogout={() => setShowChange(false)} />;
   return (
-    <Card>
-      <div className="flex flex-col gap-2 text-[12.5px]">
-        <Row label="Nama" value={me?.name} />
-        <Row label="Kode agen" value={me?.code} mono />
-        <Row label="Kode referral" value={me?.referralCode} mono />
-        <Row label="Komisi" value={me ? `${me.commissionPct}%` : ''} />
-        <Row label="HP" value={me?.phone ?? '—'} mono />
-        <Row label="Email" value={me?.email ?? '—'} />
-      </div>
-      <button onClick={() => setShowChange(true)} className="mt-4 cursor-pointer rounded-[9px] border border-[#e6ddca] bg-white px-4 py-2 text-[12px] font-semibold text-[#6f6858]">Ganti Password</button>
-    </Card>
+    <div className="flex flex-col gap-3">
+      <Card>
+        <div className="flex flex-col gap-2 text-[12.5px]">
+          <Row label="Nama" value={me?.name} />
+          <Row label="Kode agen" value={me?.code} mono />
+          <Row label="Kode referral" value={me?.referralCode} mono />
+          <Row label="Komisi" value={me ? `${me.commissionPct}%` : ''} />
+          <Row label="HP" value={me?.phone ?? '—'} mono />
+          <Row label="Email" value={me?.email ?? '—'} />
+        </div>
+        <button onClick={() => setShowChange(true)} className="mt-4 cursor-pointer rounded-[9px] border border-[#e6ddca] bg-white px-4 py-2 text-[12px] font-semibold text-[#6f6858]">Ganti Password</button>
+      </Card>
+      <ReferralShareCard me={me} />
+    </div>
   );
 }
 
